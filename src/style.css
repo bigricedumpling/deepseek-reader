@@ -1,0 +1,504 @@
+@import "tailwindcss";
+/* 令牌必须先于用到它们的规则加载，放在最上面 */
+@import "./styles/tokens.css";
+/* --- 基础 --- */
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-text);
+  background: var(--c-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button { font-family: inherit; font-size: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+a { color: var(--color-ds); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+code, pre, kbd { font-family: var(--font-mono); }
+
+/* --- 滚动条：极细、无存在感 --- */
+* { scrollbar-width: thin; scrollbar-color: #dcdcdc transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+:hover::-webkit-scrollbar-thumb { background: #dcdcdc; }
+::-webkit-scrollbar-thumb:hover { background: #c4c4c4; }
+
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+::selection { background: rgba(77, 107, 254, 0.15); }
+
+/* 键盘焦点 */
+:focus-visible {
+  outline: 1.5px solid var(--color-ds);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* 微信字体（仅用于品牌与少量标签）*/
+@font-face {
+  font-family: 'Weixin';
+  src: url('/fonts/Weixin.otf') format('opentype');
+  font-display: swap;
+}
+/* 界面字体：微信体，用于正文以外的所有地方 */
+.font-weixin,
+.ui-font {
+  font-family: "Weixin", "PingFang SC", -apple-system, sans-serif;
+}
+
+/* 西文正文字体：TeX Gyre Pagella，GUST Font License，许可证随包附带 */
+@font-face {
+  font-family: 'TeX Gyre Pagella';
+  src: url('/fonts/pagella-regular.otf') format('opentype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'TeX Gyre Pagella';
+  src: url('/fonts/pagella-bold.otf') format('opentype');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'TeX Gyre Pagella';
+  src: url('/fonts/pagella-italic.otf') format('opentype');
+  font-weight: 400; font-style: italic; font-display: swap;
+}
+@font-face {
+  font-family: 'TeX Gyre Pagella';
+  src: url('/fonts/pagella-bolditalic.otf') format('opentype');
+  font-weight: 700; font-style: italic; font-display: swap;
+}
+
+/*
+ * 代码看门狗提示。
+ *
+ * 开发时改了源码、页面却还是旧的（热更新断了、或者编辑器实例没重建），
+ * 界面上完全看不出来。这条提示只在这种情况下出现，点一下整页刷新。
+ */
+.stale-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--c-ink);
+  background: var(--c-pop);
+  border: 1px solid var(--c-line);
+  box-shadow: var(--c-pop-shadow);
+  cursor: pointer;
+}
+.stale-toast:hover {
+  background: var(--c-chip-hover);
+}
+
+/* 楷体：寒蝉正楷，按需加载（行盒被撑高的问题在 editor-crepe.css 的 em 规则里解决） */
+@font-face {
+  font-family: 'ChillKai';
+  src: url('/fonts/chill-kai.woff2') format('woff2');
+  font-display: swap;
+}
+
+mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* ============================================================
+   通用组件（极简）
+   ============================================================ */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--c-faint);
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+.btn-icon:hover { color: var(--c-ink); background: #f5f5f5; }
+.btn-icon:active { transform: scale(0.9); }
+.btn-icon.is-active { color: var(--color-ds); background: rgba(77, 107, 254, 0.08); }
+
+.btn-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--c-sub);
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+.btn-text:hover { color: var(--c-ink); background: #f5f5f5; }
+.btn-text:active { transform: scale(0.96); }
+
+/* 过渡 */
+.fade-enter-active, .fade-leave-active { transition: opacity .2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.view-enter-active { transition: opacity .22s ease, transform .22s ease; }
+.view-leave-active { transition: opacity .14s ease; }
+.view-enter-from { opacity: 0; transform: translateY(4px); }
+.view-leave-to { opacity: 0; }
+
+.pop-enter-active { transition: opacity .16s ease, transform .16s ease; }
+.pop-leave-active { transition: opacity .1s ease; }
+.pop-enter-from { opacity: 0; transform: translateY(6px) scale(.98); }
+.pop-leave-to { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ============================================================
+   打印与 PDF 导出
+   分页交给浏览器，但要管住孤行寡行与标题跟随
+   ============================================================ */
+@media print {
+  /* ---------- 先把布局链上的高度与滚动全部解除 ----------
+     #app 里面是 h-screen + flex + overflow-hidden 的一套，
+     不逐层解开的话，打印只会输出可见的那一屏。 */
+  html, body, #app {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #app > div,
+  #app > div > main,
+  .editor-shell,
+  .crepe-host,
+  .crepe-host .milkdown {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex: none !important;
+    position: static !important;
+  }
+  #main-scroll-container {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex: none !important;
+  }
+
+  /* ---------- 界面不进纸 ---------- */
+  aside,
+  .toc-panel,
+  .search-drop,
+  .pop-menu,
+  .side-menu,
+  .lossy-note,
+  button { display: none !important; }
+
+  /* ---------- 正文铺满纸面 ---------- */
+  .crepe-host .milkdown .ProseMirror,
+  .crepe-host .milkdown .ProseMirror > * {
+    max-width: none !important;
+    width: auto !important;
+    padding-inline: 0 !important;
+    margin-inline: 0 !important;
+  }
+  .crepe-host .milkdown .ProseMirror {
+    padding: 0 !important;
+    font-size: 10.5pt;
+    line-height: 1.7;
+  }
+  .crepe-host { padding-bottom: 0 !important; }
+
+  /* 表格：纸上别突破纸宽 */
+  .crepe-host .milkdown .ProseMirror > .milkdown-table-block {
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+  table { width: 100% !important; }
+
+  /* ---------- 分页 ---------- */
+  p, li, blockquote { orphans: 2; widows: 2; }
+  h1, h2, h3, h4 { break-after: avoid-page; break-inside: avoid; }
+  h1 + p, h2 + p, h3 + p { break-before: avoid-page; }
+  table, pre, img, .katex-display, .mermaid-preview, .milkdown-code-block { break-inside: avoid; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+
+  /* ---------- 纸上点不了链接，把地址印出来 ---------- */
+  .crepe-host .milkdown .ProseMirror a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+    word-break: break-all;
+  }
+  a { text-decoration: none !important; }
+
+  @page { margin: 16mm 14mm; }
+}
+
+/* ---------- 侧栏文档树（Sidebar / DocTree 共用，所以放全局） ---------- */
+
+/**
+ * 文档树是递归组件，样式不能写在任何一个组件的 scoped 块里：
+ * scoped 只作用于自己的模板，下一层 DocTree 拿不到。
+ */
+/* 目录行：折叠箭头 + 文件夹图标 + 名字，悬停时右侧浮出四个操作 */
+.cat-row {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding-right: 5px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.cat-row:hover {
+  background: var(--c-hover);
+}
+.cat-row.is-on .cat-name {
+  color: var(--c-ink);
+}
+/* 拖拽落在目录上时整行高亮 */
+.cat-row.is-drop {
+  background: var(--c-active);
+}
+/* 正在拖的那个目录淡下去，落点线才看得清 */
+.cat-row.is-dragging {
+  opacity: 0.4;
+}
+
+/* 文档行：标题、时间、操作三态切换 */
+.doc-row {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding-left: 26px;
+  padding-right: 5px;
+  border-radius: 7px;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+/* 正在拖的那一行淡下去，让落点更清楚 */
+.doc-row.is-dragging {
+  opacity: 0.4;
+}
+/* 落点分隔线：一条贴着行边的细蓝线，比整行高亮精确 */
+.drop-line {
+  height: 2px;
+  margin: 1px 6px 1px 26px;
+  border-radius: 1px;
+  background: var(--color-ds);
+}
+/* 分类作为落点时的整体高亮 */
+.doc-row:hover {
+  background: var(--c-hover);
+}
+.doc-row.is-on {
+  background: var(--c-active);
+}
+.doc-title,
+.pdf-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--c-text);
+  transition: color 0.15s ease;
+}
+/* 原位改名的输入框：长得跟标题一样，只在聚焦时露一点底 */
+.doc-edit,
+.cat-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 5px;
+  margin-left: -5px;
+  border-radius: 5px;
+  background: var(--c-field);
+  border: 1px solid var(--color-ds);
+  outline: none;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--c-ink);
+}
+.cat-edit {
+  margin-left: 8px;
+  font-size: 12.5px;
+}
+.doc-row:hover .doc-title,
+.doc-row:hover .pdf-title {
+  color: var(--c-ink);
+}
+.doc-row.is-on .doc-title,
+.doc-row.is-on .pdf-title {
+  color: var(--color-ds);
+}
+.doc-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--c-faint);
+  font-variant-numeric: tabular-nums;
+  padding-left: 6px;
+  transition: opacity 0.15s ease;
+}
+.doc-acts {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 1px;
+  padding-left: 2px;
+}
+.doc-row:hover .doc-acts {
+  display: flex;
+}
+.doc-row:hover .doc-time {
+  display: none;
+}
+.icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--c-faint);
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+.icon-btn:hover {
+  color: var(--c-ink);
+  background: var(--c-hover);
+}
+.icon-btn:active {
+  transform: scale(0.92);
+}
+.icon-btn.is-active {
+  color: var(--color-ds);
+  background: var(--c-active);
+}
+.icon-btn.danger:hover {
+  color: #e06b66;
+  background: rgba(217, 83, 79, 0.14);
+}
+.icon-btn.xs {
+  width: 19px;
+  height: 19px;
+}
+
+/* 单列表视图里标出文档挂在哪个目录 */
+.doc-dir {
+  margin-left: 6px;
+  font-size: 10.5px;
+  color: var(--c-faint);
+  flex-shrink: 0;
+}
+
+/* pdf 行：图标 + 名字，标题样式跟 markdown 行共用 */
+.doc-kind {
+  flex-shrink: 0;
+  margin-right: 5px;
+  margin-top: 1px;
+  color: var(--c-faint);
+}
+.doc-row.is-on .doc-kind {
+  color: var(--color-ds);
+}
+
+/* pdf 预览占满正文区，滚动交给 iframe 自己 */
+.pdf-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 92px);
+  border: 0;
+  background: var(--c-surface);
+}
+
+/* 「…」按钮：目录行、文档行共用一个，悬停才浮出来，位置固定在行尾 */
+.acts-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.cat-row:hover .acts-btn,
+.doc-row:hover .acts-btn {
+  opacity: 1;
+}
+
+/* 「…」菜单：teleport 到 body 的固定定位浮层 */
+.tree-menu {
+  position: fixed;
+  z-index: 80;
+  padding: 4px;
+  background: var(--c-pop);
+  border-radius: 10px;
+  box-shadow: var(--c-pop-shadow);
+}
+.tree-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--c-text);
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tree-menu-item:hover {
+  background: var(--c-hover);
+  color: var(--c-ink);
+}
+.tree-menu-item.danger {
+  color: #e06b66;
+}
+.tree-menu-item.danger:hover {
+  background: rgba(217, 83, 79, 0.14);
+}
+
+/* 菜单里的小图标：跟文字并排，默认淡色 */
+.menu-icon {
+  flex-shrink: 0;
+  color: var(--c-faint);
+}
+.tree-menu-item:hover .menu-icon {
+  color: var(--c-ink);
+}
+.tree-menu-item.danger .menu-icon {
+  color: inherit;
+}
+
+/* 侧栏「分组与排序」菜单：图标 + 文字并排 */
+.menu-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* 侧栏里"回知识库首页"那行：安静一点，不抢标题 */
+.home-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 16px 2px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--c-faint);
+  text-decoration: none;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.home-link:hover {
+  color: var(--c-ink);
+  background: var(--c-hover);
+}

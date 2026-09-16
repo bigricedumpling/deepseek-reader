@@ -1,0 +1,45 @@
+{
+  "name": "deepseek-prep-reader",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "DeepSeek 面试准备 · 调研知识库",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 8090",
+    "share": "npm run build && node server/serve.js",
+    "share:local": "npm run build && node server/serve.js --guest",
+    "share:owner": "npm run build && node server/serve.js",
+    "check": "node scripts/check-imports.mjs",
+    "regression": "node scripts/regression.mjs",
+    "e2e": "node scripts/e2e/roundtrip.mjs && node scripts/e2e/controls.mjs && node scripts/e2e/colwidth.mjs && node scripts/e2e/sidebar.mjs"
+  },
+  "dependencies": {
+    "@codemirror/language-data": "^6.5.2",
+    "@fontpkg/chill-kai": "^2.0.1",
+    "@fontsource/noto-sans-sc": "^5.3.0",
+    "@fontsource/noto-serif-sc": "^5.3.0",
+    "@milkdown/crepe": "^7.22.1",
+    "@milkdown/kit": "^7.22.1",
+    "@phosphor-icons/vue": "^2.2.1",
+    "markdown-it": "^14.1.0",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-sub": "^2.0.0",
+    "markdown-it-sup": "^2.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "markdown-it-texmath": "^1.0.0",
+    "mermaid": "^12.0.0",
+    "pdfjs-dist": "^6.3.289",
+    "pinia": "^4.0.3",
+    "shiki": "^4.4.3",
+    "tex-linebreak": "^0.9.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "tailwindcss": "^4.0.0",
+    "vite": "^6.0.7"
+  }
+}

@@ -1,0 +1,754 @@
+/**
+ * 编辑器（Crepe / ProseMirror）的样式覆盖。
+ *
+ * 这些原先堆在 MarkdownEditor.vue 的 <style scoped> 里，将近 500 行，
+ * 跟组件逻辑挤在一个 900 行的文件里。覆盖的是第三方编辑器，跟本项目组件结构无关，
+ * 单独放一个文件更好找，也方便以后整体调主题。
+ *
+ * 注意这里不能用 scoped：列宽拖拽的指示线是挂在 body 上的，scoped 会把它一起限制住。
+ * 所有选择器本来就带 .crepe-host 前缀，够specific，不需要靠 scoped 兜底。
+ */
+
+/* ---------- 组件自身的少量样式 ---------- */
+
+.editor-shell {
+  min-height: 100%;
+  /* 切文档/切标签时来一点极短的淡入：不然整页文字是"啪"地换掉的 */
+  animation: doc-in 0.18s ease-out;
+}
+@keyframes doc-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* 系统里关了动效就别动 */
+@media (prefers-reduced-motion: reduce) {
+  .editor-shell {
+    animation: none;
+  }
+}
+.lossy-note {
+  max-width: var(--measure, 960px);
+  margin: 16px auto 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #fffbf0;
+  border: 1px solid #f2e6c8;
+  color: #8a6d1f;
+  font-size: 12px;
+  line-height: 1.7;
+}
+/* 有损提示里的操作行与差异列表 */
+.lossy-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 7px;
+}
+.lossy-btn {
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid #e6d9b4;
+  background: #fffdf7;
+  color: #8a6d1f;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.lossy-btn:hover {
+  background: #fdf3dc;
+}
+.lossy-btn.is-primary {
+  border-color: #d9c58a;
+  font-weight: 600;
+}
+.lossy-hint {
+  color: #a08a4d;
+  font-size: 11px;
+}
+.lossy-diff {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e6d9b4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lossy-diff li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lossy-line {
+  color: #a08a4d;
+  font-size: 11px;
+}
+.lossy-side {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.lossy-side.is-before {
+  color: #8a6d1f;
+}
+.lossy-side.is-after {
+  color: #3f7a4f;
+}
+.src-editor {
+  display: block;
+  width: 100%;
+  max-width: var(--measure, 960px);
+  margin: 12px auto 0;
+  min-height: 70vh;
+  padding: 0 40px 96px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--c-ink);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  tab-size: 2;
+}
+.crepe-host {
+  padding-bottom: 96px;
+}
+
+/* ---------- Crepe / ProseMirror 覆盖 ---------- */
+
+/*
+ * 编辑器就是阅读界面，所以排版必须跟阅读态一致，否则切来切去会跳。
+ * Crepe 的 DOM 在组件内部，这段不能用 scoped。
+ */
+.crepe-host .milkdown {
+  --crepe-color-background: #ffffff;
+  --crepe-color-on-background: var(--c-ink);
+  --crepe-color-surface: #f7f7f7;
+  --crepe-color-surface-low: #f2f2f2;
+  --crepe-color-on-surface: var(--c-text);
+  --crepe-color-on-surface-variant: var(--c-sub);
+  /*
+   * 图标主色。不能给 --c-line：Crepe 用它画工具条、斜杠菜单、块操作菜单里
+   * 所有图标的 fill/color，而 --c-line 是分割线的颜色（#e8e8e8，接近白），
+   * 结果每个图标都淡得像禁用。给次级文字色，图标才立得住。
+   */
+  --crepe-color-outline: var(--c-sub);
+  --crepe-color-primary: var(--color-ds);
+  --crepe-color-secondary: #e8ecff;
+  --crepe-color-on-secondary: #3448c4;
+  --crepe-color-inverse: #1a1a1a;
+  --crepe-color-on-inverse: #ffffff;
+  --crepe-color-inline-code: #3448c4;
+  --crepe-color-error: #d9534f;
+  --crepe-color-hover: #f2f2f2;
+  --crepe-color-selected: #e8ecff;
+  --crepe-color-inline-area: #ededed;
+  --crepe-font-default: var(--reading-font, "Noto Serif SC", serif);
+  --crepe-font-title: var(--reading-font, "Noto Serif SC", serif);
+  --crepe-font-code: var(--font-mono);
+  /* Crepe 内部还有不少按这个基准算出来的尺寸，调小一档 */
+  --crepe-base-font-size: 14px;
+  /*
+   * 阴影。Crepe 原值第二层是 rgba(0,0,0,.3)，落在白底上发黑，浮层看着很沉。
+   * 换成两层浅影：一层贴边定轮廓，一层散开给层次，跟工具条弹层一个观感。
+   */
+  --crepe-shadow-1:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.07);
+  --crepe-shadow-2:
+    0 2px 4px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* 正文容器：整块铺满，宽度限制下放到每个块上，这样表格才能突破出去 */
+.crepe-host .milkdown .ProseMirror {
+  max-width: none;
+  /* 左右 64px 是给块手柄留的地方，见下面 .milkdown-block-handle */
+  padding: 20px 64px 0;
+  font-family: var(--reading-font, "Noto Serif SC", serif);
+  font-size: var(--reading-size, 15.5px);
+  line-height: var(--reading-lh, 1.95);
+  color: var(--c-text);
+  caret-color: var(--color-ds);
+  letter-spacing: var(--reading-tracking, 0em);
+  text-align: justify;
+  text-justify: inter-ideograph;
+  hyphens: auto;
+  font-feature-settings: "kern" 1;
+}
+
+/*
+ * 正文段落。
+ *
+ * 排版规则原先只写在只读渲染器的 .md-body 上，换成常驻编辑器之后没人接过来，
+ * 于是段距式/缩进式、加粗面、斜体面这几项点了都没反应。这里按同一套变量重新接上。
+ *
+ * text-wrap 用 pretty，不用 balance。
+ *
+ * 试过 balance 治孤行：640px 下二行段落的末行确实从 7% 变成 53%，孤行数从 20 降到 4。
+ * 但它把前几行的自然宽度压到八成，两端对齐再拉满，字距明显变松——得不偿失，退回 pretty。
+ * pretty 对中文本来也没什么用（靠拽词消孤行，中文没有词边界），留着是为了西文段落。
+ * 孤行属于中文排版常态，不值得为它牺牲字距。
+ *
+ * orphans/widows 管的是分页，打印导出 PDF 时才看得出来。
+ */
+.crepe-host .milkdown .ProseMirror p {
+  margin-block: 0 var(--para-gap, 1.15em);
+  text-indent: var(--para-indent, 0em);
+  text-wrap: pretty;
+  orphans: 2;
+  widows: 2;
+}
+/* 标题后首段、列表项、引用、表格单元格里不缩进 */
+.crepe-host .milkdown .ProseMirror h1 + p,
+.crepe-host .milkdown .ProseMirror h2 + p,
+.crepe-host .milkdown .ProseMirror h3 + p,
+.crepe-host .milkdown .ProseMirror h4 + p,
+.crepe-host .milkdown .ProseMirror li p,
+.crepe-host .milkdown .ProseMirror blockquote p,
+.crepe-host .milkdown .ProseMirror td p,
+.crepe-host .milkdown .ProseMirror th p {
+  text-indent: 0;
+}
+
+/* 加粗：中文走 Black 面，字重跟着「加粗面」走 */
+.crepe-host .milkdown .ProseMirror strong,
+.crepe-host .milkdown .ProseMirror b {
+  font-weight: var(--cjk-strong-weight, 900);
+  color: inherit;
+}
+/*
+ * 斜体：中文不倾斜，换楷体（传统做法）。
+ *
+ * font-synthesis-style: none 是必须的：楷体这类中文字体没有真正的斜体，
+ * 浏览器会"合成"一个歪的出来（尤其 em + strong、或者选框里那几档设成"不替换"时），
+ * 看着就是用户说的"那个强制斜体，不好看"。只禁合成斜体，不禁合成加粗 ——
+ * 中文加粗本来就靠合成（系统字体没有 900 字重）。
+ */
+.crepe-host .milkdown .ProseMirror {
+  font-synthesis-style: none;
+}
+.crepe-host .milkdown .ProseMirror em,
+.crepe-host .milkdown .ProseMirror i {
+  font-style: normal;
+  font-family: var(--cjk-em-family, inherit);
+  /*
+   * line-height: 1 是必须的。
+   *
+   * 楷体这类中文字体的上下伸展比正文宋体/黑体大，行内出现楷体时，那一行的行盒会被它撑高
+   * 约 2px（一行看不出来，整段折行就很明显：带斜体的行比别的行松）——
+   * 用户说的"开了斜体之后行距变得很奇怪"就是这个。
+   * 给 em 一个固定的 1，行盒就完全由段落自己的 strut（--reading-lh）决定，
+   * 实测三种段落（全正文 / 全斜体 / 混排）行盒高度完全一致。字形不受影响，只是不再撑行盒。
+   */
+  line-height: 1;
+}
+
+/*
+ * 每个块按阅读宽度居中；表格不受这个限制。
+ *
+ * transition 是补回来的：这条原本挂在只读渲染器的 .md-body > * 上，
+ * 换成常驻编辑器之后规则没接过来，于是「窄/中/宽」切换变成硬跳。
+ * 只动 max-width——字号跟着动的话整篇要重排，代价太大。
+ */
+.crepe-host .milkdown .ProseMirror > * {
+  max-width: var(--measure, 960px);
+  margin-inline: auto;
+  transition: max-width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* 表格宽度：跟正文同宽，还是铺满可用宽度 */
+.crepe-host .milkdown .ProseMirror > .milkdown-table-block {
+  max-width: 100%;
+}
+body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-block {
+  max-width: var(--measure, 960px);
+}
+
+/* 标题：字号字重递进，跟阅读态对齐 */
+.crepe-host .milkdown .ProseMirror h1 {
+  font-size: 1.62em;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--c-ink);
+  margin-block: 0 1.1em;
+  letter-spacing: 0.01em;
+}
+.crepe-host .milkdown .ProseMirror h2 {
+  font-size: 1.22em;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--c-ink);
+  margin-block: 2.1em 1em;
+  letter-spacing: 0.01em;
+}
+.crepe-host .milkdown .ProseMirror h3 {
+  font-size: 1.06em;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--c-ink);
+  margin-block: 2.2em 0.8em;
+}
+.crepe-host .milkdown .ProseMirror h4,
+.crepe-host .milkdown .ProseMirror h5,
+.crepe-host .milkdown .ProseMirror h6 {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-block: 1.7em 0.6em;
+}
+
+/*
+ * 段落与列表。
+ *
+ * 这里的 line-height 原来是写死的 1.95，把 .ProseMirror 上的 var(--reading-lh) 又盖回去了 ——
+ * 于是设置里的行距（以及行距滑块）对正文段落完全无效。改成跟着同一个变量走。
+ */
+.crepe-host .milkdown .ProseMirror p {
+  margin-block: 0 1.15em;
+  line-height: var(--reading-lh, 1.95);
+}
+.crepe-host .milkdown .ProseMirror ul,
+.crepe-host .milkdown .ProseMirror ol {
+  margin-block: 0 1.3em;
+  padding-left: 1.5em;
+}
+/*
+ * 列表：行距跟着全局行距走，但比正文紧一点（0.86）。
+ * 短条目一条一行，用正文那种 1.95 会显得散；项与项之间也收小。
+ */
+.crepe-host .milkdown .ProseMirror li {
+  margin-block: 0.18em;
+  line-height: calc(var(--reading-lh, 1.95) * 0.86);
+}
+.crepe-host .milkdown .ProseMirror li p {
+  margin-block: 0;
+}
+
+/* 引用：只用 Crepe 自带的那条竖线，别再叠一条边框上去 */
+.crepe-host .milkdown .ProseMirror blockquote {
+  margin-block: 1.4em;
+  padding-left: 1.35em;
+  border: none;
+  color: var(--c-sub);
+}
+.crepe-host .milkdown .ProseMirror blockquote::before {
+  width: 3px;
+  top: 0;
+  bottom: 0;
+  background: var(--c-line);
+  border-radius: 2px;
+}
+
+/* 分割线 */
+.crepe-host .milkdown .ProseMirror hr {
+  border-top: 1px solid var(--c-line);
+  margin-block: 3.4em 0;
+}
+
+/* 链接：唯一的彩色 */
+.crepe-host .milkdown .ProseMirror a {
+  color: var(--color-ds);
+  border-bottom: 1px solid rgba(77, 107, 254, 0.25);
+  text-decoration: none;
+}
+
+/* 行内代码 */
+.crepe-host .milkdown .ProseMirror code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: #f6f6f6;
+  border-radius: 3px;
+  padding: 0.1em 0.34em;
+  color: #333;
+}
+
+/*
+ * 表格：真的画成一张表，四角带一点圆角。
+ *
+ * 圆角跟 border-collapse: collapse 是冲突的（折叠边框模型下 border-radius 不生效），
+ * 所以改成 separate + 单元格只画右/下边框，四角由「表格外框圆角」拼出来。
+ *
+ * 选择器只对**有行的表**生效（:has(tr)）：Crepe 的 table-block 里还挂着一张 0×0 的量算表，
+ * 给它画一圈外框，正文里就会多出一个 2px 的小点。
+ *
+ * 网格线用 --c-line 而不是 --c-line-soft：soft 是 #f2f2f2，当表格线根本看不见。
+ */
+.crepe-host .milkdown .ProseMirror table:has(tr) {
+  width: 100%;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  margin-block: 1.6em;
+  font-size: 0.86em;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+.crepe-host .milkdown .ProseMirror th,
+.crepe-host .milkdown .ProseMirror td {
+  padding: 0.5em 0.7em;
+  vertical-align: top;
+  text-align: left;
+  overflow-wrap: break-word;
+}
+.crepe-host .milkdown .ProseMirror table:has(tr) th,
+.crepe-host .milkdown .ProseMirror table:has(tr) td {
+  border: 0;
+  border-right: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+}
+.crepe-host .milkdown .ProseMirror table:has(tr) th:last-child,
+.crepe-host .milkdown .ProseMirror table:has(tr) td:last-child {
+  border-right: 0;
+}
+.crepe-host .milkdown .ProseMirror table:has(tr) tr:last-child > * {
+  border-bottom: 0;
+}
+.crepe-host .milkdown .ProseMirror th {
+  font-weight: 600;
+  color: var(--c-ink);
+  background: var(--c-field);
+}
+/*
+ * 单元格里的段落：**不能继承正文的段距和行距**。
+ * 正文是 margin-bottom 1.15em + line-height 1.95，一格一行字的表格行会被撑到 116px，
+ * 看着就是"文字下面一大片空白"。这里清掉段距、行距跟表格走。
+ */
+.crepe-host .milkdown .ProseMirror th p,
+.crepe-host .milkdown .ProseMirror td p {
+  margin-block: 0;
+  line-height: inherit;
+  text-indent: 0;
+}
+/* 首列左内边距跟别的列一样，不然第一列会贴着外框 */
+.crepe-host .milkdown .ProseMirror th:first-child,
+.crepe-host .milkdown .ProseMirror td:first-child {
+  padding-left: 0.7em;
+}
+/* 长 URL 不可断的话会独占列宽，把真正文字多的列挤扁 */
+.crepe-host .milkdown .ProseMirror th,
+.crepe-host .milkdown .ProseMirror td {
+  overflow-wrap: break-word;
+}
+.crepe-host .milkdown .ProseMirror td a {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+/* Crepe 默认给表格画了框线，这里去掉只留底部细线 */
+.crepe-host .milkdown .ProseMirror .table-wrapper {
+  margin-block: 1.8em;
+  overflow-x: auto;
+}
+.crepe-host .milkdown .ProseMirror .table-wrapper table {
+  margin-block: 0;
+}
+
+/*
+ * 表格的悬停操作件。
+ *
+ * Crepe 原本是：列把手 28×16、行把手 16×28，都带 100px 全圆角和一层很重的阴影，
+ * 再用 translateY/X(50%) 往内推半个身位，故意跨在表格边线上。
+ * 但首列左内边距是 0，行把手跨进来就正好压住第一个字；图标还是同一个 16×16 的
+ * 六点握把，塞进扁胶囊里被压扁。
+ *
+ * 改成：两个把手统一 18×18 小方块，图标按原比例放 14px，
+ * 用 translate 把它们整个挪到表格外面留 6px 空隙，不再盖住任何字。
+ * 常态透明、只在悬停时给一层浅底，比一直挂着一块白胶囊安静。
+ */
+.crepe-host .milkdown .ProseMirror .milkdown-table-block .cell-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 5px;
+  background-color: transparent;
+  color: var(--c-faint);
+  box-shadow: none;
+  transition: background-color 0.12s, color 0.12s;
+}
+.crepe-host .milkdown .ProseMirror .milkdown-table-block .cell-handle:hover {
+  background-color: var(--c-hover);
+  color: var(--c-ink);
+}
+/* 行把手整个挪到表格左边外面 */
+.crepe-host .milkdown .ProseMirror .milkdown-table-block .cell-handle[data-role='row-drag-handle'] {
+  transform: translateX(-6px);
+}
+/* 列把手整个挪到表格上边外面 */
+.crepe-host .milkdown .ProseMirror .milkdown-table-block .cell-handle[data-role='col-drag-handle'] {
+  transform: translateY(-6px);
+}
+/*
+ * 握把不用 Crepe 那个 svg：两个把手共用同一个「=」，行把手也显示横杠，
+ * 跟「纵向拖动」的语义是反的。CSS 画两根线，方向跟着轴向走，颜色跟 currentColor。
+ */
+.crepe-host .milkdown .ProseMirror .milkdown-table-block .cell-handle .milkdown-icon svg {
+  display: none;
+}
+.crepe-host .milkdown .ProseMirror .milkdown-table-block .cell-handle .milkdown-icon::before {
+  content: '';
+  display: block;
+  width: 13px;
+  height: 7px;
+  background-image: linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-size: 100% 2px, 100% 2px;
+  background-position: 0 0, 0 100%;
+  background-repeat: no-repeat;
+  border-radius: 1px;
+}
+.crepe-host
+  .milkdown
+  .ProseMirror
+  .milkdown-table-block
+  .cell-handle[data-role='row-drag-handle']
+  .milkdown-icon::before {
+  width: 7px;
+  height: 13px;
+  background-size: 2px 100%, 2px 100%;
+  background-position: 0 0, 100% 0;
+}
+/* 把手要探到表格外面去，块本身不能裁 */
+.crepe-host .milkdown .ProseMirror .milkdown-table-block {
+  overflow: visible;
+}
+
+/*
+ * 表格把手（拖拽行/列的手柄）保留，但收得很安静：常态透明、只留两根细线做握把，
+ * 悬停时才有一层浅底，位置整个挪到表格外面，不压任何字。
+ * 具体样式在上面那几段里，这里只留一条说明，避免以后有人以为它是默认长相。
+ */
+
+/*
+ * 关掉 Crepe 的「插入行列」悬停指示器。
+ *
+ * 它是一根和表格等高的竖线（实测这张表 1520px，蓝色 #4d6bfe），加号胶囊用
+ * translate(-50%, -50%) 以光标为中心定位。结果是鼠标在表格里稍微一动，
+ * 就有一根蓝线切过单元格文字、一个加号压在光标底下反复闪，非常吵。
+ *
+ * 代价：没有「悬停加号插入行」这个快捷方式了。
+ * 插入列/删除列在列把手的按钮组里还在，插入行可以选中整行走表格菜单，
+ * 或者直接改 markdown。要恢复就把这段删掉。
+ */
+.crepe-host .milkdown .ProseMirror .milkdown-table-block .line-handle {
+  display: none;
+}
+
+/* 拖列宽时跟着走的那根竖线：挂在 body 上，用视口坐标，不参与编辑器内部的任何重排 */
+.col-guide {
+  position: fixed;
+  width: 2px;
+  background: var(--color-ds);
+  opacity: 0.45;
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* 表格切成 fixed 之后默认会平分，交给首行的 width 说话 */
+.crepe-host .milkdown .ProseMirror table[style*="table-layout: fixed"] {
+  table-layout: fixed;
+}
+
+/* mermaid 预览：贴在代码块下面，居中，可以横向滚动 */
+.crepe-host .milkdown .milkdown-code-block .mermaid-preview {
+  margin-top: 4px;
+  padding: 12px;
+  border-top: 1px solid var(--c-line-soft);
+  overflow-x: auto;
+  text-align: center;
+  background: var(--c-pop);
+}
+.crepe-host .milkdown .milkdown-code-block .mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/*
+ * 浮动工具条（选中文字时弹出来的那一排）。
+ *
+ * Crepe 默认每个按钮 32px 见方、外边距 6px，一格就占 44px，图标还给到 24px，
+ * 整条又高又胖。收到 28px + 3px 外边距（一格 34px）、图标 17px，
+ * 分隔条也压短。点选区域还有 28px，鼠标够用。
+ */
+.crepe-host .milkdown .milkdown-toolbar {
+  border-radius: 9px;
+}
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item {
+  width: 28px;
+  height: 28px;
+  margin: 3px;
+  padding: 3px;
+  border-radius: 5px;
+}
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item svg {
+  width: 17px;
+  height: 17px;
+}
+.crepe-host .milkdown .milkdown-toolbar .divider {
+  height: 16px;
+  margin: 9px 7px;
+}
+
+/*
+ * 块左侧的操作手柄（加号 + 六点拖动）。
+ *
+ * 它整个浮在正文左边：两个 32px 的按钮加间距一共 66px 宽，而编辑器左右内边距只有 40px，
+ * 宽屏时正文贴着内边距起始，手柄就被挤出编辑器压到侧栏上。
+ * 两头一起改：手柄收到 24px（两个加间距 50px），内边距放到 56px，正好装得下。
+ */
+/*
+ * 再往右挪 8px。
+ * 手柄 50px + Crepe 自带的 16px 间隙 = 66px，光靠内边距要 66px 才够，
+ * 那样正文两侧留白太宽。留白给到 64px，剩下这点用位移补齐，
+ * 满宽时右缘正好落在侧栏边界外。
+ */
+.crepe-host .milkdown .milkdown-block-handle {
+  transform: translateX(8px);
+}
+.crepe-host .milkdown .milkdown-block-handle .operation-item {
+  width: 24px;
+  height: 24px;
+  padding: 3px;
+  border-radius: 5px;
+}
+.crepe-host .milkdown .milkdown-block-handle .operation-item svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* ---------- 斜杠插入菜单 ---------- */
+/* Crepe 默认条目最小宽 220、内边距 14、图标 24，又大又长，整体收紧 */
+.crepe-host .milkdown .milkdown-slash-menu {
+  border-radius: 10px;
+  border: 1px solid var(--c-line-soft);
+  padding: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05), 0 12px 36px rgba(0, 0, 0, 0.13);
+}
+.crepe-host .milkdown .milkdown-slash-menu ul {
+  padding: 0;
+}
+.crepe-host .milkdown .milkdown-slash-menu .tab-group {
+  padding: 5px 5px 0;
+}
+.crepe-host .milkdown .milkdown-slash-menu .tab-group ul {
+  padding: 2px;
+  gap: 1px;
+}
+.crepe-host .milkdown .milkdown-slash-menu .tab-group ul li {
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
+  border-radius: 5px;
+}
+.crepe-host .milkdown .milkdown-slash-menu .menu-groups {
+  padding: 0 5px 5px;
+  max-height: 296px;
+}
+.crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  line-height: 14px;
+  padding: 7px 8px 3px;
+  text-transform: none;
+  color: var(--c-faint);
+}
+.crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group li {
+  min-width: 0;
+  width: 100%;
+  gap: 9px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  line-height: 18px;
+}
+.crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  width: 15px;
+  height: 15px;
+}
+.crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 18px;
+}
+.crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
+  margin: 3px 8px;
+}
+
+/*
+ * 护眼下 Crepe 的变量。
+ *
+ * 基础那套是写死的 `#ffffff` / `#f7f7f7`，不覆盖的话编辑器内部还是白的，
+ * 只有正文外面一圈变米色，会很割裂。这里把底色、面板、悬停态一起转暖，
+ * 代码块和行内代码也跟着走，不然米底上嵌一块冷白很跳。
+ */
+body[data-theme="sepia"] .crepe-host .milkdown {
+  --crepe-color-background: var(--c-surface);
+  --crepe-color-on-background: var(--c-ink);
+  --crepe-color-surface: var(--c-pop);
+  --crepe-color-surface-low: var(--c-code-bg);
+  --crepe-color-on-surface: var(--c-text);
+  --crepe-color-on-surface-variant: var(--c-sub);
+  --crepe-color-outline: var(--c-sub);
+  --crepe-color-primary: var(--color-ds);
+  --crepe-color-secondary: #e3e7f8;
+  --crepe-color-on-secondary: #3448c4;
+  --crepe-color-inverse: #2b2721;
+  --crepe-color-on-inverse: #f4eedd;
+  --crepe-color-inline-code: #3448c4;
+  --crepe-color-error: #c0473f;
+  --crepe-color-hover: rgba(90, 74, 40, 0.07);
+  --crepe-color-selected: rgba(77, 107, 254, 0.14);
+  --crepe-color-inline-area: rgba(90, 74, 40, 0.09);
+}
+/* 行内代码在浅色下是冷灰底，护眼里换成暖的 */
+body[data-theme="sepia"] .crepe-host .milkdown .ProseMirror code {
+  background: var(--c-code-inline);
+}
+
+/* 深色下 Crepe 的变量跟着走 */
+body[data-theme="dark"] .crepe-host .milkdown {
+  --crepe-color-background: var(--c-surface);
+  --crepe-color-on-background: var(--c-ink);
+  --crepe-color-surface: var(--c-pop);
+  --crepe-color-surface-low: var(--c-pop);
+  --crepe-color-on-surface: var(--c-text);
+  --crepe-color-on-surface-variant: var(--c-sub);
+  /*
+   * 图标主色。不能给 --c-line：Crepe 用它画工具条、斜杠菜单、块操作菜单里
+   * 所有图标的 fill/color，而 --c-line 是分割线的颜色（#e8e8e8，接近白），
+   * 结果每个图标都淡得像禁用。给次级文字色，图标才立得住。
+   */
+  --crepe-color-outline: var(--c-sub);
+  --crepe-color-inverse: #ececec;
+  --crepe-color-on-inverse: var(--c-surface);
+  --crepe-color-inline-code: #9db2ff;
+  --crepe-color-hover: rgba(255, 255, 255, 0.07);
+  --crepe-color-selected: rgba(122, 146, 255, 0.2);
+  --crepe-color-inline-area: rgba(255, 255, 255, 0.08);
+}
+body[data-theme="dark"] .crepe-host .milkdown .ProseMirror code {
+  background: var(--c-code-inline);
+  color: #9db2ff;
+}
+body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
+  background: var(--c-code-bg);
+}
+
+/* 选中态用品牌蓝 */
+.crepe-host .milkdown .ProseMirror ::selection {
+  background: rgba(77, 107, 254, 0.16);
+}
