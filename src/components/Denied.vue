@@ -4,8 +4,8 @@
       <h1>禁止访问</h1>
       <p>这个项目必须在两种模式里选一个打开：</p>
       <div class="denied-links">
-        <a href="/edit">/edit<span>编辑模式</span></a>
-        <a href="/onlyread">/onlyread<span>只读模式</span></a>
+        <a :href="API_BASE + '/edit'">/edit<span>编辑模式</span></a>
+        <a :href="API_BASE + '/onlyread'">/onlyread<span>只读模式</span></a>
       </div>
     </div>
   </div>
@@ -13,6 +13,7 @@
 
 <script setup>
 /* 没有明确模式时的落地页：不给看内容，也不发任何 /api 请求 */
+import { API_BASE } from '../utils/api'
 </script>
 
 <style scoped>

@@ -377,7 +377,8 @@ export const useDocsStore = defineStore('docs', () => {
     // 地址里不带 .md/.pdf：短一点、也跟用户手写的一致
     const clean = String(currentPath.value || '').replace(/\.(md|pdf)$/i, '')
     const path = clean ? '/' + clean.split('/').map(encodeURIComponent).join('/') : ''
-    const next = '/' + mode + path + location.search
+    /* 部署在子路径时，写回地址栏也要带前缀，否则一跳就跑到站点根上 */
+    const next = API_BASE + '/' + mode + path + location.search
     if (location.pathname + location.search !== next) history.replaceState(null, '', next)
   }
 

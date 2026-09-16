@@ -37,6 +37,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { API_BASE } from '../utils/api'
 
 /*
  * 知识库首页。
@@ -77,7 +78,7 @@ function pick(id) {
 onMounted(async () => {
   document.body.dataset.theme = theme.value
   try {
-    const res = await fetch('/kb.json', { cache: 'no-store' })
+    const res = await fetch(API_BASE + '/kb.json', { cache: 'no-store' })
     const data = await res.json()
     if (data && typeof data.title === 'string' && data.title) title.value = data.title
     if (Array.isArray(data?.libs) && data.libs.length) libs.value = data.libs

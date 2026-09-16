@@ -15,7 +15,7 @@
       <button class="unlock-btn" type="submit" :disabled="busy || !pass">
         {{ busy ? '验证中…' : '进入编辑' }}
       </button>
-      <a class="unlock-alt" href="/onlyread">只看，不编辑 →</a>
+      <a class="unlock-alt" :href="API_BASE + '/onlyread'">只看，不编辑 →</a>
     </form>
   </div>
 </template>

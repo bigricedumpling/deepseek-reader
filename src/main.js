@@ -59,6 +59,8 @@ window.__readerDocPath = DOC_PATH
 const PASS = localStorage.getItem('reader_pass') || ''
 // 要编辑、又还没输过密码：先给密码门（密码由服务端验，这里只负责收）
 const MODE = WANT === 'owner' && !PASS ? 'locked' : WANT
+/* 当前身份挂到 window：store 里同步地址栏时要判断写 /edit 还是 /onlyread */
+window.__readerMode = MODE
 
 const sharedToken = new URLSearchParams(location.search).get('token')
 if (sharedToken) sessionStorage.setItem('reader_token', sharedToken)

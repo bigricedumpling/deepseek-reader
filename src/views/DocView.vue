@@ -402,7 +402,7 @@
         <span class="ui-font tabular-nums">{{ stats.lines }} 行</span>
       </template>
       <span class="ui-font ml-auto flex items-center gap-1.5">
-        <a v-if="store.isGuest" class="ui-font text-[var(--c-faint)] hover:text-[var(--c-ink)] underline" href="/edit" title="切回编辑模式">只读预览 · 切到编辑</a>
+        <a v-if="store.isGuest" class="ui-font text-[var(--c-faint)] hover:text-[var(--c-ink)] underline" :href="API_BASE + '/edit'" title="切回编辑模式">只读预览 · 切到编辑</a>
         <PhSpinnerGap v-if="saving" :size="12" class="spin" />
         <span :class="saveStateClass">{{ saveStateText }}</span>
       </span>

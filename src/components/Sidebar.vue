@@ -282,6 +282,7 @@ import {
 } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
+import { API_BASE } from '../utils/api'
 const props = defineProps({
   nodes: { type: Array, required: true },
   currentPath: { type: String, default: '' },
@@ -330,7 +331,7 @@ async function openKbMenu(e) {
   kbMenu.libs = []
   kbMenu.open = true
   try {
-    const res = await fetch('/kb.json', { cache: 'no-store' })
+    const res = await fetch(API_BASE + '/kb.json', { cache: 'no-store' })
     const data = await res.json()
     kbMenu.libs = (Array.isArray(data?.libs) ? data.libs : []).filter((l) => l && l.href)
   } catch {
