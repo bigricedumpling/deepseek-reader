@@ -206,8 +206,18 @@ export function roleOf(req, url, share, { forceGuest = false } = {}) {
   const mode = String(headers['x-reader-mode'] || pick('reader_mode') || '')
   if (mode === 'guest') return 'guest'
   if (mode === 'owner') {
-    // 编辑模式要密码；密码同时允许写在 cookie 里（iframe 拉 PDF 那种请求带不了头）
-    if (!local) return 'denied'
+    /*
+     * 两条路进编辑：
+     *
+     *   1. owner token —— 公网上可靠的一条。挂在查询串或 x-reader-token 头上，
+     *      比密码长得多，也不会被浏览器记住之后到处粘。
+     *   2. 密码 —— 本地 dev 用着方便。
+     *
+     * 注意：挂在 nginx 后面时 remoteAddress 恒为 127.0.0.1，local 判断失去区分度，
+     * 所以这里不再拿它当安全边界，密码本身就是那道门。
+     */
+    const tok = String(url?.searchParams?.get('token') || headers['x-reader-token'] || '')
+    if (tok && tok === share.token('owner')) return 'owner'
     const given = String(headers['x-reader-pass'] || pick('reader_pass') || '')
     return given === EDIT_PASSWORD ? 'owner' : 'denied'
   }
