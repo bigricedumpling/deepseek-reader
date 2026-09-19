@@ -277,7 +277,7 @@ import {
   PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
   PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
   PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
-  PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft,
+  PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
   PhHandGrabbing
 } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
@@ -305,8 +305,13 @@ const LS_LOGO = 'reader.logo'
 /** 图标存成 data URL 放 localStorage，先缩到这个边长，配额才扛得住 */
 const LOGO_SIZE = 96
 
+/*
+ * 左上角的名字。改过之后存在本地，所以只有改的人自己看得见——
+ * 换个浏览器（比如从微信打开）没有这条记录，就会用下面这个默认值。
+ * 想让所有人都看到同一个名字，改这里的默认值。
+ */
 const brandLines = ref(
-  JSON.parse(localStorage.getItem(LS_BRAND) || 'null') || ['DeepSeek 面试', '调研知识库']
+  JSON.parse(localStorage.getItem(LS_BRAND) || 'null') || ['Agent（设计方向）', '笔试题交付']
 )
 watch(
   brandLines,

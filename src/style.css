@@ -502,3 +502,73 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
   color: var(--c-ink);
   background: var(--c-hover);
 }
+
+
+/* ==========================================================================
+   窄屏适配
+   --------------------------------------------------------------------------
+   桌面端的三层宽度折扣叠在一起，到手机上就只剩一条窄缝：
+     左栏 52px（收起后）+ 顶栏两侧各 32px + 正文两侧各 64px，
+     再加上阅读宽度本身打 92% 的折。
+   390px 的屏幕算下来正文只剩一百多像素，每个字都在换行。
+   所以窄屏下把这四层依次让回来，并把块手柄那 64px 收掉——
+   触屏没有悬停，手柄本来也用不到。
+   ========================================================================== */
+@media (max-width: 720px) {
+  /* 阅读宽度不再打折，占满可用区域 */
+  .print-area,
+  .crepe-host,
+  .crepe-host .milkdown,
+  .crepe-host .milkdown .ProseMirror {
+    --measure: 100% !important;
+  }
+
+  /* 正文：把给块手柄留的左右 64px 让回来 */
+  .crepe-host .milkdown .ProseMirror {
+    padding: 14px 18px 0;
+  }
+
+  /* 顶栏与底栏：32px 收到 14px */
+  .reader-topbar { padding-inline: 14px; }
+  .reader-bottombar { padding-inline: 14px; gap: 8px; }
+
+  /* 正文两侧的浮层提示也跟着收 */
+  .crepe-host .milkdown .milkdown-block-handle { display: none; }
+}
+
+@media (max-width: 480px) {
+  /* 更窄一档：正文再让一点，字号维持不变（15.5px 在手机上仍可读） */
+  .crepe-host .milkdown .ProseMirror { padding: 12px 14px 0; }
+  .reader-topbar { padding-inline: 10px; gap: 4px; }
+  .reader-bottombar { padding-inline: 10px; }
+}
+
+/*
+ * 窄屏的搜索：默认只留一个图标。
+ * 顶栏在手机上要放文档名、搜索、字体、主题、菜单五样东西，
+ * 常驻一个输入框会把它们全挤扁，所以点开才展开，展开后浮在顶栏上方。
+ */
+.search-toggle { display: none; }
+
+@media (max-width: 720px) {
+  .search-toggle { display: inline-flex; }
+
+  .search-wrap .search-field { display: none; }
+
+  .search-wrap.is-mobile-open .search-field {
+    display: flex;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: min(300px, 74vw);
+    z-index: 25;
+  }
+
+  .search-wrap.is-mobile-open .search-toggle { display: none; }
+
+  /* 下拉跟着展开的输入框走，别超出屏幕 */
+  .search-wrap .search-drop {
+    width: min(300px, 86vw);
+    right: 0;
+  }
+}

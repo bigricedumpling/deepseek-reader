@@ -73,6 +73,16 @@ if (MODE === 'locked') {
   document.cookie = 'reader_mode=; path=/; Max-Age=0; SameSite=Lax'
 } else {
   document.cookie = 'reader_mode=' + (MODE === 'owner' ? 'owner' : 'guest') + '; path=/; SameSite=Lax'
+  /*
+   * 编辑模式下把密码也种进 cookie。
+   *
+   * <img> 这类由浏览器自己发的请求带不了自定义头，只能靠 cookie 认身份。
+   * 之前只种了 reader_mode=owner，服务端要验密码却拿不到，于是图片全被 403 挡掉——
+   * 只读模式反而正常，因为它是 guest，不需要密码。
+   */
+  if (MODE === 'owner' && PASS) {
+    document.cookie = 'reader_pass=' + encodeURIComponent(PASS) + '; path=/; SameSite=Lax'
+  }
 }
 
 if (MODE === 'owner' || MODE === 'guest') {

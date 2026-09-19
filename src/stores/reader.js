@@ -78,7 +78,8 @@ export const WIDTH_OPTIONS = [
 export const useReaderStore = defineStore('reader', () => {
   /* ---------- 正文排版 ---------- */
   const rawFont = localStorage.getItem(KEY.font)
-  const font = ref(FONT_MIGRATE[rawFont] || rawFont || 'serif')
+  /* 默认无衬线：初次打开（localStorage 里没有记录）用 sans，读者自己改过的照旧 */
+  const font = ref(FONT_MIGRATE[rawFont] || rawFont || 'sans')
   const size = ref(num('size', 15.5))
   /** 阅读宽度，0 表示铺满可用宽度 */
   const measure = ref(num('measure', 960))

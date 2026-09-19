@@ -51,7 +51,7 @@ import { API_BASE } from '../utils/api'
 
 const FALLBACK = [
   {
-    name: 'DeepSeek 笔试调研',
+    name: '笔试调研',
     desc: '网页数据 / 评测基准 / 训练数据构造与筛选的调研与结论。',
     href: '/',
     meta: '调研 · 笔试 · 存档'

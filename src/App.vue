@@ -102,7 +102,6 @@ import TocPanel from './components/TocPanel.vue'
 import AppDialog from './components/AppDialog.vue'
 import { useDocsStore } from './stores/docs'
 import { useReaderStore } from './stores/reader'
-import { api } from './utils/api'
 
 const store = useDocsStore()
 /** 当前这篇是不是 pdf：右栏显示它的书签目录，点击跳页 */
@@ -425,12 +424,21 @@ watchForStaleCode()
  * 视口不够宽时先收右栏（目录），再不够就收左栏（侧栏）——
  * 只在"跨过阈值"那一下动手，之后你手动展开就不管了，免得跟你抢。
  */
-let lastW = window.innerWidth
+/*
+ * 首次进入直接按当前宽度定，不能只等"从宽变窄"那一下——
+ * 那样用窄窗口或半屏打开时会一直挤着不收。
+ */
+let lastW = null
 function fitViewport() {
   const w = window.innerWidth
-  const crossed = (px) => lastW >= px && w < px
-  if (crossed(1180) && reader.tocOpen) reader.tocOpen = false
-  if (crossed(900) && !reader.navCollapsed) reader.navCollapsed = true
+  if (lastW === null) {
+    if (w < 1180) reader.tocOpen = false
+    if (w < 900) reader.navCollapsed = true
+  } else {
+    const crossed = (px) => lastW >= px && w < px
+    if (crossed(1180) && reader.tocOpen) reader.tocOpen = false
+    if (crossed(900) && !reader.navCollapsed) reader.navCollapsed = true
+  }
   lastW = w
 }
 fitViewport()

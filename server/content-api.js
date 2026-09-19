@@ -75,7 +75,8 @@ function inReader(abs) {
 function assertFile(rel, opts) {
   assertVisible(rel, opts)
   const abs = safeResolve(rel)
-  if (!/\.(md|pdf)$/i.test(abs)) throw new Error('只能操作 md 或 pdf 文件: ' + rel)
+  /* 图片也放行：文档里插图要用 /api/file 取，否则 <img> 打不开 */
+  if (!/\.(md|pdf|png|jpe?g|webp|gif|svg|avif)$/i.test(abs)) throw new Error('只能操作 md、pdf 或图片: ' + rel)
   if (inReader(abs)) throw new Error('这是阅读器自己的文件，不在文档树里: ' + rel)
   return abs
 }

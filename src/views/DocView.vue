@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen flex flex-col overflow-hidden">
     <!-- 顶部工具条：左侧是打开的文档，右侧是各功能入口 -->
-    <div class="h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
+    <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 打开的文档：多开、切换、关掉（出现/消失也带一点过渡） -->
       <transition name="pop">
         <DocTabs
@@ -14,10 +14,17 @@
         />
       </transition>
 
-      <!-- 搜索 -->
-      <div class="relative">
+      <!-- 搜索：窄屏下先收成一个图标，点了才展开 -->
+      <div class="relative search-wrap" :class="{ 'is-mobile-open': mobileSearchOpen }">
+        <button
+          class="search-toggle h-8 w-8 items-center justify-center rounded-lg text-[var(--c-sub)] hover:bg-[var(--c-hover)]"
+          aria-label="搜索"
+          @click="openMobileSearch"
+        >
+          <PhMagnifyingGlass :size="15" />
+        </button>
         <div
-          class="flex items-center gap-2 h-8 px-3 rounded-lg bg-[var(--c-field)] transition-all duration-200"
+          class="search-field flex items-center gap-2 h-8 px-3 rounded-lg bg-[var(--c-field)] transition-all duration-200"
           :class="searchOpen ? 'w-[320px] bg-[var(--c-pop)] ring-1 ring-[var(--c-line)]' : 'w-[150px]'"
         >
           <PhMagnifyingGlass :size="13" class="text-[var(--c-faint)] shrink-0" />
@@ -37,7 +44,7 @@
 
         <div
           v-if="searchOpen && keyword.trim()"
-          class="search-drop absolute right-0 top-[38px] w-[460px] max-h-[62vh] overflow-y-auto bg-[var(--c-pop)] rounded-xl shadow-[var(--c-pop-shadow)] p-2 z-50"
+          class="search-drop absolute right-0 top-[38px] w-[460px] max-w-[86vw] max-h-[62vh] overflow-y-auto bg-[var(--c-pop)] rounded-xl shadow-[var(--c-pop-shadow)] p-2 z-50"
         >
           <p v-if="!results.length" class="text-[12px] text-[var(--c-faint)] px-3 py-4 text-center">
             没有匹配
@@ -380,7 +387,7 @@
 
     <!-- 底栏 -->
     <div
-      class="h-8 px-8 flex items-center gap-3 text-[11.5px] text-[var(--c-faint)] shrink-0 border-t border-[var(--c-line-soft)]"
+      class="reader-bottombar h-8 px-8 flex items-center gap-3 text-[11.5px] text-[var(--c-faint)] shrink-0 border-t border-[var(--c-line-soft)]"
     >
       <!-- pdf 没有正文可数，显示页数和体积 -->
       <template v-if="isPdf">
@@ -650,6 +657,15 @@ const PARA_STYLES = [
 
 const scroller = ref(null)
 const searchInput = ref(null)
+/* 窄屏下搜索先收成图标，点了才展开——顶栏在手机上放不下一个常驻输入框 */
+const mobileSearchOpen = ref(false)
+function openMobileSearch() {
+  mobileSearchOpen.value = true
+  nextTick(() => searchInput.value?.focus())
+}
+function closeMobileSearch() {
+  mobileSearchOpen.value = false
+}
 const open = ref('')
 const searchOpen = ref(false)
 
@@ -721,6 +737,7 @@ function pickExport(kind) {
 }
 function closeSearch() {
   searchOpen.value = false
+  mobileSearchOpen.value = false
   searchInput.value?.blur()
 }
 function clearSearch() {
