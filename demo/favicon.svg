@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50" fill="none">
+  <!-- 示例知识库的标记：三张叠起来的纸，表示「一组演示文档」 -->
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .paper { fill: #e8e9ea; }
+      .line { stroke: #1c1d21; }
+      .accent { fill: #7a92ff; }
+    }
+  </style>
+  <rect class="paper" x="13" y="6" width="24" height="32" rx="3" fill="#1a1a1a"/>
+  <rect class="paper" x="9" y="10" width="24" height="32" rx="3" fill="#4d6bfe" opacity="0.18"/>
+  <rect class="paper" x="17" y="14" width="24" height="30" rx="3" fill="#ffffff" stroke="#1a1a1a" stroke-width="1.6"/>
+  <line class="line" x1="22" y1="22" x2="36" y2="22" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
+  <line class="line" x1="22" y1="27" x2="36" y2="27" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
+  <line class="line" x1="22" y1="32" x2="31" y2="32" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/>
+  <circle class="accent" cx="37" cy="37" r="7" fill="#4d6bfe"/>
+  <path d="M34 37l2.2 2.2L40.5 35" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
