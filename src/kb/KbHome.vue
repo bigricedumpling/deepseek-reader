@@ -67,7 +67,7 @@ const THEMES = [
 const title = ref('知识库')
 const libs = ref(FALLBACK)
 const theme = ref(localStorage.getItem('reader.theme') || 'light')
-const logo = computed(() => localStorage.getItem('reader.brandLogo') || '/favicon.svg')
+const logo = computed(() => localStorage.getItem('reader.brandLogo') || '__SITE_ICON__')
 
 function pick(id) {
   theme.value = id

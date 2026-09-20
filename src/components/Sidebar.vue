@@ -386,7 +386,7 @@ const customLogo = ref(localStorage.getItem(LOGO_STORE) || '')
  * 根路径那个图标不属于它们，示例库会因此显示出一张裂图。
  * 同时它要是绝对路径：深链（/edit/某目录/某文档）之后相对路径会被解析到那一层去。
  */
-const siteIcon = import.meta.env.VITE_SITE_ICON || '/favicon.svg'
+const siteIcon = '__SITE_ICON__'
 const logo = computed(() => customLogo.value || import.meta.env.VITE_LOGO || siteIcon)
 
 /**

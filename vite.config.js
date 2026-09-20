@@ -4,10 +4,45 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import contentApi from './server/content-api.js'
+import fs from 'node:fs'
+
+/*
+ * 把站点图标内联成 data URI。
+ *
+ * 为什么不让浏览器去取那张 svg：
+ *   1. 两个站点同域名不同子路径，图标路径必须按实例给，写错了就是一张裂图；
+ *   2. 更要紧的是缓存 —— 早先裂过一次之后，浏览器（尤其微信内置浏览器）
+ *      会把那次失败结果留着，同一条 URL 不再重试，改服务端也没用；
+ *      换 URL 能绕，但要看它肯不肯发那次请求。
+ *   data URI 不产生网络请求，上面两件事就都不存在了。
+ *
+ * 图标只有 1–4 KB，编码后也不过 5 KB，内联代价可以忽略。
+ */
+function inlineIcon() {
+  const file = process.env.VITE_SITE_ICON_FILE
+  if (!file) return { name: 'inline-icon-noop' }
+  const svg = fs.readFileSync(file)
+  const uri = 'data:image/svg+xml;base64,' + svg.toString('base64')
+  return {
+    name: 'inline-icon',
+    transform(code, id) {
+      if (!id.match(/.(vue|js|ts)$/)) return
+      if (!code.includes('__SITE_ICON__')) return
+      return { code: code.split('__SITE_ICON__').join(uri), map: null }
+    },
+    transformIndexHtml(html) {
+      /*
+       * 路径可能是 /favicon.svg，也可能已经被 base 加了前缀（/deepseek/demo/favicon.svg），
+       * 所以匹配「斜杠 + 任意前缀 + favicon.svg」，不要写死根路径。
+       */
+      return html.replace(/href="[^"]*\/favicon\.svg"/g, 'href="' + uri + '"')
+    },
+  }
+}
 
 export default defineConfig({
   base: process.env.VITE_BASE || './',
-  plugins: [contentApi(), tailwindcss(), vue()],
+  plugins: [inlineIcon(), contentApi(), tailwindcss(), vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')
