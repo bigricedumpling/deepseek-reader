@@ -71,6 +71,31 @@ function cookieToken(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1')
 
+  /*
+   * 访问日志。
+   *
+   * 目的是排查「某个浏览器打开分享链接进不去」这类问题 —— 从外面看只能看到一个
+   * 403，看不到它实际请求了什么。这里把路径、查询串的有无、UA、cookie 键名记下来，
+   * 就能分清是「链接里的 token 没送到」还是「送到了但没认出来」。
+   * 不记 token 本身，只记有没有。
+   */
+  try {
+    if (!url.pathname.match(/\.(js|css|png|jpe?g|svg|woff2?|otf|ttf|map)$/)) {
+      const hasToken = url.searchParams.has('token')
+      const cookieNames = String(req.headers.cookie || '')
+        .split(';').map((x) => x.trim().split('=')[0]).filter(Boolean).join(',')
+      const line = [
+        new Date().toISOString().slice(11, 19),
+        req.method,
+        url.pathname + (url.search ? '?' + url.search.replace(/token=[^&]*/, 'token=<有>') : ''),
+        'token=' + (hasToken ? '有' : '无'),
+        'cookie=[' + cookieNames + ']',
+        'ua=' + String(req.headers['user-agent'] || '').slice(0, 60),
+      ].join(' | ')
+      fs.appendFileSync('/tmp/reader-access.log', line + '\n')
+    }
+  } catch { /* 日志失败不影响请求 */ }
+
   if (url.pathname.startsWith('/api')) {
     // 链接里的 token 种进 cookie：之后页面里的 /api 调用就自带身份了
     const fromQuery = url.searchParams.get('token')
