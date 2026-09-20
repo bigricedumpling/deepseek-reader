@@ -362,8 +362,15 @@ function routedDocPath() {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '')
     const full = decodeURI(location.pathname)
     const rest = base && full.startsWith(base) ? full.slice(base.length) : full
-    const m = rest.match(/^\/(?:edit|onlyread)\/(.+)$/)
-    return m ? m[1].replace(/\/+$/, '') : ''
+    /*
+     * 同样不锚定开头：站点可能挂在子路径下，见 store 里 routedDocPath 的说明。
+     *
+     * 文档路径这一段要用 decodeURIComponent：路径里的斜杠会被编码成 %2F，
+     * 而 decodeURI 有意不还原它，拿着 %2F 去比对目录里的路径永远匹配不上。
+     * 只解这一段，不要解整条 pathname。
+     */
+    const m = rest.match(/\/(?:edit|onlyread)\/(.+)$/)
+    return m ? decodeURIComponent(m[1]).replace(/\/+$/, '') : ''
   } catch {
     return ''
   }

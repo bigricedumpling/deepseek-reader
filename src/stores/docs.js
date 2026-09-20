@@ -275,8 +275,26 @@ export const useDocsStore = defineStore('docs', () => {
    */
   function routedDocPath() {
     try {
-      const m = decodeURI(location.pathname).match(/^\/(?:edit|onlyread)\/(.+)$/)
-      return m ? m[1].replace(/\/+$/, '') : ''
+      /*
+       * 不要用 ^ 锚定开头。
+       *
+       * 站点可能挂在子路径下（/deepseek/reader/onlyread/…），前缀会让「以 /onlyread/ 开头」
+       * 落空，地址栏点名的那一篇就认不出来，页面回落到目录里第一篇 ——
+       * 表现是「第二条分享链接打开的是第一篇」。/edit 走的是去前缀后的路径，所以一直没暴露。
+       */
+      const m = location.pathname.match(/\/(?:edit|onlyread)\/(.+)$/)
+      if (!m) return ''
+      /*
+       * 这里必须用 decodeURIComponent，不能用 decodeURI。
+       *
+       * 路径里的斜杠会被编码成 %2F（例如 笔试题%2F笔试题交付：题目二），
+       * 而 decodeURI 有意不还原 %2F —— 斜杠在路径里有特殊含义。
+       * 结果是查表时拿着 %2F 去比，永远匹配不上，页面静默回落到目录里第一篇：
+       * 表现就是「第二条分享链接打开的是第一篇」。这个错误很隐蔽，因为页面不报错。
+       *
+       * 只解这一段，不能解整条 pathname：那样站点前缀里的编码也会被一起还原。
+       */
+      return decodeURIComponent(m[1]).replace(/\/+$/, '')
     } catch {
       return ''
     }
@@ -290,8 +308,26 @@ export const useDocsStore = defineStore('docs', () => {
    */
   function routedDocPath() {
     try {
-      const m = decodeURI(location.pathname).match(/^\/(?:edit|onlyread)\/(.+)$/)
-      return m ? m[1].replace(/\/+$/, '') : ''
+      /*
+       * 不要用 ^ 锚定开头。
+       *
+       * 站点可能挂在子路径下（/deepseek/reader/onlyread/…），前缀会让「以 /onlyread/ 开头」
+       * 落空，地址栏点名的那一篇就认不出来，页面回落到目录里第一篇 ——
+       * 表现是「第二条分享链接打开的是第一篇」。/edit 走的是去前缀后的路径，所以一直没暴露。
+       */
+      const m = location.pathname.match(/\/(?:edit|onlyread)\/(.+)$/)
+      if (!m) return ''
+      /*
+       * 这里必须用 decodeURIComponent，不能用 decodeURI。
+       *
+       * 路径里的斜杠会被编码成 %2F（例如 笔试题%2F笔试题交付：题目二），
+       * 而 decodeURI 有意不还原 %2F —— 斜杠在路径里有特殊含义。
+       * 结果是查表时拿着 %2F 去比，永远匹配不上，页面静默回落到目录里第一篇：
+       * 表现就是「第二条分享链接打开的是第一篇」。这个错误很隐蔽，因为页面不报错。
+       *
+       * 只解这一段，不能解整条 pathname：那样站点前缀里的编码也会被一起还原。
+       */
+      return decodeURIComponent(m[1]).replace(/\/+$/, '')
     } catch {
       return ''
     }
