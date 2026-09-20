@@ -361,13 +361,17 @@
       class="flex-1 min-h-0 overflow-y-auto print-area"
       :style="reader.readingStyle"
     >
-      <!-- PDF：交给浏览器自带的阅读器，支持翻页和跳页（服务端带 Range） -->
+      <!--
+        PDF：交给浏览器自带的阅读器，支持翻页和跳页（服务端带 Range）。
+        H5：整页渲染，保留它自己的布局，不套阅读器的行宽限制。
+        两者都是「成品文件」，不经过 markdown 解析。
+      -->
       <iframe
-        v-if="isPdf"
+        v-if="isPreview"
         ref="frameRef"
         class="pdf-frame"
         :src="pdfSrc"
-        :title="meta.name || 'PDF'"
+        :title="meta.name || (isPdf ? 'PDF' : 'H5')"
       />
       <MarkdownEditor
         v-else-if="loaded"
@@ -389,8 +393,13 @@
     <div
       class="reader-bottombar h-8 px-8 flex items-center gap-3 text-[11.5px] text-[var(--c-faint)] shrink-0 border-t border-[var(--c-line-soft)]"
     >
+      <!-- h5 没有页数可数，只报体积 -->
+      <template v-if="isH5">
+        <span class="ui-font tabular-nums">H5</span>
+        <span v-if="meta.size" class="ui-font tabular-nums">{{ (meta.size / 1024).toFixed(0) }} KB</span>
+      </template>
       <!-- pdf 没有正文可数，显示页数和体积 -->
-      <template v-if="isPdf">
+      <template v-else-if="isPdf">
         <span class="ui-font tabular-nums">{{ pdfPages ? pdfPages + ' 页' : 'PDF' }}</span>
         <span v-if="meta.size" class="ui-font tabular-nums">{{ (meta.size / 1024 / 1024).toFixed(1) }} MB</span>
         <span v-if="store.pdfTranslate.status === 'running'" class="ui-font tabular-nums text-[var(--color-ds)]">
@@ -491,7 +500,10 @@ const props = defineProps({
 const emit = defineEmits(['update:keyword', 'jump', 'input', 'reload', 'select', 'canonize', 'close-tab'])
 
 /** 当前这篇是不是 pdf：是就不挂编辑器，改挂浏览器自带的 pdf 阅读器 */
+/* 「成品文件」：pdf 与 h5。两者都交给浏览器整页渲染，工具栏与页脚信息按类型分开。 */
 const isPdf = computed(() => props.meta?.type === 'pdf')
+const isH5 = computed(() => props.meta?.type === 'h5')
+const isPreview = computed(() => isPdf.value || isH5.value)
 /** 标签条要显示的东西：文件名（跟侧栏、磁盘一致）、有没有没落盘的改动 */
 /** 别人那条链接（带 token） */
 const guestLink = computed(() => store.guestLink())

@@ -104,12 +104,13 @@
         />
         <button
           v-else
-          :class="node.type === 'pdf' ? 'pdf-title' : 'doc-title'"
+          :class="node.type === 'pdf' || node.type === 'h5' ? 'pdf-title' : 'doc-title'"
           :title="node.file"
           @click="emit('select', node.file)"
           @dblclick="tree.editStart('doc', node)"
         >
           <PhFilePdf v-if="node.type === 'pdf'" :size="13" class="doc-kind" />
+          <PhFileHtml v-else-if="node.type === 'h5'" :size="13" class="doc-kind" />
           <span class="truncate">{{ node.name }}</span>
         </button>
         <PhEyeSlash
@@ -135,7 +136,7 @@
 
 <script setup>
 import { ref, computed, inject, nextTick, watch } from 'vue'
-import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhDotsThree, PhEyeSlash } from '@phosphor-icons/vue'
+import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree, PhEyeSlash } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
 
 const props = defineProps({

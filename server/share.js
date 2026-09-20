@@ -216,14 +216,23 @@ export function roleOf(req, url, share, { forceGuest = false } = {}) {
      * 注意：挂在 nginx 后面时 remoteAddress 恒为 127.0.0.1，local 判断失去区分度，
      * 所以这里不再拿它当安全边界，密码本身就是那道门。
      */
-    const tok = String(url?.searchParams?.get('token') || headers['x-reader-token'] || '')
+    /*
+     * token 三个来源：查询串、自定义头、cookie。
+     * cookie 那一条是给 iframe 用的 —— pdf 与 h5 的预览是浏览器自己发的请求，
+     * 带不了 x-reader-token 头，没有它就只能显示一屏 403。
+     */
+    const tok = String(
+      url?.searchParams?.get('token') || headers['x-reader-token'] || pick('reader_token') || ''
+    )
     if (tok && tok === share.token('owner')) return 'owner'
     const given = String(headers['x-reader-pass'] || pick('reader_pass') || '')
     return given === EDIT_PASSWORD ? 'owner' : 'denied'
   }
 
   // 分享链接带的 token
-  const given = String(url?.searchParams?.get('token') || headers['x-reader-token'] || '')
+  const given = String(
+    url?.searchParams?.get('token') || headers['x-reader-token'] || pick('reader_token') || ''
+  )
   if (given) {
     if (given === share.token('guest')) return 'guest'
     if (given === share.token('owner')) return 'owner'

@@ -85,7 +85,7 @@ function assertFile(rel, opts) {
   assertVisible(rel, opts)
   const abs = safeResolve(rel)
   /* 图片也放行：文档里插图要用 /api/file 取，否则 <img> 打不开 */
-  if (!/\.(md|pdf|png|jpe?g|webp|gif|svg|avif)$/i.test(abs)) throw new Error('只能操作 md、pdf 或图片: ' + rel)
+  if (!/\.(md|pdf|html?|png|jpe?g|webp|gif|svg|avif)$/i.test(abs)) throw new Error('只能操作 md、pdf、h5 或图片: ' + rel)
   if (inReader(abs)) throw new Error('这是阅读器自己的文件，不在文档树里: ' + rel)
   return abs
 }
@@ -133,7 +133,11 @@ function scanDir(abs, rel, depth, order) {
       if (SKIP_DIRS.has(e.name) || childAbs === READER_ROOT) continue
       scanned++
       folders.push({ type: 'folder', name: e.name, path: childRel, children: scanDir(childAbs, childRel, depth + 1, order) })
-    } else if (e.isFile() && /\.(md|pdf)$/i.test(e.name)) {
+      /*
+       * 树里认三种文件：markdown、pdf、h5（html/htm）。
+       * h5 与 pdf 一样是「成品文件」——阅读器不解析它，交给浏览器整页渲染。
+       */
+    } else if (e.isFile() && /\.(md|pdf|html?)$/i.test(e.name)) {
       let mtime = 0
       let size = 0
       try {
@@ -146,8 +150,8 @@ function scanDir(abs, rel, depth, order) {
       scanned++
       const isPdf = /\.pdf$/i.test(e.name)
       docs.push({
-        type: isPdf ? 'pdf' : 'doc',
-        name: e.name.replace(/\.(md|pdf)$/i, ''),
+        type: isPdf ? 'pdf' : (/\.html?$/i.test(e.name) ? 'h5' : 'doc'),
+        name: e.name.replace(/\.(md|pdf|html?)$/i, ''),
         file: childRel,
         mtime,
         size
@@ -510,6 +514,9 @@ function send(res, code, data) {
 
 const MIME = {
   '.pdf': 'application/pdf',
+  /* h5 要按网页发出去，否则浏览器拿到 application/octet-stream 只会下载，不渲染 */
+  '.html': 'text/html; charset=utf-8',
+  '.htm': 'text/html; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -923,7 +930,7 @@ const routes = {
     const existing = fs
       .readdirSync(abs, { withFileTypes: true })
       .filter((e) => !e.isSymbolicLink() && !e.name.startsWith('.') && path.join(abs, e.name) !== READER_ROOT)
-      .filter((e) => (e.isDirectory() && !SKIP_DIRS.has(e.name)) || (e.isFile() && /\.(md|pdf)$/i.test(e.name)))
+      .filter((e) => (e.isDirectory() && !SKIP_DIRS.has(e.name)) || (e.isFile() && /\.(md|pdf|html?)$/i.test(e.name)))
       .map((e) => e.name)
     const names = Array.isArray(body.names) ? body.names.map(String) : []
     if (names.length !== existing.length || new Set(names).size !== names.length || names.some((n) => !existing.includes(n))) {

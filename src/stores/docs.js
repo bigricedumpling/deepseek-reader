@@ -3,6 +3,15 @@ import { ref, computed } from 'vue'
 import { renderMarkdown, extractToc, searchDocs } from '../utils/markdown'
 import { API_BASE } from '../utils/api'
 
+/*
+ * 「成品文件」的类型：pdf 与 h5。
+ *
+ * 这两种不读正文、不进编辑器，交给浏览器整页渲染（pdf 用自带阅读器，h5 用 iframe）。
+ * 以前这些判定一处一处写的 'pdf'，加 h5 时漏一处就会出现「按 pdf 处理 html」
+ * 或者「html 当 markdown 解析」这类错，所以收成一个集合。
+ */
+const PREVIEW_TYPES = new Set(['pdf', 'h5'])
+
 /**
  * 文档树与正文都由本地接口提供，接口直接读写磁盘上的 md 文件。
  * 所以这个 store 既是阅读层也是编辑层。
@@ -110,8 +119,8 @@ export const useDocsStore = defineStore('docs', () => {
   /** 当前这篇的正文有没有读到内存。编辑器必须等内容到位再挂载，否则会拿空内容创建。 */
   const currentLoaded = computed(() => {
     if (!currentPath.value) return false
-    // pdf 不用读正文，直接交给浏览器预览
-    if (currentNode.value?.type === 'pdf') return true
+    // pdf 与 h5 都不用读正文，直接交给浏览器预览
+    if (PREVIEW_TYPES.has(currentNode.value?.type)) return true
     return rawMap.value[currentPath.value] !== undefined
   })
   const isDirty = computed(() => {
@@ -303,7 +312,7 @@ export const useDocsStore = defineStore('docs', () => {
       : null
     if (routedHit) {
       currentPath.value = routedHit.file
-      if (currentNode.value?.type !== 'pdf') {
+      if (!PREVIEW_TYPES.has(currentNode.value?.type)) {
         try {
           await loadDoc(routedHit.file)
         } catch {
@@ -316,7 +325,7 @@ export const useDocsStore = defineStore('docs', () => {
     // 上次那篇还在（没被改名/删掉）就接着看，否则回第一篇
     const hit = want && allFiles.value.some((f) => f.file === want)
     currentPath.value = hit ? want : allFiles.value[0]?.file || ''
-    if (currentPath.value && currentNode.value?.type !== 'pdf') {
+    if (currentPath.value && !PREVIEW_TYPES.has(currentNode.value?.type)) {
       try {
         await loadDoc(currentPath.value)
       } catch (e) {
@@ -389,7 +398,7 @@ export const useDocsStore = defineStore('docs', () => {
     rememberDoc(file)
     error.value = ''
     // pdf 没有正文可读，交给 DocView 里的预览；目录（书签）单独问接口
-    if (currentNode.value?.type === 'pdf') {
+    if (PREVIEW_TYPES.has(currentNode.value?.type)) {
       pdfTranslate.value = { status: 'idle', progress: 0, output: '', error: '' }
       pdfView.value = 'source'
       await loadPdfToc(file)

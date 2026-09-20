@@ -89,6 +89,15 @@ if (MODE === 'locked') {
   if (MODE === 'owner' && PASS) {
     document.cookie = 'reader_pass=' + encodeURIComponent(PASS) + '; path=/; SameSite=Lax'
   }
+  /*
+   * 用 token 进来的（示例知识库那条链接）也要种一份 cookie。
+   *
+   * 上面那段注释里说的「浏览器自己发的请求带不了头」对 pdf / h5 预览同样成立 ——
+   * iframe 去取文件时带不了 x-reader-token，服务端认不出身份，预览区就是一屏 403。
+   */
+  if (MODE === 'owner' && TOKEN) {
+    document.cookie = 'reader_token=' + encodeURIComponent(TOKEN) + '; path=/; SameSite=Lax'
+  }
 }
 
 if (MODE === 'owner' || MODE === 'guest') {

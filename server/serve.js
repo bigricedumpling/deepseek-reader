@@ -27,6 +27,12 @@ const PORT = Number(process.env.PORT || 8091)
  */
 const SITE_TITLE = process.env.KB_TITLE || ''
 const SITE_ICON = process.env.KB_ICON || ''
+/*
+ * 左上角的名字，写成「主标题|副标题」。
+ * 那两行存在 localStorage 里，所以第二个实例要靠一段先行脚本把默认值盖掉 ——
+ * 不然它显示的还是主站的名字（不同实例同源的话还会互相覆盖）。
+ */
+const SITE_BRAND = process.env.KB_BRAND || ''
 const args = process.argv.slice(2)
 const forceGuest = args.includes('--guest')
 
@@ -85,10 +91,25 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  /* 图标可换：独立实例有自己的 mark，不想跟主站共用一个 */
-  if (SITE_ICON && url.pathname === '/favicon.svg') {
-    res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache' })
-    return res.end(fs.readFileSync(SITE_ICON))
+  /*
+   * 图标可换：独立实例有自己的 mark，不想跟主站共用一个。
+   *
+   * KB_ICON 两种写法都支持：
+   *   - 磁盘路径（/data/demo-kb/favicon.svg）→ 直接读这个文件发出去
+   *   - 站点内的 URL 路径（/favicon.svg）→ 什么都不做，交给下面的静态文件处理。
+   *     独立实例的 dist 里有自己的 favicon.svg，那样发出去的就是它。
+   * 早先只当磁盘路径用，传 URL 路径时 readFileSync 直接抛 ENOENT，把进程带崩了。
+   */
+  if (SITE_ICON && SITE_ICON.startsWith('/') && !fs.existsSync(SITE_ICON) && url.pathname === '/favicon.svg') {
+    // URL 路径写法：落到静态文件那里
+  } else if (SITE_ICON && url.pathname === '/favicon.svg') {
+    try {
+      const icon = fs.readFileSync(SITE_ICON)
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache' })
+      return res.end(icon)
+    } catch {
+      // 读不到就退回静态文件。一个图标不该把整个进程带走。
+    }
   }
 
   // 静态文件：dist/ 里没有的路径一律回 index.html（前端自己路由）
@@ -107,11 +128,23 @@ const server = http.createServer(async (req, res) => {
      * 不在构建时改，是因为同一个 dist 要服务两个站点 —— 各构建一份的话，
      * 以后每次改前端都得记得构建两次，迟早会漏。
      */
-    if (SITE_TITLE && path.basename(file) === 'index.html') {
-      body = Buffer.from(
-        String(body).replace(/<title>[^<]*<\/title>/, '<title>' + SITE_TITLE + '</title>'),
-        'utf-8'
-      )
+    if (path.basename(file) === 'index.html' && (SITE_TITLE || SITE_BRAND || SITE_ICON)) {
+      let html = String(body)
+      if (SITE_TITLE) html = html.replace(/<title>[^<]*<\/title>/, '<title>' + SITE_TITLE + '</title>')
+      /*
+       * 先行脚本：在应用挂载之前把品牌写进 localStorage。
+       * 只在「还没被用户改过」时写，免得把访客自己改的名字冲掉。
+       */
+      if (SITE_BRAND || SITE_ICON) {
+        const lines = SITE_BRAND.split('|')
+        const boot = '<script>(function(){try{' +
+          "if(!localStorage.getItem('reader.brand')&&" + JSON.stringify(lines) + '.length)' +
+          "localStorage.setItem('reader.brand',JSON.stringify(" + JSON.stringify(lines) + '));' +
+          (SITE_ICON ? "if(!localStorage.getItem('reader.logo'))localStorage.setItem('reader.logo'," + JSON.stringify(SITE_ICON) + ');' : '') +
+          '}catch(e){}})()<\/script>'
+        html = html.replace('</head>', boot + '</head>')
+      }
+      body = Buffer.from(html, 'utf-8')
     }
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
