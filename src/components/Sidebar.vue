@@ -300,23 +300,27 @@ const store = useDocsStore()
 /** 访客（分享链接进来的人）：新建、改名、删除这些入口一律不显示 */
 const isGuest = computed(() => store.isGuest)
 
-const LS_BRAND = 'reader.brand'
-const LS_LOGO = 'reader.logo'
+/*
+ * 左上角的名字与图标 —— 从服务端读，不存 localStorage。
+ *
+ * 两个站点在同一域名下（/deepseek/reader/ 与 /deepseek/demo/），localStorage 按域名共享：
+ * 前端一写回就互相串味，打开过示例库、主站的名字也被顶掉。
+ * 而且以前写回用的键是写死的，注入的独立键根本读不到，
+ * 所以「按实例分开键名」也解决不了。改成服务端按实例给：品牌从哪来由服务端决定，
+ * 前端只负责显示；本地改只改当前这次会话，不落盘。
+ */
 /** 图标存成 data URL 放 localStorage，先缩到这个边长，配额才扛得住 */
 const LOGO_SIZE = 96
 
 /*
- * 左上角的名字。改过之后存在本地，所以只有改的人自己看得见——
- * 换个浏览器（比如从微信打开）没有这条记录，就会用下面这个默认值。
- * 想让所有人都看到同一个名字，改这里的默认值。
+ * 品牌来自构建时注入的 VITE_BRAND（形如「第一行|第二行」），
+ * 与 VITE_BASE 一个机制 —— 每个实例构建自己的那一份，不依赖运行时环境变量，
+ * 也不经过 localStorage（同域名下两个站点共用一个存储，写回就会串味）。
  */
 const brandLines = ref(
-  JSON.parse(localStorage.getItem(LS_BRAND) || 'null') || ['Agent（设计方向）', '笔试题交付']
-)
-watch(
-  brandLines,
-  (v) => localStorage.setItem(LS_BRAND, JSON.stringify(v.filter((x) => x !== null))),
-  { deep: true }
+  String(import.meta.env.VITE_BRAND || '').split('|').filter(Boolean).length
+    ? String(import.meta.env.VITE_BRAND).split('|')
+    : ['Agent（设计方向）', '笔试题交付']
 )
 
 const logoInput = ref(null)
@@ -361,9 +365,20 @@ function onDocClickClose() {
 }
 onMounted(() => document.addEventListener('click', onDocClickClose))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClickClose))
-const customLogo = ref(localStorage.getItem(LS_LOGO) || '')
-// 绝对路径：深链（/edit/某目录/某文档）之后，'./favicon.svg' 会被解析到那一层去，图就裂了
-const logo = computed(() => customLogo.value || '/favicon.svg')
+/*
+ * 自己换过的图标。
+ *
+ * 键名按实例分开：两个站点同域名、localStorage 共享 ——
+ * 共用一个键的话，主站存了虎鲸，示例库也会读出来那只虎鲸，把示例库自己的图标压掉。
+ * 键名与品牌一样用构建时注入，不依赖运行时环境变量。
+ */
+const LOGO_STORE = String(import.meta.env.VITE_LOGO_KEY || 'reader.logo')
+const customLogo = ref(localStorage.getItem(LOGO_STORE) || '')
+/*
+ * 图标的优先级：自己换过的 > 服务端按实例给的 > 站内默认。
+ * 绝对路径：深链（/edit/某目录/某文档）之后，'./favicon.svg' 会被解析到那一层去，图就裂了。
+ */
+const logo = computed(() => customLogo.value || import.meta.env.VITE_LOGO || '/favicon.svg')
 
 /**
  * 换图标。
@@ -388,7 +403,7 @@ function onPickLogo(e) {
       cv.getContext('2d').drawImage(img, 0, 0, w, h)
       try {
         customLogo.value = cv.toDataURL('image/png')
-        localStorage.setItem(LS_LOGO, customLogo.value)
+        localStorage.setItem(LOGO_STORE, customLogo.value)
       } catch {
         /* 存不下就只当次生效，不打断 */
         customLogo.value = String(reader.result)

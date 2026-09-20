@@ -116,6 +116,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 知识库清单：每次都现读 public/kb.json，改完刷新页面就生效（不用重新构建）
+  /*
+   * 实例自己的品牌配置。
+   *
+   * 为什么不放 localStorage：两个站点在同一域名下（/deepseek/reader/ 与 /deepseek/demo/），
+   * localStorage 按域名共享 —— 前端一写回就串味；而且前端写回用的键是写死的，
+   * 注入的独立键根本读不到，所以「按实例分开键名」也解决不了。
+   * 改成服务端按实例给：品牌从哪来由服务端决定。
+   */
+  if (url.pathname === '/brand.json') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' })
+    return res.end(JSON.stringify({
+      brand: SITE_BRAND ? SITE_BRAND.split('|') : null,
+      logo: SITE_ICON || null,
+    }))
+  }
+
   if (url.pathname === '/kb.json') {
     try {
       const body = fs.readFileSync(process.env.KB_JSON || path.resolve(HERE, '..', 'public', 'kb.json'))
@@ -135,6 +151,7 @@ const server = http.createServer(async (req, res) => {
    *     独立实例的 dist 里有自己的 favicon.svg，那样发出去的就是它。
    * 早先只当磁盘路径用，传 URL 路径时 readFileSync 直接抛 ENOENT，把进程带崩了。
    */
+
   if (SITE_ICON && SITE_ICON.startsWith('/') && !fs.existsSync(SITE_ICON) && url.pathname === '/favicon.svg') {
     // URL 路径写法：落到静态文件那里
   } else if (SITE_ICON && url.pathname === '/favicon.svg') {
