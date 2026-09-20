@@ -102,7 +102,7 @@
           :disabled="lib.current || lib.soon"
           @click="goLib(lib)"
         >
-          <img class="kb-item-logo" :src="lib.icon || '/favicon.svg'" alt="" />
+          <img class="kb-item-logo" :src="lib.icon || siteIcon" alt="" />
           <span class="kb-item-name">{{ lib.name }}</span>
           <PhCheck v-if="lib.current" :size="12" weight="bold" />
               <span v-else-if="lib.soon" class="kb-soon">待建</span>
@@ -378,7 +378,16 @@ const customLogo = ref(localStorage.getItem(LOGO_STORE) || '')
  * 图标的优先级：自己换过的 > 服务端按实例给的 > 站内默认。
  * 绝对路径：深链（/edit/某目录/某文档）之后，'./favicon.svg' 会被解析到那一层去，图就裂了。
  */
-const logo = computed(() => customLogo.value || import.meta.env.VITE_LOGO || '/favicon.svg')
+/*
+ * 站内默认图标。
+ *
+ * 必须按实例给站点路径，不能写 '/favicon.svg' —— 那是站点根路径，
+ * 主站在 /deepseek/reader/、示例库在 /deepseek/demo/，
+ * 根路径那个图标不属于它们，示例库会因此显示出一张裂图。
+ * 同时它要是绝对路径：深链（/edit/某目录/某文档）之后相对路径会被解析到那一层去。
+ */
+const siteIcon = import.meta.env.VITE_SITE_ICON || '/favicon.svg'
+const logo = computed(() => customLogo.value || import.meta.env.VITE_LOGO || siteIcon)
 
 /**
  * 换图标。
