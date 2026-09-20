@@ -198,9 +198,17 @@ onMounted(async () => {
   // （最典型的是表格单元格里的 <br>），这篇就不能自动保存，否则会静默损坏原文
   const roundTrip = normalizeMarkdown(crepe.getMarkdown(), baseline)
   const differs = roundTrip.replace(/\s+$/, '') !== String(baseline).replace(/\s+$/, '')
-  lossy.value = differs
-  emit('lossy', differs)
-  if (differs) {
+  /*
+   * 只读模式不降级。
+   *
+   * 降级成源码编辑的用意是「防止自动保存把原文静默改写」—— 但那是个写回风险，
+   * 只读访客根本不会写回，所以这个风险不存在，降级只剩副作用：
+   * 审阅人打开一篇结构稍复杂的文档，看到的是一屏 markdown 原文而不是排版好的页面。
+   * 那正是他最不该看到的东西。
+   */
+  lossy.value = props.readonly ? false : differs
+  emit('lossy', lossy.value)
+  if (lossy.value) {
     // 把差异算出来：光说"表达不了"没法让用户决策，得让他看见是哪一行、差在哪
     roundTripText.value = roundTrip
     diff.value = diffLines(baseline, roundTrip, 6)

@@ -1084,9 +1084,13 @@ export async function handleApi(req, res, ctx = {}) {
   if (role === 'denied') {
     return send(res, 403, { ok: false, error: '禁止访问：请用 /edit 或 /onlyread 打开' })
   }
-  if (isGuest && req.method !== 'GET') {
-    return send(res, 403, { ok: false, error: '这份是只读分享，你没有编辑权限' })
-  }
+  /*
+   * 访客能不能写，要看具体路径 —— 不能一律拒。
+   *
+   * 这里原先是一句「非 GET 就 403」，于是 share.js 里那套逐路径的 editable
+   * （state.editable，按前缀回溯）永远走不到，对外开放编辑这个功能等于不存在。
+   * 现在把写权限的判断挪到下面解析完 body 之后，按目标路径逐条核。
+   */
   // 只有我能碰的东西
   if (isGuest && (key === 'GET /share' || key === 'GET /build' || key === 'PUT /share')) {
     return send(res, 403, { ok: false, error: '只有库的主人能看这个' })
@@ -1113,6 +1117,22 @@ export async function handleApi(req, res, ctx = {}) {
       if (rel && !share.isShared(rel)) throw new Error('这篇没有对外分享')
     }
     const body = req.method === 'GET' ? {} : await readBody(req)
+    /*
+     * 访客的写操作：这一份（或这一层）必须是明确开放编辑的。
+     *
+     * 逐路径判断，不搞"访客一律只读" —— 主人可以只开放某一棵子树给审阅人改，
+     * 其余照旧拒绝。取路径时把所有可能的字段都算上：不同接口的目标字段不一样
+     * （文档类用 path，移动用 file/dir，新建分组用 parent），
+     * 只要有一个字段指向没开放的路径就拒绝（宁可严一点）。
+     */
+    if (isGuest && req.method !== 'GET') {
+      const rels = [body.path, body.file, body.dir, body.parent, body.toParent]
+        .map(x => String(x || '').trim())
+        .filter(Boolean)
+      if (!rels.length || !rels.every(rel => share.isEditable(rel))) {
+        throw new Error('这份是只读分享，你没有编辑权限')
+      }
+    }
     const out = await handler(body, url, { role })
     // 树是唯一一处"要加工结果"的接口：访客拿到的是剪掉过的版本
     if (isGuest && key === 'GET /tree' && out && out.data && Array.isArray(out.data.nodes)) {
