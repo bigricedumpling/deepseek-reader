@@ -58,7 +58,7 @@
       }
 
       /* 章节：靠上间距与细分隔线分段，不用卡片堆叠 */
-      section { padding: 54px 0 8px; }
+      section { padding: 40px 0 4px; }
       .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
       .sec-head h2 { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink); letter-spacing: -0.2px; }
       .sec-head .note { margin: 6px 0 0; font-size: 12.5px; color: var(--faint); max-width: 560px; }
@@ -127,7 +127,7 @@
       .fade-in { animation: fade .35s ease both; }
       @keyframes fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
       .empty-hint { padding: 34px 0; text-align: center; font-size: 12px; color: var(--faint); }
-      footer { margin-top: 62px; padding: 22px 0 40px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
+      .wrap { padding-bottom: 44px; }
 
       @media (max-width: 900px) {
         .wrap { padding: 0 18px; }
@@ -147,10 +147,11 @@
     </div></header>
 
     <div class="hero">
-      <canvas id="fluid"></canvas>
+      <!-- 宽度交给 CSS 撑满，但属性宽度必须同步 —— 否则流体在 300×150 上算完再被拉伸，看着就是一块黑 -->
+      <canvas id="fluid" style="width:100%;background:#fafafa"></canvas>
       <div class="cap">
         <h1>检索质量监控台</h1>
-        <p>指针在画布上划动，会在流场里留下彩色的墨。这是一段真实的流体计算：速度场、密度场、每帧解一次泊松方程。</p>
+        <p>指针划过，在流场里留下彩色的墨。这是一段真实的流体计算。</p>
       </div>
       <div class="tip">拖动看看 · 静止时它自己会走</div>
     </div>
@@ -162,7 +163,7 @@
         <div class="sec-head">
           <div>
             <h2>质量指标</h2>
-            <p class="note">指标、走势与样本表都在页面内计算与绘制，用的是 SVG 与原生脚本，没有引入任何图表库。</p>
+            <p class="note">指标、走势与样本表都在页面内绘制，没有引入图表库。</p>
           </div>
           <span class="tag" id="scopeName">全部流量</span>
         </div>
@@ -198,33 +199,12 @@
       </section>
 
 
-      <!-- 二、三维曲面 -->
-      <section id="surface-sec">
-        <div class="sec-head">
-          <div>
-            <h2>检索得分曲面</h2>
-            <p class="note">横轴是分块粒度，纵深是召回路数，高度是综合得分。原生 WebGL 绘制：高度场算法线、单向光照、深度雾，另叠一层等高线。拖拽旋转，滚轮缩放。</p>
-          </div>
-          <span class="tag" id="fps">— fps</span>
-        </div>
-        <div class="card" style="margin-top:22px"><div class="bd">
-          <canvas class="demo" id="gl" height="430"></canvas>
-          <div class="controls">
-            <button class="btn is-on" data-gl="0">实面</button>
-            <button class="btn" data-gl="1">网格</button>
-            <button class="btn" data-gl="2">等高线</button>
-            <button class="btn" data-gl="spin">自动旋转</button>
-            <button class="btn" data-gl="reset">重置视角</button>
-          </div>
-        </div></div>
-      </section>
-
       <!-- 三、粒子流场 -->
       <section id="field-sec">
         <div class="sec-head">
           <div>
             <h2>粒子流场</h2>
-            <p class="note">速度场来自一层平滑噪声，粒子沿它移动并留下渐隐的轨迹。指针是一个斥力源，靠近的粒子会被推开。</p>
+            <p class="note">平滑速度场驱动的粒子，留下渐隐轨迹；指针是斥力源。</p>
           </div>
           <span class="tag" id="pcount">— 个粒子</span>
         </div>
@@ -243,7 +223,7 @@
         <div class="sec-head">
           <div>
             <h2>移动端页面</h2>
-            <p class="note">同一套设计在手机尺寸下的样子：底部标签、分段筛选、骨架屏与进入动画。三块屏幕各自独立交互。</p>
+            <p class="note">同一套设计在手机尺寸下的样子。</p>
           </div>
         </div>
         <div class="phones">
@@ -293,9 +273,8 @@
         <div class="sec-head">
           <div>
             <h2>过渡与动效</h2>
-            <p class="note">数值滚动、进度生长、路径绘制。动效只用在状态变化上，时长 300–900ms，不做循环装饰。</p>
+            <p class="note">数值滚动、进度生长、路径绘制，时长 300–900ms。</p>
           </div>
-          <span class="tag">点一次看一遍</span>
         </div>
         <div class="grid2" style="grid-template-columns:1fr 1fr">
           <div class="card"><div class="hd"><h3>数值滚动</h3><span>0 → 目标值</span></div><div class="bd">
@@ -313,7 +292,6 @@
         </div></div>
       </section>
 
-      <footer>这份 H5 是一个独立原件：图形、动画与交互全部在页面内实现，不依赖任何外部库。</footer>
     </div>
 
 <script>
@@ -406,9 +384,9 @@
    * 单笔注入 0.5，一秒钟叠 60 笔、再被平流摊开，稳态大致就是这个区间。
    */
   const FORCE = 0.7;      /* 速度注入 */
-  const INK = 0.05;        /* 密度与颜色的注入量 */
+  const INK = 0.034;       /* 密度与颜色的注入量 */
   const INK_GAMMA = 0.7;
-  const INK_SCALE = 2.2;
+  const INK_SCALE = 1.8;
 
   let px = -1, py = -1, pdx = 0, pdy = 0, moved = false;
 
@@ -520,6 +498,14 @@
     },
   };
   window.addEventListener('resize', () => { if (running) resize(); });
+  /*
+   * 首屏这块必须在布局稳定后立刻定量一次并开跑。
+   * 原先只挂在 IntersectionObserver 上，但它对「首次加载时已在视口内」的元素
+   * 回调时机不保证，画布就停在默认的 300×150、再被 CSS 拉满 —— 看起来就是黑屏。
+   */
+  function boot() { resize(); window.__fluid.start(); }
+  if (document.readyState === 'complete') requestAnimationFrame(boot);
+  else window.addEventListener('load', () => requestAnimationFrame(boot));
 })();
 
 </script>
@@ -530,249 +516,6 @@
  * 下面按「三维曲面 → 粒子流场 → 指标看板 → 移动端 → 动效」分段。
  * ============================================================
  */
-
-/* ---------- 二、WebGL 得分曲面 ---------- */
-(function () {
-  const cv = document.getElementById('gl');
-  if (!cv) return;
-  const gl = cv.getContext('webgl', { antialias: true, alpha: false });
-  const fpsEl = document.getElementById('fps');
-  if (!gl) {
-    /*
-     * 没有图形上下文时（无头浏览器、或用户关了硬件加速）不摆一句「不支持」了事 ——
-     * 用同一份高度场在 2D 画布上画等高线图。它和三维那份是两个投影，
-     * 演示的厚度不至于因为环境差异就塌掉。
-     */
-    if (fpsEl) fpsEl.textContent = '等高线视图';
-    (function fallback() {
-      const c2 = document.createElement('canvas');
-      c2.className = cv.className;
-      c2.height = 430;
-      c2.style.width = '100%';        /* 宽度靠 CSS 撑，属性宽度只用来定像素密度 */
-      c2.style.display = 'block';
-      cv.parentNode.replaceChild(c2, cv);
-      const ctx = c2.getContext('2d');
-      const H = (u, v) =>
-        0.62 * Math.exp(-(u * u + v * v) * 7.5) +
-        0.34 * Math.exp(-((u + 0.24) * (u + 0.24) + (v - 0.22) * (v - 0.22)) * 20) - 0.14;
-      function draw() {
-        const w = c2.clientWidth || 900, h = 430;
-        const dpr = Math.min(2, window.devicePixelRatio || 1);
-        c2.width = Math.round(w * dpr); c2.height = Math.round(h * dpr);
-        c2.style.height = h + 'px';
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        const img = ctx.createImageData(w, h);
-        const d = img.data;
-        for (let y = 0; y < h; y++) {
-          const v = (y / h - 0.5) * 1.5;
-          for (let x = 0; x < w; x++) {
-            const u = (x / w - 0.5) * 1.5;
-            const z = (H(u, v) + 0.14) / 0.82;
-            /* 同一个映射：低处近白，高处品牌蓝；再叠等高线 */
-            const t = Math.max(0, Math.min(1, z));
-            const band = Math.abs(((t * 9) % 1) - 0.5) * 2;
-            const line = band > 0.86 ? (band - 0.86) / 0.13 : 0;
-            const rr = (0.93 + (0.302 - 0.93) * t) * (1 - line) + 0.62 * line;
-            const gg = (0.94 + (0.420 - 0.94) * t) * (1 - line) + 0.66 * line;
-            const bb = (0.96 + (0.996 - 0.96) * t) * (1 - line) + 0.76 * line;
-            const o = (y * w + x) * 4;
-            d[o] = rr * 255; d[o + 1] = gg * 255; d[o + 2] = bb * 255; d[o + 3] = 255;
-          }
-        }
-        ctx.putImageData(img, 0, 0);
-      }
-      draw();
-      window.addEventListener('resize', draw);
-    })();
-    return;
-  }
-
-  const N = 96;                 /* 网格分辨率 */
-  const VS = [
-    'attribute vec3 aPos;',
-    'attribute vec3 aNrm;',
-    'attribute float aH;',
-    'uniform mat4 uMVP;',
-    'uniform vec3 uEye;',
-    'varying vec3 vNrm;',
-    'varying vec3 vView;',
-    'varying float vH;',
-    'varying float vDepth;',
-    'void main(){',
-    '  vNrm = aNrm; vH = aH;',
-    '  vView = normalize(uEye - aPos);',
-    '  vDepth = clamp((aPos.z + 1.0) * 0.5, 0.0, 1.0);',
-    '  gl_Position = uMVP * vec4(aPos, 1.0);',
-    '}',
-  ].join('\n');
-  const FS = [
-    'precision mediump float;',
-    'varying vec3 vNrm; varying vec3 vView; varying float vH; varying float vDepth;',
-    'void main(){',
-    /* 一个蓝色 + 灰阶：低处近白，高处是品牌蓝 */
-    '  vec3 lo = vec3(0.93, 0.94, 0.96);',
-    '  vec3 hi = vec3(0.302, 0.420, 0.996);',
-    '  vec3 base = mix(lo, hi, smoothstep(0.0, 1.0, vH));',
-    /* 单向光 + 一点环境光；法线来自高度场差分 */
-    '  vec3 L = normalize(vec3(-0.45, 0.72, 0.52));',
-    '  float diff = max(dot(normalize(vNrm), L), 0.0);',
-    '  float rim = pow(1.0 - max(dot(normalize(vNrm), normalize(vView)), 0.0), 2.6);',
-    '  float fog = mix(1.0, 0.55, vDepth);',
-    '  vec3 col = base * (0.52 + 0.62 * diff) * fog + rim * 0.10;',
-    /* 等高线：按高度取模，线宽随坡度变细 */
-    '  float band = abs(fract(vH * 9.0) - 0.5) * 2.0;',
-    '  float line = smoothstep(0.86, 0.99, band);',
-    '  col = mix(col, vec3(0.42, 0.48, 0.62), line * 0.28);',
-    '  gl_FragColor = vec4(col, 1.0);',
-    '}',
-  ].join('\n');
-
-  const mk = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); return s; };
-  const prog = gl.createProgram();
-  gl.attachShader(prog, mk(gl.VERTEX_SHADER, VS));
-  gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, FS));
-  gl.linkProgram(prog);
-  gl.useProgram(prog);
-
-  /* 高度场：两峰一谷，模拟粒度与路数的相互作用 */
-  const H = (u, v) =>
-    0.62 * Math.exp(-(u * u + v * v) * 7.5) +
-    0.34 * Math.exp(-((u + 0.24) * (u + 0.24) + (v - 0.22) * (v - 0.22)) * 20) -
-    0.14;
-
-  const pos = [], nrm = [], idx = [], hgt = [];
-  const S = 2.0;
-  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
-    const u = i / N - 0.5, v = j / N - 0.5;
-    const y = H(u, v);
-    const e = 1 / N;
-    /* 法线用中心差分求，比逐面算法线省事且平滑 */
-    const nx = -(H(u + e, v) - H(u - e, v)) / (2 * e) / S;
-    const nz = -(H(u, v + e) - H(u, v - e)) / (2 * e) / S;
-    const len = Math.hypot(nx, 1, nz);
-    pos.push(u * S, y, v * S);
-    nrm.push(nx / len, 1 / len, nz / len);
-    hgt.push((y + 0.14) / 0.82);
-  }
-  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
-    const a = i * (N + 1) + j, b = a + 1, c = a + N + 1, d = c + 1;
-    idx.push(a, c, b, b, c, d);
-  }
-  const lineIdx = [];
-  for (let i = 0; i < N; i += 2) for (let j = 0; j < N; j++) {
-    const a = i * (N + 1) + j, c = a + N + 1;
-    lineIdx.push(a, c);
-  }
-
-  const vbo = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
-  const nbo = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, nbo);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(nrm), gl.STATIC_DRAW);
-  const hbo = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, hbo);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(hgt), gl.STATIC_DRAW);
-  const ibo = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
-  const ibo2 = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo2);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(lineIdx), gl.STATIC_DRAW);
-
-  const bind = (buf, loc, size, stride, off) => {
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, off);
-  };
-  const stride = 3 * 4;
-  bind(vbo, gl.getAttribLocation(prog, 'aPos'), 3, stride, 0);
-  bind(nbo, gl.getAttribLocation(prog, 'aNrm'), 3, stride, 0);
-  bind(hbo, gl.getAttribLocation(prog, 'aH'), 1, 1 * 4, 0);
-
-  gl.enable(gl.DEPTH_TEST);
-  gl.enable(gl.CULL_FACE);
-
-  let rx = -0.62, ry = 0.5, dist = 3.5, mode = 0, spin = false, raf = 0, last = 0, frames = 0;
-  const mvpLoc = gl.getUniformLocation(prog, 'uMVP');
-  const eyeLoc = gl.getUniformLocation(prog, 'uEye');
-
-  function mul(a, b) {
-    const o = new Array(16).fill(0);
-    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) for (let k = 0; k < 4; k++)
-      o[i * 4 + j] += a[k * 4 + j] * b[i * 4 + k];
-    return o;
-  }
-  function matrices() {
-    const aspect = cv.width / cv.height;
-    const f = 1 / Math.tan(0.5 * 0.85);
-    const proj = [f / aspect,0,0,0, 0,f,0,0, 0,0,(10 + dist) / (0.1 - 10),-1, 0,0,(2 * 10 * dist) / (0.1 - 10),0];
-    const cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry);
-    const vx = [1,0,0,0, 0,cx,sx,0, 0,-sx,cx,0, 0,0,-dist,1];
-    const vy = [cy,0,-sy,0, 0,1,0,0, sy,0,cy,0, 0,0,0,1];
-    const view = mul(vy, vx);
-    return { mvp: mul(proj, view), eye: [0, 0, dist] };
-  }
-
-  function resize() {
-    const w = cv.clientWidth || 900, h = 430;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-    cv.style.height = h + 'px';
-  }
-  function frame(t) {
-    const dt = Math.min(50, t - last); last = t;
-    if (spin) ry += dt * 0.00030;
-    gl.viewport(0, 0, cv.width, cv.height);
-    gl.clearColor(0.98, 0.98, 0.99, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    const m = matrices();
-    gl.uniformMatrix4fv(mvpLoc, false, new Float32Array(m.mvp));
-    gl.uniform3fv(eyeLoc, new Float32Array([m.eye[0], 0.9, m.eye[2]]));
-    const count = idx.length;
-    if (mode === 0) gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, 0);
-    else if (mode === 1) {
-      gl.disable(gl.CULL_FACE);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo2);
-      gl.drawElements(gl.LINES, lineIdx.length, gl.UNSIGNED_SHORT, 0);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-      gl.enable(gl.CULL_FACE);
-    } else gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, 0);
-    frames++;
-    if (fpsEl && frames % 20 === 0) fpsEl.textContent = Math.round(1000 / (dt || 16)) + ' fps';
-    raf = requestAnimationFrame(frame);
-  }
-  function start() { resize(); if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }
-  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
-
-  let down = false, lx = 0, ly = 0;
-  cv.addEventListener('pointerdown', (e) => { down = true; lx = e.clientX; ly = e.clientY; cv.setPointerCapture(e.pointerId); });
-  cv.addEventListener('pointermove', (e) => {
-    if (!down) return;
-    ry += (e.clientX - lx) * 0.008;
-    rx = Math.max(-1.45, Math.min(0.25, rx + (e.clientY - ly) * 0.006));
-    lx = e.clientX; ly = e.clientY;
-  });
-  cv.addEventListener('pointerup', () => { down = false; });
-  cv.addEventListener('pointercancel', () => { down = false; });
-  cv.addEventListener('wheel', (e) => { e.preventDefault(); dist = Math.max(2.4, Math.min(6.2, dist + e.deltaY * 0.002)); }, { passive: false });
-
-  document.querySelectorAll('[data-gl]').forEach((b) => {
-    b.onclick = () => {
-      const k = b.dataset.gl;
-      if (k === 'spin') { spin = !spin; b.classList.toggle('is-on', spin); return; }
-      if (k === 'reset') { rx = -0.62; ry = 0.5; dist = 3.5; return; }
-      mode = Number(k);
-      document.querySelectorAll('[data-gl="0"],[data-gl="1"],[data-gl="2"]').forEach((x) => x.classList.remove('is-on'));
-      b.classList.add('is-on');
-    };
-  });
-  window.addEventListener('resize', resize);
-
-  /* 进入视野才开始画，滚出就停 —— 五个 demo 同页，不能都一直烧 CPU */
-  const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) start(); else stop(); }, { threshold: 0.12 });
-  io.observe(cv);
-})();
 
 /* ---------- 三、粒子流场 ---------- */
 (function () {
