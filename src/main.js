@@ -57,14 +57,20 @@ const WANT = ROUTE === '/edit' || ROUTE.startsWith('/edit/')
 // 让 store 知道"用户点名要看哪一篇"
 window.__readerDocPath = DOC_PATH
 const PASS = localStorage.getItem('reader_pass') || ''
-// 要编辑、又还没输过密码：先给密码门（密码由服务端验，这里只负责收）
-const MODE = WANT === 'owner' && !PASS ? 'locked' : WANT
-/* 当前身份挂到 window：store 里同步地址栏时要判断写 /edit 还是 /onlyread */
-window.__readerMode = MODE
-
 const sharedToken = new URLSearchParams(location.search).get('token')
 if (sharedToken) sessionStorage.setItem('reader_token', sharedToken)
 const TOKEN = sessionStorage.getItem('reader_token') || ''
+/*
+ * 进编辑模式的两条路，缺一不可：
+ *   - owner token（链接里带 ?token=…）：服务端认它，不需要密码。
+ *     示例知识库就是靠这条 —— 审阅人点链接直接能编辑，不用发口令给他。
+ *   - 密码：自己用的时候方便。
+ * 以前这里只判了密码，带 token 的链接照样先弹密码门，
+ * 于是「分享一个可直接编辑的库」这件事根本走不通。
+ */
+const MODE = WANT === 'owner' && !PASS && !TOKEN ? 'locked' : WANT
+/* 当前身份挂到 window：store 里同步地址栏时要判断写 /edit 还是 /onlyread */
+window.__readerMode = MODE
 
 if (MODE === 'locked') {
   document.cookie = 'reader_mode=; path=/; Max-Age=0; SameSite=Lax'

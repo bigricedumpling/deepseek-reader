@@ -20,7 +20,16 @@ import { createShare, roleOf } from './share.js'
 
 // 用文件自身位置推导，不依赖启动时的工作目录
 const READER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const DOCS_ROOT = path.resolve(READER_ROOT, '..')
+/*
+ * 内容根。默认是 reader 的上一级（本地开发与主站都是这样）。
+ *
+ * DOCS_ROOT 环境变量可以指到别处 —— 用于跑第二个实例：一个独立的示例知识库，
+ * 内容只有演示文档，与真实资料在文件系统上就隔开（不是靠分享开关过滤，
+ * 而是那些文件根本不在它的根目录里）。
+ */
+const DOCS_ROOT = process.env.DOCS_ROOT
+  ? path.resolve(process.env.DOCS_ROOT)
+  : path.resolve(READER_ROOT, '..')
 /** 分享状态（谁能看到什么）：只有两种身份，见 server/share.js */
 const share = createShare(DOCS_ROOT)
 

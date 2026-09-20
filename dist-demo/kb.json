@@ -1,0 +1,21 @@
+{
+  "title": "知识库",
+  "libs": [
+    {
+      "name": "笔试调研",
+      "desc": "网页数据 / 评测基准 / 训练数据构造与筛选的调研与结论。",
+      "href": "/",
+      "meta": "调研 · 笔试 · 存档",
+      "icon": "/favicon.svg",
+      "current": true
+    },
+    {
+      "name": "个人计划",
+      "desc": "待接入：日常计划与记录。",
+      "href": "/kb/plan/",
+      "meta": "占位",
+      "icon": "/icon-plan.svg",
+      "soon": true
+    }
+  ]
+}

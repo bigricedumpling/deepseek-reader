@@ -17,8 +17,16 @@ import { handleApi, share, DOCS_ROOT } from './content-api.js'
 import { roleOf } from './share.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const DIST = path.resolve(HERE, '..', 'dist')
+/* 前端产物目录也可以按实例覆盖（独立实例部署在自己的子路径下，base 不同，要单独构建） */
+const DIST = process.env.DIST_DIR ? path.resolve(process.env.DIST_DIR) : path.resolve(HERE, '..', 'dist')
 const PORT = Number(process.env.PORT || 8091)
+/*
+ * 站点标识与清单都可以按实例覆盖，用来跑第二个实例（独立的示例知识库）：
+ * 同一个 dist，换标题、图标与 kb.json 就是另一个站点，不必再构建一份。
+ * 不设这些变量时行为与以前完全一样。
+ */
+const SITE_TITLE = process.env.KB_TITLE || ''
+const SITE_ICON = process.env.KB_ICON || ''
 const args = process.argv.slice(2)
 const forceGuest = args.includes('--guest')
 
@@ -69,12 +77,18 @@ const server = http.createServer(async (req, res) => {
   // 知识库清单：每次都现读 public/kb.json，改完刷新页面就生效（不用重新构建）
   if (url.pathname === '/kb.json') {
     try {
-      const body = fs.readFileSync(path.resolve(HERE, '..', 'public', 'kb.json'))
+      const body = fs.readFileSync(process.env.KB_JSON || path.resolve(HERE, '..', 'public', 'kb.json'))
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' })
       return res.end(body)
     } catch {
       return res.end('{"libs":[]}')
     }
+  }
+
+  /* 图标可换：独立实例有自己的 mark，不想跟主站共用一个 */
+  if (SITE_ICON && url.pathname === '/favicon.svg') {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache' })
+    return res.end(fs.readFileSync(SITE_ICON))
   }
 
   // 静态文件：dist/ 里没有的路径一律回 index.html（前端自己路由）
@@ -87,7 +101,18 @@ const server = http.createServer(async (req, res) => {
   if (!fs.existsSync(file)) file = path.join(DIST, 'index.html')
 
   try {
-    const body = fs.readFileSync(file)
+    let body = fs.readFileSync(file)
+    /*
+     * 独立实例的标题在发出去的时候换掉。
+     * 不在构建时改，是因为同一个 dist 要服务两个站点 —— 各构建一份的话，
+     * 以后每次改前端都得记得构建两次，迟早会漏。
+     */
+    if (SITE_TITLE && path.basename(file) === 'index.html') {
+      body = Buffer.from(
+        String(body).replace(/<title>[^<]*<\/title>/, '<title>' + SITE_TITLE + '</title>'),
+        'utf-8'
+      )
+    }
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': 'no-cache',
