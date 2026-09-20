@@ -28,6 +28,18 @@
       }
       .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px 56px; }
 
+      /* 首屏：画布铺满，文字压在左下 */
+      .hero { position: relative; height: 380px; background: var(--panel); }
+      .hero canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+      .hero-cap { position: absolute; left: max(32px, calc((100% - 1080px) / 2 + 32px)); bottom: 30px; pointer-events: none; }
+      .hero-cap h1 { margin: 0 0 6px; font-size: 25px; font-weight: 600; color: var(--ink); letter-spacing: -0.5px; }
+      .hero-cap p { margin: 0; font-size: 12.5px; color: var(--sub); }
+      @media (max-width: 900px) {
+        .hero { height: 260px; }
+        .hero-cap { left: 18px; bottom: 20px; }
+        .hero-cap h1 { font-size: 19px; }
+      }
+
       header.top { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 0 16px; border-bottom: 1px solid var(--line); }
       .brand { display: flex; align-items: baseline; gap: 10px; }
       .brand b { font-size: 15px; font-weight: 600; color: var(--ink); }
@@ -112,9 +124,23 @@
     </style>
   </head>
   <body>
+    <!--
+      首屏：粒子流场。
+      速度场来自一层平滑噪声，粒子沿它移动并留下渐隐的轨迹；指针是斥力源。
+      文字压在画布上，不另占高度。
+    -->
+    <div class="hero">
+      <canvas id="field"></canvas>
+      <div class="hero-cap">
+        <h1>检索质量监控台</h1>
+        <p>指针划过会被推开，轨迹是速度场里自然形成的。</p>
+      </div>
+    </div>
+
     <div class="wrap">
+      <!-- 首屏已经写了站名，这一条只放范围与时间，不重复标题 -->
       <header class="top">
-        <div class="brand"><b>检索质量监控台</b><span>近 24 小时</span></div>
+        <div class="brand"><b>近 24 小时</b><span>全部线上流量</span></div>
         <span id="clock">--:--:--</span>
       </header>
 
@@ -199,6 +225,81 @@
     </div>
 
     <script>
+    /* ---------- 首屏粒子流场 ---------- */
+    (function () {
+      const cv = document.getElementById('field');
+      if (!cv) return;
+      const ctx = cv.getContext('2d');
+      const COUNT = 1600;
+      let w = 0, h = 0, raf = 0, running = false;
+      const parts = [];
+      const mouse = { x: -9999, y: -9999 };
+      let seed = 7;
+      /* 固定种子的伪随机：每次刷新形态一致，便于回看 */
+      const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+
+      /* 平滑速度场：两层正弦叠加。比逐粒子随机方向有组织得多 */
+      function field(x, y, t) {
+        const s = 0.0032;
+        const a = Math.sin(x * s + t * 0.00031) * Math.cos(y * s * 1.4 - t * 0.00022);
+        const b = Math.cos(x * s * 1.7 - t * 0.00019) * Math.sin(y * s + t * 0.00027);
+        return [a * 0.9 + b * 0.5, b * 0.9 - a * 0.5];
+      }
+
+      function resize() {
+        const cw = cv.clientWidth || 900, ch = cv.clientHeight || 380;
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        w = cw; h = ch;
+        if (!parts.length) for (let i = 0; i < COUNT; i++) parts.push({
+          x: rnd() * w, y: rnd() * h, px: 0, py: 0, life: 50 + rnd() * 170, age: rnd() * 170,
+        });
+        ctx.fillStyle = '#fafafa'; ctx.fillRect(0, 0, w, h);
+      }
+
+      function frame(t) {
+        /* 轨迹模式下整屏极缓慢地蒙一层底色，形成长尾而不是涂满 */
+        ctx.fillStyle = 'rgba(250,250,250,0.085)';
+        ctx.fillRect(0, 0, w, h);
+        for (const p of parts) {
+          const [vx, vy] = field(p.x, p.y, t);
+          let nx = p.x + vx * 1.6, ny = p.y + vy * 1.6;
+          const dx = p.x - mouse.x, dy = p.y - mouse.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < 16000) {
+            const f = (1 - d2 / 16000) * 10;
+            const d = Math.sqrt(d2) || 1;
+            nx += (dx / d) * f; ny += (dy / d) * f;
+          }
+          p.age++;
+          if (p.age > p.life || nx < -20 || nx > w + 20 || ny < -20 || ny > h + 20) {
+            p.x = rnd() * w; p.y = rnd() * h; p.age = 0; p.px = p.x; p.py = p.y;
+            continue;
+          }
+          p.px = p.x; p.py = p.y;
+          p.x = nx; p.y = ny;
+          const a = 0.50 * Math.min(1, Math.sin((p.age / p.life) * Math.PI) * 1.6);
+          ctx.strokeStyle = 'rgba(77,107,254,' + a.toFixed(3) + ')';
+          ctx.lineWidth = 1.1;
+          ctx.beginPath(); ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); ctx.stroke();
+        }
+        raf = requestAnimationFrame(frame);
+      }
+      function start() { resize(); if (!running) { running = true; raf = requestAnimationFrame(frame); } }
+      function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+
+      cv.addEventListener('pointermove', (e) => { const b = cv.getBoundingClientRect(); mouse.x = e.clientX - b.left; mouse.y = e.clientY - b.top; });
+      cv.addEventListener('pointerleave', () => { mouse.x = mouse.y = -9999; });
+      window.addEventListener('resize', () => { if (running) resize(); });
+      /* 首屏一直在视口里，布局稳定后直接开跑；滚出视口就停 */
+      const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) start(); else stop(); }, { threshold: 0.05 });
+      io.observe(cv);
+      const boot = () => requestAnimationFrame(() => { if (cv.clientWidth) start(); });
+      if (document.readyState === 'complete') boot();
+      else window.addEventListener('load', boot);
+    })();
+
     /* 数据是静态的：这是一份演示原件，不连后端。 */
     (function () {
       const NS = 'http://www.w3.org/2000/svg';
