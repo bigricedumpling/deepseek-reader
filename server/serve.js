@@ -33,6 +33,16 @@ const SITE_ICON = process.env.KB_ICON || ''
  * 不然它显示的还是主站的名字（不同实例同源的话还会互相覆盖）。
  */
 const SITE_BRAND = process.env.KB_BRAND || ''
+/*
+ * 品牌存 localStorage 的键名。
+ *
+ * 必须是按实例分开的 —— 两个站点在同一域名下（/deepseek/reader/ 与 /deepseek/demo/），
+ * localStorage 是按域名共享的，共用一个键就会互相覆盖：
+ * 打开过示例库之后，回主站看到的也是示例库的名字。默认值保持原样，
+ * 独立实例用 KB_BRAND_KEY 指到自己的键。
+ */
+const BRAND_KEY = process.env.KB_BRAND_KEY || 'reader.brand'
+const LOGO_KEY = process.env.KB_LOGO_KEY || 'reader.logo'
 const args = process.argv.slice(2)
 const forceGuest = args.includes('--guest')
 
@@ -149,27 +159,33 @@ const server = http.createServer(async (req, res) => {
   try {
     let body = fs.readFileSync(file)
     /*
-     * 独立实例的标题在发出去的时候换掉。
+     * 独立实例的标题与品牌在发出去的时候换掉。
      * 不在构建时改，是因为同一个 dist 要服务两个站点 —— 各构建一份的话，
      * 以后每次改前端都得记得构建两次，迟早会漏。
      */
-    if (path.basename(file) === 'index.html' && (SITE_TITLE || SITE_BRAND || SITE_ICON)) {
+    if (path.basename(file) === "index.html" && (SITE_TITLE || SITE_BRAND || SITE_ICON)) {
       let html = String(body)
-      if (SITE_TITLE) html = html.replace(/<title>[^<]*<\/title>/, '<title>' + SITE_TITLE + '</title>')
+      if (SITE_TITLE) html = html.replace(/<title>[^<]*<\/title>/, "<title>" + SITE_TITLE + "</title>")
       /*
        * 先行脚本：在应用挂载之前把品牌写进 localStorage。
-       * 只在「还没被用户改过」时写，免得把访客自己改的名字冲掉。
+       *
+       * 两个要点：
+       *   1. 键名按实例分开。两个站点在同一域名下（/deepseek/reader/ 与 /deepseek/demo/），
+       *      localStorage 按域名共享 —— 共用一个键，打开示例库之后主站的名字也被顶掉。
+       *   2. 顺手删掉旧键。早期版本用的是共享键（reader.brand / reader.logo），
+       *      已经写进浏览器的值不会自己消失，不删的话那个串味的名字会一直显示。
        */
-      if (SITE_BRAND || SITE_ICON) {
-        const lines = SITE_BRAND.split('|')
-        const boot = '<script>(function(){try{' +
-          "if(!localStorage.getItem('reader.brand')&&" + JSON.stringify(lines) + '.length)' +
-          "localStorage.setItem('reader.brand',JSON.stringify(" + JSON.stringify(lines) + '));' +
-          (SITE_ICON ? "if(!localStorage.getItem('reader.logo'))localStorage.setItem('reader.logo'," + JSON.stringify(SITE_ICON) + ');' : '') +
-          '}catch(e){}})()<\/script>'
-        html = html.replace('</head>', boot + '</head>')
-      }
-      body = Buffer.from(html, 'utf-8')
+      const script = [
+        "(function(){try{",
+        'try{localStorage.removeItem("reader.brand");localStorage.removeItem("reader.logo");}catch(e){}',
+        SITE_BRAND
+          ? "localStorage.setItem(" + JSON.stringify(BRAND_KEY) + ",JSON.stringify(" + JSON.stringify(SITE_BRAND.split("|")) + "));"
+          : "",
+        SITE_ICON ? "localStorage.setItem(" + JSON.stringify(LOGO_KEY) + "," + JSON.stringify(SITE_ICON) + ");" : "",
+        "}catch(e){}})()",
+      ].join("")
+      html = html.replace("</head>", "<script>" + script + "<\/script></head>")
+      body = Buffer.from(html, "utf-8")
     }
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
