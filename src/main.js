@@ -57,9 +57,30 @@ const WANT = ROUTE === '/edit' || ROUTE.startsWith('/edit/')
 // 让 store 知道"用户点名要看哪一篇"
 window.__readerDocPath = DOC_PATH
 const PASS = localStorage.getItem('reader_pass') || ''
-const sharedToken = new URLSearchParams(location.search).get('token')
-if (sharedToken) sessionStorage.setItem('reader_token', sharedToken)
-const TOKEN = sessionStorage.getItem('reader_token') || ''
+/*
+ * token 优先取地址栏里的，其次才是 sessionStorage。
+ *
+ * 顺序反过来的话，在微信内置浏览器里会直接给一张「禁止访问」——
+ * 那边对 sessionStorage 的处理和常规浏览器不一样（读写可能抛异常或拿不到值），
+ * 于是 token 判成空，明明链接里带着也进不去。地址栏参数没有这些不确定性。
+ */
+function readToken() {
+  const fromUrl = new URLSearchParams(location.search).get('token')
+  if (fromUrl) return fromUrl
+  try {
+    return sessionStorage.getItem('reader_token') || ''
+  } catch {
+    return ''
+  }
+}
+const TOKEN = readToken()
+if (TOKEN) {
+  try {
+    sessionStorage.setItem('reader_token', TOKEN)
+  } catch {
+    /* 存不下也无所谓，地址栏那份还在 */
+  }
+}
 /*
  * 进编辑模式的两条路，缺一不可：
  *   - owner token（链接里带 ?token=…）：服务端认它，不需要密码。
@@ -96,7 +117,11 @@ if (MODE === 'locked') {
    * iframe 去取文件时带不了 x-reader-token，服务端认不出身份，预览区就是一屏 403。
    */
   if (MODE === 'owner' && TOKEN) {
-    document.cookie = 'reader_token=' + encodeURIComponent(TOKEN) + '; path=/; SameSite=Lax'
+    try {
+      document.cookie = 'reader_token=' + encodeURIComponent(TOKEN) + '; path=/; SameSite=Lax'
+    } catch {
+      /* cookie 写不进去时，头里那份 token 仍然有效 */
+    }
   }
 }
 
