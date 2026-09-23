@@ -54,7 +54,7 @@
   --para-indent: 0em;             /* 段首缩进，缩进式排版才用 */
   --para-gap: 1.15em;             /* 段间距，段距式排版才用 */
   --cjk-strong-weight: 900;       /* 中文加粗面：900 是宋体 Black */
-  --reading-font: "Noto Sans SC", "Source Han Sans SC", "Heiti SC", -apple-system, sans-serif;
+  --reading-font: "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
 }
 
 /* 中西文分开选：西文在前、中文在后，浏览器按字符回退，天然分流 */
@@ -67,6 +67,10 @@ body[data-font="sans"] {
   --reading-font: "Noto Sans SC", "Source Han Sans SC", "Heiti SC",
     -apple-system, sans-serif;
   --cjk-family: "Noto Sans SC", "Source Han Sans SC", "Heiti SC", sans-serif;
+}
+body[data-font="harmony"] {
+  --reading-font: "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
+  --cjk-family: "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
 }
 body[data-font="kai"] {
   --reading-font: "TeX Gyre Pagella", "ChillKai", "Kaiti SC", STKaiti, "楷体", serif;

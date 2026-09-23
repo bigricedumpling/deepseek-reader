@@ -79,11 +79,11 @@ export const WIDTH_OPTIONS = [
 export const useReaderStore = defineStore('reader', () => {
   /* ---------- 正文排版 ---------- */
   const rawFont = localStorage.getItem(KEY.font)
-  /* 旧默认衬线会在首次打开时自动写进本地设置。只迁移一次，之后手动选衬线仍会保留。 */
+  /* 旧默认衬线会在首次打开时自动换成当前默认字体。只迁移一次，之后手动选衬线仍会保留。 */
   const migrateOldDefault = !localStorage.getItem(SANS_DEFAULT_MIGRATION)
   const font = ref(migrateOldDefault && (rawFont === 'serif' || rawFont === 'song')
-    ? 'sans'
-    : FONT_MIGRATE[rawFont] || rawFont || 'sans')
+    ? 'harmony'
+    : FONT_MIGRATE[rawFont] || rawFont || 'harmony')
   if (migrateOldDefault) localStorage.setItem(SANS_DEFAULT_MIGRATION, '1')
   const size = ref(num('size', 15.5))
   /** 阅读宽度，0 表示铺满可用宽度 */

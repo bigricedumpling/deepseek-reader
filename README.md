@@ -11,7 +11,9 @@
 - 收起时点击左上角图标展开文档侧栏；展开时点击该图标切换知识库。
 - 手机上的知识库切换采用弹窗。
 - 多文档以标签切换；只打开一篇时显示普通标题。
-- 默认使用非衬线字体，可调整字号、行距、正文宽度和主题。
+- 默认使用 HarmonyOS Sans，可调整字体、字号、行距、正文宽度和主题。
+
+字体说明：阅读器使用 HarmonyOS Sans © Huawei Device Co., Ltd.，字体文件保持原样，授权文本见 [HarmonyOS Sans 字体许可](public/fonts/HarmonyOS-Sans-LICENSE.txt)。
 
 ## 编辑
 

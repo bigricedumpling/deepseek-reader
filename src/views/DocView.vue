@@ -85,7 +85,6 @@
                 {{ f.label }}
               </button>
             </div>
-
             <p class="type-label"><span class="label-main"><component :is="PhTextB" :size="12" class="label-icon" />中文加粗</span></p>
             <div class="type-row">
               <button
@@ -555,6 +554,7 @@ const FONTS = [
     label: '无衬线',
     stack: '"Noto Sans SC", "Heiti SC", -apple-system, sans-serif'
   },
+  { id: 'harmony', label: 'HarmonyOS Sans', stack: '"HarmonyOS Sans SC", "Noto Sans SC", sans-serif' },
   { id: 'kai', label: '楷体', stack: '"ChillKai", "Kaiti SC", STKaiti, serif' },
   { id: 'ping', label: '苹方', stack: '"PingFang SC", "Hiragino Sans GB", sans-serif' }
 ]
