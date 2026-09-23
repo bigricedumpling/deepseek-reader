@@ -107,11 +107,6 @@ const server = http.createServer(async (req, res) => {
   } catch { /* 日志失败不影响请求 */ }
 
   if (url.pathname.startsWith('/api')) {
-    // 链接里的 token 种进 cookie：之后页面里的 /api 调用就自带身份了
-    const fromQuery = url.searchParams.get('token')
-    if (fromQuery) {
-      res.setHeader('Set-Cookie', 'reader_token=' + encodeURIComponent(fromQuery) + '; Path=/; HttpOnly; SameSite=Lax')
-    }
     return handleApi(req, res, { role: roleOf(req, url, share, { forceGuest }) })
   }
 
@@ -165,15 +160,29 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 静态文件：dist/ 里没有的路径一律回 index.html（前端自己路由）
-  let rel = decodeURIComponent(url.pathname)
+  let rel
+  try {
+    rel = decodeURIComponent(url.pathname)
+  } catch {
+    return notFound(res)
+  }
   if (rel === '/' || rel === '') rel = '/index.html'
   let file = path.resolve(DIST, '.' + rel)
-  if (!file.startsWith(DIST)) return notFound(res)
+  const inside = (candidate) => {
+    const relative = path.relative(DIST, candidate)
+    return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative)
+  }
+  if (!inside(file)) return notFound(res)
   // 目录名要补 index.html（比如门户页在 /kb/ 下），补不到再退回应用首页
   if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html')
   if (!fs.existsSync(file)) file = path.join(DIST, 'index.html')
 
   try {
+    // 静态目录里的软链也不能把请求带出构建产物。
+    const realRoot = fs.realpathSync(DIST)
+    const realFile = fs.realpathSync(file)
+    const relative = path.relative(realRoot, realFile)
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) return notFound(res)
     let body = fs.readFileSync(file)
     /*
      * 独立实例的标题与品牌在发出去的时候换掉。
@@ -222,10 +231,6 @@ function notFound(res) {
 }
 
 server.listen(PORT, '127.0.0.1', () => {
-  const mode = forceGuest ? '访客（只读）' : '我'
-  console.log('分享服务器已启动： http://127.0.0.1:' + PORT + '/   身份：' + mode)
-  console.log('文档根目录： ' + DOCS_ROOT)
-  if (!forceGuest) {
-    console.log('访客链接： http://127.0.0.1:' + PORT + '/?token=' + share.token('guest'))
-  }
+  console.log('文档工作台已启动：http://127.0.0.1:' + PORT + '/')
+  console.log('文档根目录：' + DOCS_ROOT)
 })

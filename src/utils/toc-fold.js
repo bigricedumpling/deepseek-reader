@@ -1,9 +1,7 @@
 /**
  * 目录里的折叠状态。
  *
- * 只影响**右侧目录列表**的显示：长文读起来，目录一下拉得老长，
- * 找一个小节要在几十条里扫 —— 把它收起来，目录就短了。
- * 正文一个字都不动（正文本来就靠目录导航）。
+ * 折叠状态属于阅读偏好；「哪些标题是折叠标题」则是文档元数据，由服务端保存。
  *
  * 按文档存 localStorage：
  *
@@ -12,7 +10,8 @@
  * 键是「级别|标题文字|同名第几个」：不存位置，所以正文里插入删除、标题挪位置都不会串。
  * 标题改了名，旧键自然失效（那一节展开），这比"折叠状态错位"要好。
  */
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { API_BASE } from './api.js'
 
 const STORE_KEY = 'reader.tocFolds'
 
@@ -27,8 +26,48 @@ function load() {
 
 const folds = ref(load())
 
+/** 折叠状态本身（正文折叠插件要 watch 它，两处联动） */
+export const foldState = folds
+
 /** 当前文档路径（目录面板在文档切换时写入） */
 export const foldDoc = ref('')
+export const foldableState = ref({})
+
+export function foldableKeys() {
+  return foldableState.value[foldDoc.value] || {}
+}
+
+export function isFoldable(key) {
+  return !!foldableKeys()[key]
+}
+
+async function loadFoldable(path) {
+  if (!path) return
+  try {
+    const res = await fetch(API_BASE + '/api/foldable?path=' + encodeURIComponent(path))
+    const json = await res.json()
+    if (!json.ok) return
+    foldableState.value = { ...foldableState.value, [path]: json.data.keys || {} }
+  } catch {
+    /* 暂时离线仍可阅读正文，折叠标题稍后重新打开文档再取。 */
+  }
+}
+
+watch(foldDoc, loadFoldable, { immediate: true })
+
+export async function setFoldable(key, on) {
+  const path = foldDoc.value
+  if (!path) throw new Error('尚未选中文档')
+  const res = await fetch(API_BASE + '/api/foldable', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, key, on })
+  })
+  const json = await res.json()
+  if (!json.ok) throw new Error(json.error || '保存标题类型失败')
+  foldableState.value = { ...foldableState.value, [path]: json.data.keys || {} }
+  if (!on) unfoldKeys(key)
+}
 
 let saveTimer = null
 function persist() {
@@ -60,6 +99,7 @@ function write(next) {
 }
 
 export function toggleFold(key) {
+  if (!isFoldable(key)) return
   const next = { ...foldedKeys() }
   if (next[key]) delete next[key]
   else next[key] = true

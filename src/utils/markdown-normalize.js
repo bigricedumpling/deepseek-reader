@@ -2,6 +2,7 @@
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload())
 }
+import MarkdownIt from 'markdown-it'
 
 /**
  * Crepe 序列化 markdown 时会做一批改动，内容多数不受影响，但源码会变样、体积能翻倍，
@@ -23,10 +24,39 @@ if (import.meta.hot) {
  * 比对不上就丢掉整格，单元格里的分行全没了。转义和自动链接也要一并还原，
  * 编辑器会给 @ _ 之类加反斜杠，还会把裸链接包进尖括号。
  */
-const cellKey = (s) =>
+/**
+ * 编辑器会改、但看着一模一样的三类写法，比对时要抹平 —— 抹平了才能认出
+ * "这一行用户没动过"，从而整行沿用原文：
+ *
+ *   1. 自动链接：原文 [url](url) 会被写成 <url>
+ *   2. 图片替代文字：原文 ![逐轮评分与理由](url) 会被写成 ![1.00](url)
+ *      图还是那张图，但 alt 文字被换成了缩放比例
+ *   3. 转义、列表符号、表格空格
+ *
+ * 只动语法外壳，正文一个字不碰 —— 用户真改了内容就匹配不上，
+ * 那一行会保持用户改过的样子。
+ */
+/*
+ * 列表符号统一。
+ *
+ * 编辑器一律把 - 和 + 写成 *，而且引用块里还多一层 ">"：
+ *   原文 "> - 跑过"   →   往返 "> * 跑过"
+ * 只认行首的 [-*+] 会漏掉带引用的那行，于是整行被判成"改过"、
+ * 原文的 "-" 也换不回来。这里允许行首有任何数量的 ">" 与空白。
+ */
+const unifyBullet = (s) => String(s).replace(/^((?:\s*>\s*)*)([-*+])(\s+)/, '$1-$3')
+
+const mediaKey = (s) =>
   String(s)
-    .replace(/<br\s*\/?>/gi, '')
+    /* ![alt](url) → 只留 url：alt 被编辑器换掉是常态 */
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, '![]($2)')
+    /* [text](url) 与 <url> 指向同一个目标，统一成裸 url */
+    .replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '$2')
     .replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
+
+const cellKey = (s) =>
+  mediaKey(String(s))
+    .replace(/<br\s*\/?>/gi, '')
     .replace(/\\([\\`*_{}[\]()#+\-.!~$@|])/g, '$1')
     .replace(/\s+/g, '')
 
@@ -113,8 +143,9 @@ function restoreOriginalLines(lines, original) {
    * 这几样都是编辑器会改、但看着一模一样的东西，正文一个字不同就不会匹配上。
    */
   const strip = (s) => {
-    let out = String(s).replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
-    out = out.replace(/^(\s*)[-*+](\s+)/, '$1-$2')
+    /* 先抹平图片 alt 与链接写法（见 mediaKey 的说明），再管尖括号和列表符号 */
+    let out = mediaKey(s)
+    out = unifyBullet(out)
     if (out.trimStart().startsWith('|')) out = out.replace(/\s+/g, ' ')
     return out.trim()
   }
@@ -241,7 +272,7 @@ export function normalizeMarkdown(input, original, { spacing = true } = {}) {
 
       if (/^-{3,}$/.test(line.trim())) dashRule = true
 
-      const b = line.match(/^(\s*)([-*+])\s+(.*)$/)
+      const b = line.match(/^((?:\s*>\s*)*)([-*+])\s+(.*)$/)
       if (b) bullets.push([b[2], cellKey(b[3])])
 
       if (!line.startsWith('|') || /^\|[\s\-:|]+\|$/.test(line.trim())) continue
@@ -338,4 +369,30 @@ export function normalizeMarkdown(input, original, { spacing = true } = {}) {
   const text = finalLines.join('\n').replace(/\n+$/, '')
   const tail = original ? (String(original).match(/\n+$/) || [''])[0] : '\n'
   return text + tail
+}
+const comparisonParser = new MarkdownIt({ html: true, linkify: true })
+
+/**
+ * 只把语法写法变化视为无损。比较解析后的结构与内容，不能简单抹掉星号、
+ * 反引号等字符：那会把加粗、行内代码丢失误判成纯外观变化。
+ */
+export function isCosmeticOnly(before, after) {
+  const shape = (token) => ({
+    type: token.type,
+    tag: token.tag,
+    nesting: token.nesting,
+    hidden: token.hidden,
+    attrs: token.attrs || null,
+    info: token.info?.trim() || '',
+    content: token.type === 'inline' ? '' :
+      token.type === 'text' ? token.content.replace(/\s+/g, ' ') : token.content,
+    children: token.children?.map(shape) || null
+  })
+  try {
+    const a = comparisonParser.parse(String(before ?? ''), {}).map(shape)
+    const b = comparisonParser.parse(String(after ?? ''), {}).map(shape)
+    return JSON.stringify(a) === JSON.stringify(b)
+  } catch {
+    return false
+  }
 }

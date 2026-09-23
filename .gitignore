@@ -3,3 +3,6 @@ dist/
 .vite-cache/
 *.log
 .DS_Store
+
+.admin-password
+.dist-*/

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { renderMarkdown, extractToc, searchDocs } from '../utils/markdown'
 import { API_BASE } from '../utils/api'
+import { interviewPaths } from '../utils/interview-paths'
 
 /*
  * 「成品文件」的类型：pdf 与 h5。
@@ -52,6 +53,11 @@ function flatten(nodes, dir, out) {
 /** 上次看的是哪篇：刷新（改完代码要硬刷新）之后还能回到原来那篇 */
 const LAST_DOC_KEY = 'reader.lastDoc'
 
+function lastDocKey() {
+  const key = tabsKey()
+  return key === TABS_KEY ? LAST_DOC_KEY : LAST_DOC_KEY + key.slice(TABS_KEY.length)
+}
+
 /**
  * 打开的文档列表，就是工作台上摊着的那几篇。
  *
@@ -60,10 +66,21 @@ const LAST_DOC_KEY = 'reader.lastDoc'
  */
 const TABS_KEY = 'reader.tabs'
 
+function tabsKey() {
+  try {
+    const requestedLib = new URLSearchParams(location.search).get('lib') || ''
+    const lib = requestedLib === '业务面' ? '面试准备' : requestedLib
+    const guest = window.__readerMode === 'guest' ? ':guest' : ''
+    return TABS_KEY + guest + (lib ? ':' + lib : '')
+  } catch {
+    return TABS_KEY
+  }
+}
+
 function loadTabs() {
   try {
-    const raw = JSON.parse(localStorage.getItem(TABS_KEY) || '[]')
-    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string' && x) : []
+    const raw = JSON.parse(localStorage.getItem(tabsKey()) || '[]')
+    return Array.isArray(raw) ? [...new Set(raw.filter((x) => typeof x === 'string' && x))] : []
   } catch {
     return []
   }
@@ -71,7 +88,7 @@ function loadTabs() {
 
 function lastDoc() {
   try {
-    return localStorage.getItem(LAST_DOC_KEY) || ''
+    return localStorage.getItem(lastDocKey()) || ''
   } catch {
     return ''
   }
@@ -79,7 +96,7 @@ function lastDoc() {
 
 function rememberDoc(file) {
   try {
-    if (file) localStorage.setItem(LAST_DOC_KEY, file)
+    if (file) localStorage.setItem(lastDocKey(), file)
   } catch {
     /* 隐私模式下写不了就算了 */
   }
@@ -132,7 +149,7 @@ export const useDocsStore = defineStore('docs', () => {
 
   const searchResults = computed(() => {
     if (!searchKeyword.value.trim()) return []
-    const docs = allDocs.value
+    const docs = allDocs.value.filter(d => d.file === currentPath.value)
       .map((d) => ({ id: d.file, title: d.name, raw: rawMap.value[d.file] || '' }))
       .filter((d) => d.raw)
     return searchDocs(docs, searchKeyword.value)
@@ -163,9 +180,17 @@ export const useDocsStore = defineStore('docs', () => {
 
   /* ---------- 身份与分享 ---------- */
 
-  /** 'owner' = 我（能编辑）；'guest' = 别人（只读，只能看勾选分享的部分） */
-  const role = ref('owner')
-  const isGuest = computed(() => role.value === 'guest')
+  /** owner 可管理全部内容；guest 只见公开内容，且只能编辑未锁定项。 */
+  /** 每换一次知识库 +1；侧边栏据此知道"折叠状态该重置了" */
+  const libEpoch = ref(0)
+
+  const role = ref(window.__readerMode === 'owner' ? 'owner' : 'guest')
+  const isGuest = computed(() => role.value !== 'owner')
+  const accessRequest = ref(null)
+  const currentReadonly = computed(() => !canEdit(currentNode.value))
+  function requestAccess(path, change, label) { accessRequest.value = { path, change, label } }
+  function canEdit(node) { return !!node && (!isGuest.value || (node.locked === false && node.shared === true)) }
+
   /** 分享设置：{ shared: { 路径: true }, editable: {...}, guestToken } */
   const shareInfo = ref({ shared: {}, editable: {}, guestToken: '' })
 
@@ -190,29 +215,9 @@ export const useDocsStore = defineStore('docs', () => {
     }
   }
 
-  /** 勾选 / 取消某个节点对外可见 */
-  async function setShared(path, shared, editable) {
-    const res = await fetch(API_BASE + '/api/share', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, shared, editable })
-    })
-    const json = await res.json()
-    if (!json.ok) throw new Error(json.error || '改分享设置失败')
-    shareInfo.value = json.data
-  }
-
-  /** 别人那条链接（把 token 带上，服务器靠它认身份） */
-  function guestLink() {
-    // 直接给只读模式的地址，并且带上当前这一篇：对方打开就落在这一篇上
-    const token = shareInfo.value.guestToken
-    const path = currentPath.value ? '/' + currentPath.value.split('/').map(encodeURIComponent).join('/') : ''
-    return location.origin + '/onlyread' + path + (token ? '?token=' + token : '')
-  }
-
   function saveTabs() {
     try {
-      localStorage.setItem(TABS_KEY, JSON.stringify(tabs.value))
+      localStorage.setItem(tabsKey(), JSON.stringify(tabs.value))
     } catch {
       /* 写不了就算了，只是刷新后恢复不了标签 */
     }
@@ -270,39 +275,6 @@ export const useDocsStore = defineStore('docs', () => {
   /**
    * 地址栏里点名的那一篇（/edit/调研/数据调研 或 /onlyread/…）。
    *
-   * 直接从 location 读，不依赖 main.js 先塞一个全局变量 ——
-   * 那样子依赖初始化顺序，刚才就因此一直没生效（踩过）。
-   */
-  function routedDocPath() {
-    try {
-      /*
-       * 不要用 ^ 锚定开头。
-       *
-       * 站点可能挂在子路径下（/deepseek/reader/onlyread/…），前缀会让「以 /onlyread/ 开头」
-       * 落空，地址栏点名的那一篇就认不出来，页面回落到目录里第一篇 ——
-       * 表现是「第二条分享链接打开的是第一篇」。/edit 走的是去前缀后的路径，所以一直没暴露。
-       */
-      const m = location.pathname.match(/\/(?:edit|onlyread)\/(.+)$/)
-      if (!m) return ''
-      /*
-       * 这里必须用 decodeURIComponent，不能用 decodeURI。
-       *
-       * 路径里的斜杠会被编码成 %2F（例如 笔试题%2F笔试题交付：题目二），
-       * 而 decodeURI 有意不还原 %2F —— 斜杠在路径里有特殊含义。
-       * 结果是查表时拿着 %2F 去比，永远匹配不上，页面静默回落到目录里第一篇：
-       * 表现就是「第二条分享链接打开的是第一篇」。这个错误很隐蔽，因为页面不报错。
-       *
-       * 只解这一段，不能解整条 pathname：那样站点前缀里的编码也会被一起还原。
-       */
-      return decodeURIComponent(m[1]).replace(/\/+$/, '')
-    } catch {
-      return ''
-    }
-  }
-
-  /**
-   * 地址栏里点名的那一篇（/edit/调研/数据调研 或 /onlyread/…）。
-   *
    * 直接从 location 读，不依赖 main.js 先塞的全局变量 ——
    * 那样子依赖初始化顺序，前面试了两处都没生效（踩过）。
    */
@@ -315,7 +287,7 @@ export const useDocsStore = defineStore('docs', () => {
        * 落空，地址栏点名的那一篇就认不出来，页面回落到目录里第一篇 ——
        * 表现是「第二条分享链接打开的是第一篇」。/edit 走的是去前缀后的路径，所以一直没暴露。
        */
-      const m = location.pathname.match(/\/(?:edit|onlyread)\/(.+)$/)
+      const m = location.pathname.match(/\/(?:doc|edit|onlyread)\/(.+)$/)
       if (!m) return ''
       /*
        * 这里必须用 decodeURIComponent，不能用 decodeURI。
@@ -327,16 +299,109 @@ export const useDocsStore = defineStore('docs', () => {
        *
        * 只解这一段，不能解整条 pathname：那样站点前缀里的编码也会被一起还原。
        */
-      return decodeURIComponent(m[1]).replace(/\/+$/, '')
+      const raw = decodeURIComponent(m[1]).replace(/\/+$/, '')
+      return legacyPath(raw)
     } catch {
       return ''
     }
   }
 
+  /**
+   * 旧链接的路径映射。
+   *
+   * 对外发出去的链接长这样：/onlyread/笔试题/笔试题交付：题目一
+   * 那时 笔试题 与 调研报告 是文档根下的两个顶层目录。
+   * 后来资料按知识库归拢：笔试题 成了「Agent（设计方向）」库，调研报告 挪进了它里面。
+   *
+   * 规则：老路径的第一段（笔试题）在当前库里已经不存在，把它换成现在所属的库根，
+   * /笔试题/调研报告/评测调研 → /Agent（设计方向）/调研报告/评测调研
+   *
+   * 两个容易写错的地方：
+   *   1. allFiles 只含文件（flatten 不产出目录），所以判断目录要看有没有文件的
+   *      file 里含这一段，不能用 f.path —— 那个字段在文件条目上根本不存在。
+   *   2. 段是出现在路径中间的（Agent（设计方向）/调研报告/…），
+   *      所以用 indexOf 找，不能用 startsWith。
+   */
+  function legacyPath(raw) {
+    if (!raw) return ''
+    if (raw.startsWith('笔试题/')) return 'Agent（设计方向）/' + raw.slice('笔试题/'.length)
+    const extension = /\.md$/i.test(raw) ? raw.slice(-3) : ''
+    const relocated = interviewPaths[raw.replace(/\.md$/i, '')]
+    if (relocated) return relocated + extension
+    /* 2026-09：散在面试准备根部的资料已归类，业务面也并回这个知识库。 */
+    if (raw.startsWith('业务面/')) return '面试准备/' + raw
+    if (raw.startsWith('面试准备/')) {
+      const leaf = raw.slice('面试准备/'.length)
+      const stem = leaf.replace(/\.md$/i, '')
+      const section = {
+        README: '总览', 面试准备: '总览', 笔试面试总复习速览: '总览', 下一步计划: '总览',
+        岗位JD与目标: '岗位与策略', 能力线与笔试题型预测: '岗位与策略', 访问画像线索: '岗位与策略',
+        模拟题库: '问答演练', 全量问答手册: '问答演练', 术语急救卡: '问答演练', 反问清单与叙事结构: '问答演练',
+        wegen项目事实卡: '项目素材'
+      }[stem]
+      if (section) return legacyPath('面试准备/' + section + '/' + leaf)
+    }
+    const files = allFiles.value
+    if (!files.length) return raw
+
+    const seg = (name) => files.find((f) => f.file.indexOf(name + '/') >= 0)
+    const kids = (p) => files.filter((f) => f.file.indexOf(p + '/') === 0)
+    const isDoc = (p) =>
+      files.some((f) => f.file === p || f.file.replace(/\.(md|pdf)$/i, '') === p)
+
+    const first = raw.split('/')[0]
+    const rest = raw.slice(first.length + 1)
+    /* 路径没变过：第一段本身就是现在库里的东西 */
+    if (!first || seg(first) || isDoc(first)) return raw
+    if (!rest) return raw
+    /* 去掉孤儿第一段之后，剩下的正好是库根 */
+    if (kids(rest).length) return rest
+
+    const head = rest.split('/')[0]
+    const hit = seg(head)
+    if (!hit) return raw
+    /* hit.file 里 head 之前的部分就是所属库根 */
+    const idx = hit.file.indexOf(head)
+    if (idx <= 0) return raw
+    const mapped = hit.file.slice(0, idx) + rest
+    /* 指向目录时落到里面第一篇 */
+    const inner = kids(mapped)
+    return inner.length ? inner[0].file : mapped
+  }
+
+  /**
+   * 旧链接没有 ?lib=，但它的第一段（笔试题）其实指的就是某个库。
+   * 侧边栏定默认库时用它 —— 不然会落到"第一个库"上，
+   * 而路径又按老前缀解析，两边对不上。
+   */
+  function legacyLib() {
+    const raw = (() => {
+      try {
+        const m = location.pathname.match(/\/(?:doc|edit|onlyread)\/(.+)$/)
+        return m ? decodeURIComponent(m[1]).replace(/\/+$/, '') : ''
+      } catch {
+        return ''
+      }
+    })()
+    if (!raw) return ''
+    const first = raw.split('/')[0]
+    const rest = raw.slice(first.length + 1)
+    if (!rest) return ''
+    const files = allFiles.value
+    if (!files.length) return ''
+    if (files.some((f) => f.file.startsWith(first + '/'))) return ''
+    const head = rest.split('/')[0]
+    const inside = files.find((f) => f.file.startsWith(head + '/'))
+    if (!inside) return ''
+    const idx = inside.file.indexOf(head)
+    return idx > 0 ? inside.file.slice(0, idx).replace(/\/$/, '') : ''
+  }
+
   async function ensureCurrent() {
     pruneTabs()
-    if (allDocs.value.some((d) => d.file === currentPath.value)) {
+    if (allFiles.value.some((d) => d.file === currentPath.value)) {
       openTab(currentPath.value)
+      syncUrl()
       return
     }
     // 路由点名的那一篇优先（别人分享过来的链接、或你提交作业时要别人直接看到的）
@@ -348,6 +413,8 @@ export const useDocsStore = defineStore('docs', () => {
       : null
     if (routedHit) {
       currentPath.value = routedHit.file
+      openTab(routedHit.file)
+      syncUrl()
       if (!PREVIEW_TYPES.has(currentNode.value?.type)) {
         try {
           await loadDoc(routedHit.file)
@@ -361,6 +428,8 @@ export const useDocsStore = defineStore('docs', () => {
     // 上次那篇还在（没被改名/删掉）就接着看，否则回第一篇
     const hit = want && allFiles.value.some((f) => f.file === want)
     currentPath.value = hit ? want : allFiles.value[0]?.file || ''
+    openTab(currentPath.value)
+    if (currentPath.value) syncUrl()
     if (currentPath.value && !PREVIEW_TYPES.has(currentNode.value?.type)) {
       try {
         await loadDoc(currentPath.value)
@@ -372,11 +441,31 @@ export const useDocsStore = defineStore('docs', () => {
 
   /* ---------- 读取 ---------- */
 
+  /*
+   * 当前知识库：地址栏里的 ?lib=<库名>。
+   *
+   * 一个知识库就是文档根下的一个文件夹。不选时看整棵树（工作区总览），
+   * 选了就只看那一个 —— 切换知识库不换实例，只换这一个参数。
+   */
+  function routedLib() {
+    try {
+      const lib = String(new URLSearchParams(location.search).get('lib') || '').trim()
+      return lib === '业务面' ? '面试准备' : lib
+    } catch {
+      return ''
+    }
+  }
+
+  let treeRequest = 0
   async function loadTree() {
-    const { data } = await api('GET', '/tree')
+    const request = ++treeRequest
+    const lib = routedLib()
+    const { data } = await api('GET', lib ? '/tree?lib=' + encodeURIComponent(lib) : '/tree')
+    if (request !== treeRequest || lib !== routedLib()) return false
     treeNodes.value = Array.isArray(data.nodes) ? data.nodes : []
     pruneCache()
     await ensureCurrent()
+    return true
   }
 
   async function loadDoc(file, { force = false } = {}) {
@@ -390,15 +479,45 @@ export const useDocsStore = defineStore('docs', () => {
     return json.data.content
   }
 
+  /**
+   * 切换知识库之后重新加载。
+   *
+   * 关键一步：先把"当前这篇"清掉再拉树。
+   *
+   * 不清的话会得到一个自相矛盾的地址：syncUrl 写地址时用的是 location.search，
+   * 里面已经带了新的 ?lib=，而 currentPath 还是上一个库的那篇 ——
+   * 于是出现 /edit/过程稿/…/xxx?lib=面试准备 这种"路径属于 A 库、lib 指向 B 库"的地址。
+   * 清掉之后由 ensureCurrent 从新库的树里重新挑一篇，两边就一致了。
+   */
+  async function switchLib() {
+    /*
+     * 发一个"换库了"的信号。
+     *
+     * 目录的展开/收起状态是按路径存的，而路径是带库名的 ——
+     * 换库之后旧路径在新库里一个都不存在，于是所有目录都成了"没标过 = 展开"，
+     * 看着就是"一更新/一切库，文件夹全被展开"。
+     * 侧边栏拿到这个信号后清一次折叠状态，让新库按自己的第一层重新收起。
+     */
+    libEpoch.value++
+    tabs.value = loadTabs()
+    currentPath.value = ''
+    rawMap.value = {}
+    error.value = ''
+    await loadAll()
+  }
+
+  let allRequest = 0
   async function loadAll() {
+    const request = ++allRequest
     // 先问清自己是谁：guest 拿到的树是服务端剪过的，前端只管别露出编辑入口
     await loadMe()
     if (!isGuest.value) loadShare()
     loading.value = true
     error.value = ''
     try {
-      await loadTree()
+      if (!(await loadTree())) return
       await Promise.all(allDocs.value.map((d) => loadDoc(d.file)))
+      if (request !== allRequest) return
       // 路由点名的那一篇最优先（/edit/调研/数据调研、分享过来的 /onlyread/…）
       const routed = routedDocPath()
       const routedHit = routed
@@ -410,20 +529,23 @@ export const useDocsStore = defineStore('docs', () => {
         currentPath.value = allDocs.value[0].file
       }
     } catch (e) {
-      error.value = String(e.message || e)
+      if (request === allRequest) error.value = String(e.message || e)
     } finally {
-      loading.value = false
+      if (request === allRequest) loading.value = false
     }
   }
 
   /** 把当前这一篇写进地址栏：/edit/<路径> 或 /onlyread/<路径>（别人复制地址就能直达） */
   function syncUrl() {
-    const mode = window.__readerMode === 'guest' ? 'onlyread' : 'edit'
+    const mode = window.__readerPublicView ? 'onlyread' : 'doc'
     // 地址里不带 .md/.pdf：短一点、也跟用户手写的一致
     const clean = String(currentPath.value || '').replace(/\.(md|pdf)$/i, '')
     const path = clean ? '/' + clean.split('/').map(encodeURIComponent).join('/') : ''
     /* 部署在子路径时，写回地址栏也要带前缀，否则一跳就跑到站点根上 */
-    const next = API_BASE + '/' + mode + path + location.search
+    const search = new URLSearchParams(location.search)
+    if (search.get('lib') === '业务面') search.set('lib', '面试准备')
+    const query = search.size ? '?' + search.toString() : ''
+    const next = API_BASE + '/' + mode + path + query
     if (location.pathname + location.search !== next) history.replaceState(null, '', next)
   }
 
@@ -556,29 +678,44 @@ export const useDocsStore = defineStore('docs', () => {
    *
    * 只写正文。文件名叫什么、在哪个目录，全由磁盘决定，保存不碰它们。
    */
-  async function save() {
-    if (!currentPath.value) return true
-    const path = currentPath.value
+  let saveTask = null
+  async function savePath(path) {
+    if (!path) return true
+    // 同一时间只允许一个写请求。等待前一次结束后重新取最新正文，
+    // 避免慢请求把后发的修改覆盖回旧版本。
+    while (saveTask) await saveTask
     // 从没读到过内容就保存，等于把空内容写回磁盘，必须拦住
     if (rawMap.value[path] === undefined) {
       error.value = '这篇没有成功读取，拒绝保存，免得把空内容覆盖上去'
       return false
     }
-    if (!isDirty.value) return true
-    saving.value = true
-    error.value = ''
-    try {
+    if (rawMap.value[path] === savedMap.value[path]) return true
+    const task = (async () => {
+      saving.value = true
+      error.value = ''
       const content = rawMap.value[path]
-      await api('PUT', '/doc', { path, content })
-      savedMap.value[path] = content
-      savedAt.value = Date.now()
-      return true
-    } catch (e) {
-      error.value = '保存失败：' + String(e.message || e)
-      return false
-    } finally {
-      saving.value = false
-    }
+      try {
+        await api('PUT', '/doc', { path, content })
+        savedMap.value[path] = content
+        savedAt.value = Date.now()
+        return true
+      } catch (e) {
+        error.value = '保存失败：' + String(e.message || e)
+        return false
+      } finally {
+        saving.value = false
+      }
+    })()
+    saveTask = task
+    const ok = await task
+    if (saveTask === task) saveTask = null
+    if (!ok) return false
+    // 写入期间如果又输入了内容，继续存到最新版本再报告成功。
+    return rawMap.value[path] === savedMap.value[path] ? true : savePath(path)
+  }
+
+  async function save() {
+    return savePath(currentPath.value)
   }
 
   /* ---------- 树结构增删改 ---------- */
@@ -602,6 +739,7 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   async function deleteDoc(file) {
+    if (saveTask) await saveTask
     await api('DELETE', '/doc', { path: file })
     delete rawMap.value[file]
     delete savedMap.value[file]
@@ -613,6 +751,9 @@ export const useDocsStore = defineStore('docs', () => {
 
   /** 改名 = 改文件名，正文一个字都不动 */
   async function renameDoc(file, name) {
+    if (currentPath.value === file && rawMap.value[file] !== undefined && !(await savePath(file))) {
+      throw new Error(error.value || '保存失败，未改名')
+    }
     const { data } = await api('PATCH', '/doc', { path: file, name })
     moveCache(file, data.file)
     remapTabs(file, data.file)
@@ -631,6 +772,9 @@ export const useDocsStore = defineStore('docs', () => {
 
   /** 换目录（拖拽） */
   async function moveDoc(file, dir) {
+    if (currentPath.value === file && rawMap.value[file] !== undefined && !(await savePath(file))) {
+      throw new Error(error.value || '保存失败，未移动')
+    }
     const { data } = await api('PUT', '/move/doc', { file, dir })
     moveCache(file, data.file)
     remapTabs(file, data.file)
@@ -641,6 +785,9 @@ export const useDocsStore = defineStore('docs', () => {
 
   /** 把目录挪到另一个目录下（拖拽）。目录连同里面的东西一起走。 */
   async function moveCategory(path, toParent) {
+    if (currentPath.value.startsWith(path + '/') && rawMap.value[currentPath.value] !== undefined && !(await savePath(currentPath.value))) {
+      throw new Error(error.value || '保存失败，未移动目录')
+    }
     const { data } = await api('PUT', '/move/category', { path, toParent })
     // 目录下所有文档的路径都变了，缓存键跟着搬
     const remap = (map) => {
@@ -666,8 +813,10 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   async function renameCategory(path, name) {
+    if (currentPath.value.startsWith(path + '/') && rawMap.value[currentPath.value] !== undefined && !(await savePath(currentPath.value))) {
+      throw new Error(error.value || '保存失败，未改名目录')
+    }
     const { data } = await api('PATCH', '/category', { path, name })
-    await loadTree()
     // 目录改名会连带改掉里面所有文档的路径，缓存键跟着搬
     const remap = (map) => {
       const next = {}
@@ -682,15 +831,20 @@ export const useDocsStore = defineStore('docs', () => {
     if (currentPath.value === path || currentPath.value.startsWith(path + '/')) {
       currentPath.value = data.path + currentPath.value.slice(path.length)
     }
+    await loadTree()
   }
 
   async function deleteCategory(path) {
+    if (saveTask) await saveTask
     await api('DELETE', '/category', { path })
     // 先让 loadTree 依据新树清理缓存，顺序反了会把还活着的也清掉
     await loadTree()
   }
 
   return {
+    legacyLib,
+    libEpoch,
+    switchLib,
     moveDoc,
     moveCategory,
     reorderEntries,
@@ -741,11 +895,9 @@ export const useDocsStore = defineStore('docs', () => {
     renameCategory,
     deleteCategory,
     role,
-    isGuest,
+    isGuest, currentReadonly, canEdit, accessRequest, requestAccess,
     shareInfo,
     loadShare,
-    setShared,
-    syncUrl,
-    guestLink
+    syncUrl
   }
 })

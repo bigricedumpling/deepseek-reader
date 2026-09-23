@@ -65,6 +65,7 @@
       @go-page="store.pdfPage = $event"
     />
 
+    <AccessDialog />
     <AppDialog
       :open="dialog.open"
       :mode="dialog.mode"
@@ -96,6 +97,7 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 /* 页面加载时间：跟服务端的源码修改时间比对，判断手上这份页面是不是旧的 */
 const pageLoadedAt = Date.now()
+import AccessDialog from './components/AccessDialog.vue'
 import Sidebar from './components/Sidebar.vue'
 import DocView from './views/DocView.vue'
 import TocPanel from './components/TocPanel.vue'
@@ -161,7 +163,8 @@ function closeDialog() {
 function ensureSafe() {
   return new Promise((resolve) => {
     if (!store.isDirty) {
-      resolve(true)
+      if (store.saving) store.save().then(resolve)
+      else resolve(true)
       return
     }
     ask({
@@ -209,15 +212,15 @@ function askDeleteCategory(folder) {
     danger: true,
     onConfirm: async () => {
       dialog.open = false
+      if (store.currentPath.startsWith(folder.path + '/') && !(await ensureSafe())) return
       await guard(() => store.deleteCategory(folder.path))
     }
   })
 }
 async function askCreateDoc(dir) {
-  // 目录从哪来：根部按钮传 ''（= 根目录），目录行的「新建文档」传那个目录。
+  // 目录从哪来：根部按钮传当前知识库路径，目录行传它所在的目录。
   // 没传参时也**默认根目录** —— 以前会悄悄落到"当前文档所在目录"，
   // 于是按了根部的按钮、对话框里却写着「在『笔试』下新建文档」，很莫名其妙。
-  // 建在哪不重要，反正建完可以拖到任意位置。
   const target = dir == null ? '' : dir
   // 先处理未保存的改动，再问名字，顺序反了会让人白填一次
   if (!(await ensureSafe())) return
@@ -258,12 +261,13 @@ async function guard(fn) {
 }
 
 /**
- * 按编辑器规范重排这篇（用户在有损黄条上主动点的）。
+ * 按编辑器规范重排这篇（真丢内容、用户在有损黄条上主动点的）。
  *
  * 有损时编辑器不能自动保存，否则会静默改写正文；但用户可以让它"一次性对齐规范"：
  * 把还原后的文本写回磁盘，这篇从此就能富文本编辑。所以这里要先确认、再写、写完重读。
  */
 function onCanonize(text) {
+  const file = store.currentPath
   const name = store.currentNode?.name || store.currentPath
   ask({
     title: '按编辑器规范重排《' + name + '》？',
@@ -271,9 +275,10 @@ function onCanonize(text) {
     confirmText: '重排并保存',
     onConfirm: () => {
       dialog.open = false
+      if (store.currentPath !== file) return
       store.updateContent(text)
       guard(async () => {
-        await store.save()
+        if (!(await store.save())) throw new Error(store.error || '保存失败')
         // 重排完重新挂一次编辑器：黄条才会消失（:key 不变的话组件是复用的）
         docEpoch.value++
         await store.select(store.currentPath)
@@ -314,6 +319,7 @@ async function onCloseTab(file) {
  * 不再有编辑态和阅读态之分，所以也不需要有保存按钮。
  */
 let saveTimer = null
+let failedSave = null
 
 function onEdit(text) {
   store.updateContent(text)
@@ -321,12 +327,17 @@ function onEdit(text) {
 
 // 监听脏标记而不是挂在编辑器的 input 上：不管改动从哪来，停手就落盘
 watch(
-  () => store.isDirty,
-  (dirty) => {
-    if (!dirty) return
+  () => [store.currentPath, store.currentRaw, store.isDirty, store.saving],
+  ([path, raw, dirty, saving]) => {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      if (store.isDirty && !store.saving) store.save()
+    if (!dirty) failedSave = null
+    if (!dirty || saving) return
+    if (failedSave?.path === path && failedSave?.raw === raw) return
+    saveTimer = setTimeout(async () => {
+      if (store.isDirty && !store.saving && store.currentPath === path) {
+        failedSave = { path, raw }
+        if (await store.save()) failedSave = null
+      }
     }, 800)
   }
 )
@@ -369,7 +380,7 @@ function routedDocPath() {
      * 而 decodeURI 有意不还原它，拿着 %2F 去比对目录里的路径永远匹配不上。
      * 只解这一段，不要解整条 pathname。
      */
-    const m = rest.match(/\/(?:edit|onlyread)\/(.+)$/)
+    const m = rest.match(/\/(?:doc|edit|onlyread)\/(.+)$/)
     return m ? decodeURIComponent(m[1]).replace(/\/+$/, '') : ''
   } catch {
     return ''
@@ -465,7 +476,7 @@ function onBeforeUnload(e) {
 }
 
 function focusSearch() {
-  const el = document.querySelector('input[placeholder="搜索"]')
+  const el = document.querySelector('input[placeholder="查找当前文档"]')
   if (el) {
     el.focus()
     el.select?.()

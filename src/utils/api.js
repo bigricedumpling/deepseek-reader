@@ -5,4 +5,4 @@
  * 否则会打到站点根上，nginx 匹配不到对应的 location。
  * Dev 下 BASE_URL 是 /，常量为空串，拼接后等于原样。
  */
-export const API_BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '')
+export const API_BASE = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '')

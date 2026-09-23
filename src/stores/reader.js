@@ -36,6 +36,7 @@ const KEY = {
 
 /** 早期版本存的是 song / hei，对应到现在的 serif / sans */
 const FONT_MIGRATE = { song: 'serif', hei: 'sans' }
+const SANS_DEFAULT_MIGRATION = 'reader.fontSansDefault.v1'
 
 const str = (k, fallback) => localStorage.getItem(KEY[k]) || fallback
 /** 0 是合法取值（字间距），所以不能用 || 兜底 */
@@ -78,8 +79,12 @@ export const WIDTH_OPTIONS = [
 export const useReaderStore = defineStore('reader', () => {
   /* ---------- 正文排版 ---------- */
   const rawFont = localStorage.getItem(KEY.font)
-  /* 默认无衬线：初次打开（localStorage 里没有记录）用 sans，读者自己改过的照旧 */
-  const font = ref(FONT_MIGRATE[rawFont] || rawFont || 'sans')
+  /* 旧默认衬线会在首次打开时自动写进本地设置。只迁移一次，之后手动选衬线仍会保留。 */
+  const migrateOldDefault = !localStorage.getItem(SANS_DEFAULT_MIGRATION)
+  const font = ref(migrateOldDefault && (rawFont === 'serif' || rawFont === 'song')
+    ? 'sans'
+    : FONT_MIGRATE[rawFont] || rawFont || 'sans')
+  if (migrateOldDefault) localStorage.setItem(SANS_DEFAULT_MIGRATION, '1')
   const size = ref(num('size', 15.5))
   /** 阅读宽度，0 表示铺满可用宽度 */
   const measure = ref(num('measure', 960))

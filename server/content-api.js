@@ -9,14 +9,14 @@
  * 保存时"正文一级标题 → 侧栏名"单向同步，而改名接口又不动正文，
  * 于是改完名一保存就被弹回去。现在名字只有一个来源（文件名），这类问题不会再出现。
  *
- * 只在 127.0.0.1 上跑，不做鉴权；所有写操作都限制在 DOCS_ROOT 之内。
+ * 文件操作必须限制在 DOCS_ROOT 内，且不能穿过目录中的符号链接。
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { createShare, roleOf } from './share.js'
+import { createShare, roleOf, EDIT_PASSWORD } from './share.js'
 
 // 用文件自身位置推导，不依赖启动时的工作目录
 const READER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -36,6 +36,45 @@ const share = createShare(DOCS_ROOT)
 const TRASH = '.回收站'
 /** 译文放这里（点号开头，不进文档树）；只有读文件时放行，写/删一律不放 */
 const TRANSLATE_DIR = '.翻译'
+/** 每次覆盖前留的旧版本放这里（隐藏目录，不进文档树） */
+const VERSION_DIR = '.版本'
+/** 每个文件最多留几份旧版本 */
+const VERSION_KEEP = 5
+
+/**
+ * 把一份旧内容存进 .版本/。
+ *
+ * 文件名带时间戳，同名的旧版本超过 VERSION_KEEP 份就把最老的删掉 ——
+ * 不然改得多了会攒出一堆没人看的东西。
+ */
+function stashVersion(rel, content) {
+  const stamp = new Date().toISOString().replace(/[:T.Z]/g, '-')
+  const flat = encodeURIComponent(String(rel))
+  const dir = path.join(DOCS_ROOT, VERSION_DIR)
+  fs.mkdirSync(dir, { recursive: true })
+  let serial = 0
+  while (true) {
+    try {
+      fs.writeFileSync(path.join(dir, stamp + '-' + serial + '__' + flat), content, { encoding: 'utf-8', flag: 'wx' })
+      break
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+      serial++
+    }
+  }
+  const mine = fs
+    .readdirSync(dir)
+    .filter((n) => n.endsWith('__' + flat))
+    .sort()
+  while (mine.length > VERSION_KEEP) {
+    try {
+      fs.unlinkSync(path.join(dir, mine.shift()))
+    } catch {
+      break
+    }
+  }
+}
+
 /** 这些目录永远不进文档树 */
 const SKIP_DIRS = new Set(['node_modules'])
 /** 扫描护栏：目录太深或文件太多就截断，免得误指到巨型目录把页面拖死 */
@@ -51,6 +90,17 @@ function safeResolve(rel) {
   const rootWithSep = DOCS_ROOT.endsWith(path.sep) ? DOCS_ROOT : DOCS_ROOT + path.sep
   if (abs !== DOCS_ROOT && !abs.startsWith(rootWithSep)) {
     throw new Error('路径越界: ' + rel)
+  }
+  // 扫描树会跳过符号链接；接口也必须拒绝。只做字符串前缀检查时，
+  // 知识库里的 link/secret.md 仍可经由磁盘链接读写到根目录之外。
+  let cursor = DOCS_ROOT
+  for (const part of path.relative(DOCS_ROOT, abs).split(path.sep).filter(Boolean)) {
+    cursor = path.join(cursor, part)
+    try {
+      if (fs.lstatSync(cursor).isSymbolicLink()) throw new Error('符号链接不归阅读器管: ' + rel)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
   }
   return abs
 }
@@ -263,6 +313,43 @@ function removeFromOrder(parent, name) {
  * 一个文件装全部文档的列宽，键是文档相对路径，省得为「附录/术语表.md」这种路径造目录。
  */
 const COLW_FILE = path.join(DOCS_ROOT, '.表宽.json')
+const FOLDABLE_FILE = path.join(DOCS_ROOT, '.折叠标题.json')
+
+function readFoldables() {
+  try {
+    const data = JSON.parse(fs.readFileSync(FOLDABLE_FILE, 'utf8'))
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeFoldables(data) {
+  fs.writeFileSync(FOLDABLE_FILE, JSON.stringify(data, null, 2), 'utf8')
+}
+
+function remapFoldables(from, to, descendants = false) {
+  const data = readFoldables()
+  let changed = false
+  for (const key of Object.keys(data)) {
+    if (key !== from && !(descendants && key.startsWith(from + '/'))) continue
+    data[to + key.slice(from.length)] = data[key]
+    delete data[key]
+    changed = true
+  }
+  if (changed) writeFoldables(data)
+}
+
+function dropFoldables(path, descendants = false) {
+  const data = readFoldables()
+  let changed = false
+  for (const key of Object.keys(data)) {
+    if (key !== path && !(descendants && key.startsWith(path + '/'))) continue
+    delete data[key]
+    changed = true
+  }
+  if (changed) writeFoldables(data)
+}
 
 function readColWidths() {
   try {
@@ -492,7 +579,12 @@ function uniqueFile(dir, name, ext = '.md') {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', (c) => chunks.push(c))
+    let size = 0
+    req.on('data', (c) => {
+      size += c.length
+      if (size > 2 * 1024 * 1024) { reject(new Error('请求内容超过 2 MB')); return }
+      chunks.push(c)
+    })
     req.on('end', () => {
       try {
         resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf-8')) : {})
@@ -783,6 +875,138 @@ function startTranslate(rel) {
   return rec
 }
 
+/* ---------- 知识库（文档根下的第一层目录）---------- */
+
+/** 图标与说明的旁路表，放在文档根下，缺省也不影响使用 */
+/*
+ * ---------- 知识库注册表（唯一真源）----------
+ *
+ * .知识库.json 是知识库身份的唯一存放处。以前这份信息散在五处：
+ * 磁盘目录名、这个文件、public/kb.json、localStorage 的标题与图标、组件内部状态 ——
+ * 于是"改一个地方另一处不知道"，每两处之间都要单独接一根线，接不全就漏。
+ *
+ * 现在只留这一份，其余一律由它派生：
+ *   · 目录名      = lib.name（改名就是改目录名，两边永远一致）
+ *   · 侧边栏标题   = 当前库的 name（标题第一行就是库名，不再各存一份）
+ *   · 侧边栏图标   = 当前库的 icon
+ *   · 面板宽度     = config.panelWidth
+ * 磁盘上多出来的目录（在 Finder 里新建的）按名字补进注册表，不丢东西。
+ */
+const LIB_META_FILE = '.知识库.json'
+
+const DEFAULT_REGISTRY = { version: 1, config: { panelWidth: 236, panelOpen: true }, libs: [] }
+
+function readRegistry() {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(DOCS_ROOT, LIB_META_FILE), 'utf8'))
+    if (d && Array.isArray(d.libs)) {
+      return {
+        version: d.version || 1,
+        config: Object.assign({}, DEFAULT_REGISTRY.config, d.config || {}),
+        libs: d.libs.filter((l) => l && typeof l.name === 'string')
+      }
+    }
+    /* 旧格式：{ libs: { 名字: {...} } }，转成数组 */
+    if (d && d.libs && typeof d.libs === 'object') {
+      return {
+        version: 1,
+        config: Object.assign({}, DEFAULT_REGISTRY.config),
+        libs: Object.keys(d.libs).map((k, i) => Object.assign({ id: 'L' + (i + 1), name: k }, d.libs[k]))
+      }
+    }
+  } catch {
+    /* 读不到就当空表，下面会用磁盘目录补 */
+  }
+  return JSON.parse(JSON.stringify(DEFAULT_REGISTRY))
+}
+
+function writeRegistry(reg) {
+  try {
+    fs.writeFileSync(path.join(DOCS_ROOT, LIB_META_FILE), JSON.stringify(reg, null, 2) + '\n', 'utf8')
+  } catch {
+    /* 写不进去也不影响知识库本身 */
+  }
+}
+
+/** 磁盘上真实存在的知识库目录（第一层，非隐藏） */
+function diskLibs() {
+  try {
+    return fs
+      .readdirSync(DOCS_ROOT, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SKIP_DIRS.has(e.name))
+      .map((e) => e.name)
+  } catch {
+    return []
+  }
+}
+
+/** 读注册表，并把磁盘上多出来 / 已经消失的目录对齐过去 */
+function syncRegistry() {
+  const reg = readRegistry()
+  const disk = diskLibs()
+  const known = new Set(reg.libs.map((l) => l.name))
+  let changed = false
+  /* 磁盘上多出来的：按名字补一条 */
+  for (const name of disk) {
+    if (!known.has(name)) {
+      let n = reg.libs.length + 1
+      while (reg.libs.some((l) => l.id === 'L' + n)) n++
+      reg.libs.push({ id: 'L' + n, name, icon: '', desc: '', meta: '' })
+      changed = true
+    }
+  }
+  /* 注册表里已经没有对应目录的：留着（可能只是被临时移走），但标记一下 */
+  for (const l of reg.libs) l.missing = !disk.includes(l.name)
+  if (changed) writeRegistry(reg)
+  return reg
+}
+
+function listLibs() {
+  const reg = syncRegistry()
+  return reg.libs
+    .filter((l) => !l.missing)
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      path: l.name,
+      icon: l.icon || '',
+      desc: l.desc || '',
+      meta: l.meta || '',
+      /* 副标题：跟随知识库走，不再是全站写死的一句 */
+      sub: l.sub || '',
+      ...share.status(l.name),
+      docs: countDocs(path.join(DOCS_ROOT, l.name))
+    }))
+  /*
+   * 顺序 = 注册表里的顺序，不重新排序。
+   *
+   * 以前按名字排，而 'zh-Hans-CN' 的规则把中文排在拉丁字母前面，
+   * 「Agent（设计方向）」被挤到最后、默认就落到别的库上了。
+   * 顺序是使用者的意图，不该由排序规则决定。
+   */
+}
+
+/** 数一下这个目录里有多少篇可读文档（md / pdf / html），带护栏 */
+function countDocs(abs) {
+  let n = 0
+  const walk = (dir, depth) => {
+    if (depth > MAX_DEPTH || n > MAX_NODES) return
+    let list = []
+    try {
+      list = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of list) {
+      if (e.name.startsWith('.') || e.isSymbolicLink()) continue
+      if (e.isDirectory()) walk(path.join(dir, e.name), depth + 1)
+      else if (/\.(md|pdf|html?)$/i.test(e.name)) n++
+    }
+  }
+  walk(abs, 0)
+  return n
+}
+
 const routes = {
   /** 这次请求算谁：我 还是 别人。前端靠它决定要不要露出编辑相关的东西 */
   'GET /me': async (_body, _url, ctx) => ({ ok: true, data: { role: ctx.role } }),
@@ -794,19 +1018,164 @@ const routes = {
   },
 
   /** 勾选 / 取消某个节点对外可见（子级继承，见 share.js） */
-  'PUT /share': async (body, _url, ctx) => {
-    if (ctx.role !== 'owner') throw new Error('只有你能改分享设置')
-    const rel = String(body.path || '')
-    if (!rel) throw new Error('缺 path')
-    assertVisible(rel)
-    share.setShared(rel, !!body.shared)
-    if (body.editable !== undefined) share.setEditable(rel, !!body.editable)
-    return { ok: true, data: share.snapshot() }
+
+  /*
+   * ---------- 知识库（文档根下的第一层目录）----------
+   *
+   * 一个知识库 = 根目录下的一个文件夹。名字直接取文件夹名，不另存清单 ——
+   * 「磁盘是唯一真源」这条原则在这里也照用：
+   *   · 在 Finder 里改名，下一次 GET /libs 就跟着变
+   *   · 在界面上改名，走 PUT /lib/name，服务端重命名文件夹后把 .分享.json 的键一起搬
+   * 图标与说明是给人看的附加信息，存在根目录的 .知识库.json 里（可缺省）。
+   */
+  'GET /libs': async (_body, _url, ctx) => {
+    const cfg = syncRegistry().config
+    /*
+     * 访客只看得到对外可见的库 —— 连"存在一个不公开的库"这件事都不该知道。
+     * 主人看全部，并带上可见性开关的状态。
+     */
+    const all = listLibs()
+    const libs = ctx.role === 'owner' ? all : all.filter((l) => l.shared)
+    return { ok: true, data: { libs, config: cfg } }
   },
 
-  /** 整棵树：直接扫盘，附每个文件的修改时间与大小 */
-  'GET /tree': async () => {
+  /** 改一个知识库的显示名（= 重命名它的文件夹） */
+  'PUT /lib/name': async (body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw new Error('只有你能改知识库名')
+    const from = String(body.from || '').replace(/^\/+|\/+$/g, '')
+    const to = String(body.to || '').replace(/^\/+|\/+$/g, '')
+    if (!from || !to) throw new Error('缺 from / to')
+    if (from.includes('/') || to.includes('/')) throw new Error('知识库名不能带斜杠')
+    const absOld = safeResolve(from)
+    const absNew = safeResolve(to)
+    if (!fs.existsSync(absOld)) throw new Error('知识库不存在: ' + from)
+    if (fs.existsSync(absNew)) throw new Error('已有同名知识库: ' + to)
+    fs.renameSync(absOld, absNew)
+    /* 分享与可编辑的键跟着搬，否则改名就等于把不公开的东西放出去了 */
+    share.rename(from, to)
+    remapOrderUnder(from, to)
+    remapColWidthsUnder(from + '/', to + '/')
+    remapFoldables(from, to, true)
+    /* 图标/说明表里的键也要跟着改 */
+    /* 注册表是唯一真源：改名就是改它，目录名与标题都从它派生 */
+    const reg = syncRegistry()
+    const hit = reg.libs.find((l) => l.name === from)
+    if (hit) { hit.name = to; writeRegistry(reg) }
+    return { ok: true, data: { libs: listLibs() } }
+  },
+
+  /** 改一个知识库的图标与说明 */
+  'PUT /lib/meta': async (body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw new Error('只有你能改')
+    const name = String(body.name || '').replace(/^\/+|\/+$/g, '')
+    if (!name || name.includes('/')) throw new Error('缺 name')
+    const reg = syncRegistry()
+    const hit = reg.libs.find((l) => l.name === name)
+    if (!hit) throw new Error('知识库不存在: ' + name)
+    if (body.icon !== undefined) hit.icon = String(body.icon)
+    if (body.desc !== undefined) hit.desc = String(body.desc)
+    if (body.meta !== undefined) hit.meta = String(body.meta)
+    if (body.sub !== undefined) hit.sub = String(body.sub)
+    writeRegistry(reg)
+    return { ok: true, data: { libs: listLibs() } }
+  },
+
+  /** 新建知识库：建目录 + 写进注册表，一步到位，不留"目录有了但没登记"的中间态 */
+  'POST /lib': async (body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw new Error('只有你能新建知识库')
+    const name = String(body.name || '').trim()
+    if (!name) throw new Error('知识库名不能为空')
+    if (name.includes('/') || name.startsWith('.')) throw new Error('名字里不能有斜杠，也不能以点开头')
+    const abs = safeResolve(name)
+    if (fs.existsSync(abs)) throw new Error('已有同名知识库: ' + name)
+    fs.mkdirSync(abs, { recursive: true })
+    share.setShared(name, false)
+    share.setLocked(name, false)
+    const reg = syncRegistry()
+    let n = reg.libs.length + 1
+    while (reg.libs.some((l) => l.id === 'L' + n)) n++
+    reg.libs.push({ id: 'L' + n, name, icon: String(body.icon || ''), desc: String(body.desc || ''), meta: '' })
+    writeRegistry(reg)
+    return { ok: true, data: { libs: listLibs() } }
+  },
+
+  /** 调整知识库顺序：整份顺序数组覆盖过去（顺序是使用者的意图，存在注册表里） */
+  'PUT /lib/order': async (body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw new Error('只有你能调整顺序')
+    const order = Array.isArray(body.order) ? body.order.map((x) => String(x)) : []
+    if (!order.length) throw new Error('缺 order')
+    const reg = syncRegistry()
+    const byName = new Map(reg.libs.map((l) => [l.name, l]))
+    const next = []
+    for (const name of order) {
+      const hit = byName.get(name)
+      if (hit) { next.push(hit); byName.delete(name) }
+    }
+    /* 没在 order 里提到的（比如刚在 Finder 里建的）跟在后面，不丢 */
+    for (const rest of byName.values()) next.push(rest)
+    reg.libs = next
+    writeRegistry(reg)
+    return { ok: true, data: { libs: listLibs() } }
+  },
+
+  /*
+   * 面板宽度这类界面偏好也放注册表 —— 和知识库同源，
+   * 免得再开一个 localStorage 副本出来（那正是之前串味的根源）。
+   */
+  'PUT /lib/config': async (body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw new Error('只有你能改')
+    const reg = syncRegistry()
+    if (body.panelWidth !== undefined) {
+      reg.config.panelWidth = Math.max(180, Math.min(420, Number(body.panelWidth) || 236))
+    }
+    if (body.panelOpen !== undefined) reg.config.panelOpen = !!body.panelOpen
+    writeRegistry(reg)
+    return { ok: true, data: { config: reg.config } }
+  },
+
+  /*
+   * 删除一个知识库：整个文件夹挪进回收站（不真删）。
+   * 一次动几百个文件，误删代价大，所以只做移动 —— 回收站里还能捞回来。
+   */
+  'DELETE /lib': async (body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw new Error('只有你能删知识库')
+    const name = String(body.name || '').replace(/^\/+|\/+$/g, '')
+    if (!name || name.includes('/')) throw new Error('缺 name')
+    const abs = safeResolve(name)
+    if (!fs.existsSync(abs)) throw new Error('知识库不存在: ' + name)
+    if (!fs.statSync(abs).isDirectory()) throw new Error('不是目录: ' + name)
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+    const inTrash = TRASH + '/' + stamp + '__' + name
+    const absTrash = safeResolve(inTrash)
+    fs.mkdirSync(path.dirname(absTrash), { recursive: true })
+    fs.renameSync(abs, absTrash)
+    /* 分享状态跟着进回收站，免得留一堆指向不存在路径的键 */
+    share.rename(name, inTrash)
+    const reg = syncRegistry()
+    reg.libs = reg.libs.filter((l) => l.name !== name)
+    writeRegistry(reg)
+    return { ok: true, data: { libs: listLibs() } }
+  },
+
+  /**
+   * 整棵树：直接扫盘，附每个文件的修改时间与大小。
+   *
+   * ?lib=<库名> 时只返回那一个知识库（根目录下的一个文件夹）的内容，
+   * 并且把每个节点的路径补上库名前缀 —— 这样前端拿到的 file 仍是相对文档根的全路径，
+   * 读文档、存文档那一整套都不用改。
+   */
+  'GET /tree': async (_body, url) => {
     scanned = 0
+    const lib = String(url.searchParams.get('lib') || '')
+    if (lib) {
+      if (lib === '.' || lib === '..' || lib.startsWith('.') || /[/\\]/.test(lib)) {
+        throw new Error('知识库名无效')
+      }
+      const abs = safeResolve(lib)
+      if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new Error('知识库不存在: ' + lib)
+      const nodes = scanDir(abs, lib, 0, readOrder())
+      return { ok: true, data: { nodes, lib } }
+    }
     return { ok: true, data: { nodes: scanDir(DOCS_ROOT, '', 0, readOrder()) } }
   },
 
@@ -818,11 +1187,38 @@ const routes = {
     return { ok: true, data: { path: rel, content: fs.readFileSync(abs, 'utf-8') } }
   },
 
+  /** 哪些标题明确设成折叠标题；正文仍保持标准 Markdown。 */
+  'GET /foldable': async (_body, url) => {
+    const rel = url.searchParams.get('path') || ''
+    const abs = assertMd(rel)
+    if (!fs.existsSync(abs)) throw new Error('文档不存在: ' + rel)
+    return { ok: true, data: { path: rel, keys: readFoldables()[rel] || {} } }
+  },
+  'PUT /foldable': async (body) => {
+    const rel = String(body.path || '')
+    const abs = assertMd(rel)
+    if (!fs.existsSync(abs)) throw new Error('文档不存在: ' + rel)
+    const key = String(body.key || '')
+    if (!key || key.length > 500 || !/^\d\|/.test(key)) throw new Error('标题标识无效')
+    const all = readFoldables()
+    const keys = { ...(all[rel] || {}) }
+    if (body.on) keys[key] = true
+    else delete keys[key]
+    if (Object.keys(keys).length) all[rel] = keys
+    else delete all[rel]
+    writeFoldables(all)
+    return { ok: true, data: { path: rel, keys } }
+  },
+
   /** 保存一篇文档 */
   'PUT /doc': async (body) => {
     const abs = assertMd(body.path)
     if (!fs.existsSync(abs)) throw new Error('文档不存在: ' + body.path)
-    fs.writeFileSync(abs, String(body.content ?? ''), 'utf-8')
+    const next = String(body.content ?? '')
+    // 覆盖前必须先存好旧版本；备份失败时保留原文并报告失败。
+    const old = fs.readFileSync(abs, 'utf-8')
+    if (old !== next) stashVersion(body.path, old)
+    fs.writeFileSync(abs, next, 'utf-8')
     return { ok: true, savedAt: Date.now() }
   },
 
@@ -861,7 +1257,9 @@ const routes = {
         fs.renameSync(absOld, absNew)
       }
     }
+    share.rename(body.path, next)
     moveColWidths(body.path, next)
+    remapFoldables(body.path, next)
     removeFromOrder(dir === '.' ? '' : dir, path.basename(body.path))
     return { ok: true, data: { name, file: next } }
   },
@@ -872,6 +1270,7 @@ const routes = {
     if (!fs.existsSync(abs)) throw new Error('文档不存在: ' + body.path)
     const moved = moveToTrash(body.path)
     dropColWidthsUnder(body.path)
+    dropFoldables(body.path)
     return { ok: true, data: { movedTo: moved } }
   },
 
@@ -901,7 +1300,9 @@ const routes = {
     if (!fs.existsSync(absOld)) throw new Error('目录不存在: ' + rel)
     if (fs.existsSync(absNew)) throw new Error('同位置已有同名目录: ' + name)
     fs.renameSync(absOld, absNew)
+    share.rename(rel, next)
     remapColWidthsUnder(rel + '/', next + '/')
+    remapFoldables(rel, next, true)
     dropOrderFor(rel)
     return { ok: true, data: { name, path: next } }
   },
@@ -913,6 +1314,7 @@ const routes = {
     if (!fs.existsSync(safeResolve(rel))) throw new Error('目录不存在: ' + rel)
     const moved = moveToTrash(rel)
     dropColWidthsUnder(rel + '/')
+    dropFoldables(rel, true)
     dropOrderFor(rel)
     return { ok: true, data: { movedTo: moved } }
   },
@@ -936,7 +1338,7 @@ const routes = {
     if (names.length !== existing.length || new Set(names).size !== names.length || names.some((n) => !existing.includes(n))) {
       throw new Error('顺序列表跟磁盘上的条目对不上，拒绝写入')
     }
-    const isFile = (n) => /\.(md|pdf)$/i.test(n)
+    const isFile = (n) => /\.(md|pdf|html?)$/i.test(n)
     // 默认顺序（文档在前、目录在后，各自按名字）就不记，省得旁路文件里攒没意义的条目
     const defaultOrder = [...existing].sort((a, b) => {
       if (isFile(a) !== isFile(b)) return isFile(a) ? -1 : 1
@@ -970,7 +1372,13 @@ const routes = {
     fs.mkdirSync(safeResolve(toParent), { recursive: true })
     fs.renameSync(absOld, absNew)
     remapColWidthsUnder(rel + '/', next + '/')
+    remapFoldables(rel, next, true)
     remapOrderUnder(rel, next)
+    /*
+     * 分享状态也要跟着走。否则从这个目录里挪出去的东西会脱离
+     * 「整枝不分享」的约束，而没标过就是可见 —— 一篇不公开的稿子会因此漏出去。
+     */
+    share.rename(rel, next)
     // 只把名字从源层摘掉；它自己在 next 那一层的顺序刚才已经搬过去了，不能删
     removeFromOrder(fromParent, name)
     removeFromOrder(toParent, name)
@@ -992,6 +1400,9 @@ const routes = {
     const next = uniqueFile(dir, base, ext)
     fs.renameSync(absOld, safeResolve(next))
     moveColWidths(body.file, next)
+    remapFoldables(body.file, next)
+    /* 同上：分享状态要跟着文档走，不然一拖就变了可见性 */
+    share.rename(body.file, next)
     removeFromOrder(fromDir === '.' ? '' : fromDir, path.basename(body.file))
     return { ok: true, data: { file: next } }
   },
@@ -1052,6 +1463,8 @@ const routes = {
   /** 读一篇文档的表格列宽 */
   'GET /colw': async (_body, url) => {
     const file = url.searchParams.get('file') || ''
+    assertVisible(file)
+    assertMd(file)
     return { ok: true, data: readColWidths()[file] || [] }
   },
 
@@ -1086,77 +1499,100 @@ const routes = {
  *   - 碰到的每个路径都要 isShared 过关（猜 URL 也没用）；
  *   - /tree 直接把不分享的整枝剪掉再下发（不是前端藏，是根本不下发）。
  */
+// 对文件及目录的所有修改在这里统一校验，包含改名、移动、排序、子树删除。
+function canWrite(rel, role, recursive = false) {
+  if (!rel) throw new Error('请选择一个知识库')
+  assertVisible(rel)
+  safeResolve(rel)
+  if (role !== 'owner' && (!share.isShared(rel) || share.isLocked(rel))) throw new Error('该内容已锁定或不可访问')
+  if (recursive && fs.existsSync(safeResolve(rel)) && fs.statSync(safeResolve(rel)).isDirectory()) {
+    for (const entry of fs.readdirSync(safeResolve(rel), { withFileTypes: true })) {
+      if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue
+      canWrite(rel + '/' + entry.name, role, true)
+    }
+  }
+}
+function checkWrite(key, body, role) {
+  const source = body.path || body.file
+  if (key === 'POST /lib' || key === 'PUT /lib/order' || key === 'PUT /lib/config') {
+    if (role !== 'owner') throw new Error('请先验证管理密码')
+    return
+  }
+  if (key.includes('/lib')) {
+    if (role !== 'owner') throw new Error('请先验证管理密码')
+    canWrite(body.from || body.name, role, true)
+  } else if (key === 'POST /doc') canWrite(body.dir, role)
+  else if (key === 'POST /category' || key === 'PUT /order') canWrite(body.parent, role, key.endsWith('/order'))
+  else {
+    canWrite(source, role, key.includes('category') || key.startsWith('DELETE'))
+    if (key === 'PUT /move/doc') canWrite(body.dir, role)
+    if (key === 'PUT /move/category') canWrite(body.toParent, role)
+    if (key === 'POST /pdf-translate' && role !== 'owner') throw new Error('请先验证管理密码')
+  }
+}
+const loginAttempts = new Map()
+function verifyPassword(req, password) {
+  const ip = req.socket?.remoteAddress || 'local'
+  const now = Date.now()
+  const attempt = loginAttempts.get(ip)
+  if (attempt && now - attempt.time < 60000 && attempt.count >= 10) throw new Error('尝试过于频繁，请一分钟后再试')
+  if (!EDIT_PASSWORD || String(password || '') !== EDIT_PASSWORD) {
+    loginAttempts.set(ip, { time: attempt && now - attempt.time < 60000 ? attempt.time : now, count: attempt && now - attempt.time < 60000 ? attempt.count + 1 : 1 })
+    throw new Error('密码不正确')
+  }
+  loginAttempts.delete(ip)
+}
 export async function handleApi(req, res, ctx = {}) {
   const url = new URL(req.url, 'http://127.0.0.1')
-  /*
-   * 两个入口的前缀不一样：dev 的中间件挂在 '/api' 上、会把前缀剥掉，
-   * 独立服务器是直接收原始请求（带 /api）。这里统一剥一次，两边行为完全一致。
-   */
   if (url.pathname.startsWith('/api/')) url.pathname = url.pathname.slice(4)
   const key = req.method + ' ' + url.pathname
-  const role = ctx.role || 'owner'
+  const role = ctx.role || 'guest'
   const isGuest = role !== 'owner'
-
-  if (role === 'denied') {
-    return send(res, 403, { ok: false, error: '禁止访问：请用 /edit 或 /onlyread 打开' })
-  }
-  /*
-   * 访客能不能写，要看具体路径 —— 不能一律拒。
-   *
-   * 这里原先是一句「非 GET 就 403」，于是 share.js 里那套逐路径的 editable
-   * （state.editable，按前缀回溯）永远走不到，对外开放编辑这个功能等于不存在。
-   * 现在把写权限的判断挪到下面解析完 body 之后，按目标路径逐条核。
-   */
-  // 只有我能碰的东西
-  if (isGuest && (key === 'GET /share' || key === 'GET /build' || key === 'PUT /share')) {
-    return send(res, 403, { ok: false, error: '只有库的主人能看这个' })
-  }
-
-  // 文件流不进 routes：它要把原始字节转发出去，不走 JSON 那条路
-  if (key === 'GET /file') {
-    try {
-      const rel = url.searchParams.get('path') || ''
-      if (isGuest && !share.isShared(rel)) throw new Error('这个文件没有对外分享')
-      return sendFile(req, res, rel, { allowTranslate: true })
-    } catch (e) {
-      return send(res, 400, { ok: false, error: String(e.message || e) })
-    }
-  }
-
-  const handler = routes[key]
-  if (!handler) return send(res, 404, { ok: false, error: '没有这个接口: ' + key })
-
   try {
-    // 访客：凡是带 path 的接口，路径必须是分享出去的
-    if (isGuest) {
-      const rel = url.searchParams.get('path') || ''
-      if (rel && !share.isShared(rel)) throw new Error('这篇没有对外分享')
+    if (req.method !== 'GET') {
+      const origin = req.headers.origin
+      if (origin && new URL(origin).host !== req.headers.host && new URL(origin).host !== req.headers['x-forwarded-host']) throw new Error('请求来源不匹配')
+      if (!String(req.headers['content-type'] || '').startsWith('application/json')) throw new Error('仅接受 JSON 请求')
     }
     const body = req.method === 'GET' ? {} : await readBody(req)
-    /*
-     * 访客的写操作：这一份（或这一层）必须是明确开放编辑的。
-     *
-     * 逐路径判断，不搞"访客一律只读" —— 主人可以只开放某一棵子树给审阅人改，
-     * 其余照旧拒绝。取路径时把所有可能的字段都算上：不同接口的目标字段不一样
-     * （文档类用 path，移动用 file/dir，新建分组用 parent），
-     * 只要有一个字段指向没开放的路径就拒绝（宁可严一点）。
-     */
-    if (isGuest && req.method !== 'GET') {
-      const rels = [body.path, body.file, body.dir, body.parent, body.toParent]
-        .map(x => String(x || '').trim())
-        .filter(Boolean)
-      if (!rels.length || !rels.every(rel => share.isEditable(rel))) {
-        throw new Error('这份是只读分享，你没有编辑权限')
-      }
+    if (key === 'DELETE /session') {
+      res.setHeader('Set-Cookie', 'reader_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0')
+      return send(res, 200, { ok: true })
+    }
+    if (key === 'POST /session') {
+      verifyPassword(req, body.password)
+      res.setHeader('Set-Cookie', 'reader_session=' + share.token('owner') + '; Path=/; HttpOnly; SameSite=Strict' + (req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''))
+      return send(res, 200, { ok: true, data: { role: 'owner' } })
+    }
+    if (key === 'PUT /access') {
+      verifyPassword(req, body.password)
+      const rel = String(body.path || '')
+      if (!rel) throw new Error('缺少路径')
+      assertVisible(rel)
+      if (!fs.existsSync(safeResolve(rel))) throw new Error('内容不存在')
+      if (Number(typeof body.locked === 'boolean') + Number(typeof body.shared === 'boolean') !== 1) throw new Error('每次只更改一个权限设置')
+      if (typeof body.locked === 'boolean') share.setLocked(rel, body.locked)
+      if (typeof body.shared === 'boolean') share.setShared(rel, body.shared)
+      return send(res, 200, { ok: true, data: share.status(rel) })
+    }
+    if (isGuest && ['GET /share', 'GET /build'].includes(key)) throw new Error('请先验证管理密码')
+    if (key === 'GET /file') {
+      const rel = url.searchParams.get('path') || ''
+      if (isGuest && !share.isShared(rel)) throw new Error('内容不可访问')
+      return sendFile(req, res, rel, { allowTranslate: true })
+    }
+    const handler = routes[key]
+    if (!handler) return send(res, 404, { ok: false, error: '接口不存在' })
+    if (req.method !== 'GET') checkWrite(key, body, role)
+    if (isGuest) {
+      const rel = url.searchParams.get('path') || url.searchParams.get('lib') || url.searchParams.get('file') || ''
+      if (rel && !share.isShared(rel)) throw new Error('内容不可访问')
     }
     const out = await handler(body, url, { role })
-    // 树是唯一一处"要加工结果"的接口：访客拿到的是剪掉过的版本
-    if (isGuest && key === 'GET /tree' && out && out.data && Array.isArray(out.data.nodes)) {
-      out.data.nodes = share.filterTree(out.data.nodes)
-    }
+    if (key === 'GET /tree' && out?.data?.nodes) out.data.nodes = share.decorate(isGuest ? share.filterTree(out.data.nodes) : out.data.nodes)
     send(res, 200, out)
   } catch (e) {
-    send(res, 400, { ok: false, error: String(e.message || e) })
+    send(res, 403, { ok: false, error: String(e.message || e) })
   }
 }
 

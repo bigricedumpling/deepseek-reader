@@ -12,8 +12,13 @@
     "share:local": "npm run build && node server/serve.js --guest",
     "share:owner": "npm run build && node server/serve.js",
     "check": "node scripts/check-imports.mjs",
+    "test:readonly": "node scripts/test-readonly.mjs",
+    "test:fold": "node scripts/test-editor-fold.mjs",
+    "test:block": "node scripts/test-block-conversion.mjs",
     "regression": "node scripts/regression.mjs",
-    "e2e": "node scripts/e2e/roundtrip.mjs && node scripts/e2e/controls.mjs && node scripts/e2e/colwidth.mjs && node scripts/e2e/sidebar.mjs"
+    "e2e": "node scripts/e2e/roundtrip.mjs && node scripts/e2e/controls.mjs && node scripts/e2e/colwidth.mjs && node scripts/e2e/sidebar.mjs",
+    "test:access": "node scripts/test-access.mjs",
+    "test:routes": "node scripts/test-routes.mjs"
   },
   "dependencies": {
     "@codemirror/language-data": "^6.5.2",

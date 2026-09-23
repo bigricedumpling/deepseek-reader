@@ -2,7 +2,7 @@
   <div class="h-screen flex flex-col overflow-hidden">
     <!-- 顶部工具条：左侧是打开的文档，右侧是各功能入口 -->
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
-      <!-- 打开的文档：多开、切换、关掉（出现/消失也带一点过渡） -->
+      <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
       <transition name="pop">
         <DocTabs
           v-if="tabItems.length > 1"
@@ -13,58 +13,20 @@
           @close="onCloseTab"
         />
       </transition>
+      <span
+        v-if="tabItems.length === 1"
+        class="single-doc-title mr-auto truncate text-[12px] text-[var(--c-sub)]"
+        :title="tabItems[0].file"
+      >{{ tabItems[0].name }}</span>
 
-      <!-- 搜索：窄屏下先收成一个图标，点了才展开 -->
-      <div class="relative search-wrap" :class="{ 'is-mobile-open': mobileSearchOpen }">
-        <button
-          class="search-toggle h-8 w-8 items-center justify-center rounded-lg text-[var(--c-sub)] hover:bg-[var(--c-hover)]"
-          aria-label="搜索"
-          @click="openMobileSearch"
-        >
-          <PhMagnifyingGlass :size="15" />
-        </button>
-        <div
-          class="search-field flex items-center gap-2 h-8 px-3 rounded-lg bg-[var(--c-field)] transition-all duration-200"
-          :class="searchOpen ? 'w-[320px] bg-[var(--c-pop)] ring-1 ring-[var(--c-line)]' : 'w-[150px]'"
-        >
-          <PhMagnifyingGlass :size="13" class="text-[var(--c-faint)] shrink-0" />
-          <input
-            ref="searchInput"
-            :value="keyword"
-            class="flex-1 min-w-0 bg-transparent outline-none text-[12.5px] text-[var(--c-ink)] placeholder:text-[var(--c-faint)]"
-            placeholder="搜索"
-            @focus="searchOpen = true"
-            @input="emit('update:keyword', $event.target.value)"
-            @keydown.esc="closeSearch"
-          />
-          <button v-if="keyword" class="text-[var(--c-faint)] hover:text-[var(--c-sub)]" @click="clearSearch">
-            <PhX :size="12" />
-          </button>
-        </div>
-
-        <div
-          v-if="searchOpen && keyword.trim()"
-          class="search-drop absolute right-0 top-[38px] w-[460px] max-w-[86vw] max-h-[62vh] overflow-y-auto bg-[var(--c-pop)] rounded-xl shadow-[var(--c-pop-shadow)] p-2 z-50"
-        >
-          <p v-if="!results.length" class="text-[12px] text-[var(--c-faint)] px-3 py-4 text-center">
-            没有匹配
-          </p>
-          <div v-for="r in results" :key="r.id" class="mb-1.5">
-            <div class="flex items-center gap-2 px-3 py-1.5">
-              <span class="text-[11.5px] text-ds">{{ r.title }}</span>
-              <span class="text-[10.5px] text-[var(--c-faint)] tabular-nums">{{ r.hits.length }}</span>
-            </div>
-            <button
-              v-for="(h, i) in r.hits.slice(0, 6)"
-              :key="i"
-              class="flex gap-3 w-full text-left px-3 py-1.5 rounded-lg hover:bg-[var(--c-hover)] transition-colors"
-              @mousedown.prevent="onResultClick(r)"
-            >
-              <span
-                class="text-[12px] leading-relaxed text-[var(--c-sub)] line-clamp-2"
-                v-html="highlight(h.text, keyword)"
-              />
-            </button>
+      <div class="doc-search-wrap">
+        <button class="btn-icon" title="查找当前文档" aria-label="查找当前文档" :aria-expanded="searchOpen" @click="toggleDocSearch"><PhMagnifyingGlass :size="15" /></button>
+        <div v-if="searchOpen" class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
+          <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
+          <p class="search-scope">仅当前文档正文 · 跨文档查找请展开左侧栏</p>
+          <div v-if="keyword.trim()" class="doc-search-results">
+            <p v-if="!results.length" class="search-scope">没有匹配</p>
+            <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r)"><span v-html="highlight(h.text, keyword)" /></button></template>
           </div>
         </div>
       </div>
@@ -284,35 +246,23 @@
         </transition>
       </div>
 
-      <!-- 导出：md 与 PDF -->
-      <!-- 分享（原「导出」并进来了：对外链接、导出、打印都在这一个菜单里） -->
-      <div v-if="!store.isGuest" class="relative">
-        <button
-          class="btn-icon"
-          :class="{ 'is-active': open === 'share' }"
-          title="分享"
-          @click="toggle('share')"
-        >
-          <PhShareNetwork :size="15" />
-        </button>
-        <transition name="pop">
-          <div v-if="open === 'share'" class="pop-menu is-panel w-[330px]">
-            <p class="type-label">
-              <span class="label-main"><PhShareNetwork :size="12" class="label-icon" />分享</span>
-            </p>
-            <div class="share-link-row">
-              <input class="share-link-input" :value="guestLink" readonly @focus="$event.target.select()" />
-              <button class="share-copy" @click="copyLink">{{ copied ? '已复制' : '复制' }}</button>
-            </div>
-            <div class="share-sep" />
-            <button class="pop-item" @click="pickExport('md')">
-              <span class="pop-label"><PhFileText :size="14" class="menu-icon" />导出 markdown</span>
+      <div v-if="docId" class="relative">
+        <button class="btn-icon" title="文档设置与导出" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhDotsThree :size="19" /></button>
+        <div v-if="open === 'access'" class="pop-menu is-panel w-[250px]">
+          <div class="doc-state-pair">
+            <button class="doc-state" role="switch" :aria-checked="meta.shared !== false" aria-label="对外展示" @click="changeAccess('shared')">
+              <component :is="meta.shared === false ? PhEyeSlash : PhEye" :size="15" /><span>对外展示</span><span class="state-switch" :class="{on:meta.shared !== false}" />
             </button>
-            <button class="pop-item" @click="pickExport('pdf')">
-              <span class="pop-label"><PhPrinter :size="14" class="menu-icon" />打印 / 导出 PDF</span>
+            <button class="doc-state" role="switch" :aria-checked="!!meta.locked" aria-label="访客只读" @click="changeAccess('locked')">
+              <PhLock :size="15" /><span>访客只读</span><span class="state-switch" :class="{on:meta.locked}" />
             </button>
           </div>
-        </transition>
+          <p class="search-scope">公开决定访客能否看到；锁定决定访客能否编辑。管理员始终可以维护内容。</p>
+          <p v-if="meta.lockedAt && meta.lockedAt !== docId" class="search-scope">继承「{{ meta.lockedAt }}」的锁定。点击锁定开关可管理上级。</p>
+          <div class="doc-options-divider" />
+          <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="14" /> 导出 Markdown</button>
+          <button class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="14" /> 打印 / 导出 PDF</button>
+        </div>
       </div>
 
       <!-- pdf 翻译：没翻过就起任务，翻好了就是「看译文 / 看原文」的开关 -->
@@ -369,14 +319,15 @@
       <iframe
         v-if="isPreview"
         ref="frameRef"
+        :sandbox="isH5 ? 'allow-scripts' : undefined"
         class="pdf-frame"
         :src="pdfSrc"
         :title="meta.name || (isPdf ? 'PDF' : 'H5')"
       />
       <MarkdownEditor
         v-else-if="loaded"
-        :key="docId + ':' + epoch"
-        :readonly="store.isGuest"
+        :key="String(store.currentReadonly) + docId + ':' + epoch"
+        :readonly="store.currentReadonly"
         @pick-doc="pickDoc = true"
         @open-doc="store.select($event)"
         :value="raw"
@@ -418,7 +369,7 @@
         <span class="ui-font tabular-nums">{{ stats.lines }} 行</span>
       </template>
       <span class="ui-font ml-auto flex items-center gap-1.5">
-        <a v-if="store.isGuest" class="ui-font text-[var(--c-faint)] hover:text-[var(--c-ink)] underline" :href="API_BASE + '/edit'" title="切回编辑模式">只读预览 · 切到编辑</a>
+        <span v-if="store.currentReadonly" class="ui-font text-[var(--c-faint)]">已锁定 · 只读</span>
         <PhSpinnerGap v-if="saving" :size="12" class="spin" />
         <span :class="saveStateClass">{{ saveStateText }}</span>
       </span>
@@ -452,7 +403,7 @@ import {
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
   PhArrowsOutSimple, PhArrowsInSimple, PhSun, PhCoffee, PhMoon,
-  PhFileText, PhTranslate, PhShareNetwork
+  PhFileText, PhTranslate, PhLock, PhEye, PhEyeSlash, PhDotsThree
 } from '@phosphor-icons/vue'
 import { highlight } from '../utils/markdown'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
@@ -505,20 +456,6 @@ const isPdf = computed(() => props.meta?.type === 'pdf')
 const isH5 = computed(() => props.meta?.type === 'h5')
 const isPreview = computed(() => isPdf.value || isH5.value)
 /** 标签条要显示的东西：文件名（跟侧栏、磁盘一致）、有没有没落盘的改动 */
-/** 别人那条链接（带 token） */
-const guestLink = computed(() => store.guestLink())
-const copied = ref(false)
-
-async function copyLink() {
-  try {
-    await navigator.clipboard.writeText(guestLink.value)
-    copied.value = true
-    setTimeout(() => (copied.value = false), 1600)
-  } catch {
-    /* 剪贴板不给用就自己选中复制 */
-  }
-}
-
 const tabItems = computed(() =>
   store.tabs.map((file) => ({
     file,
@@ -731,6 +668,16 @@ const saveStateClass = computed(() =>
 
 /* ---------- 工具条 ---------- */
 
+function changeAccess(key) {
+  open.value = ''
+  const value = key === 'shared' ? props.meta.shared === false : !props.meta.locked
+  const target = key === 'locked' && props.meta.lockedAt ? props.meta.lockedAt : props.docId
+  store.requestAccess(target, { [key]: value }, key === 'shared' ? (value ? '对外展示此文档' : '不对外展示此文档') : (value ? '设为访客只读' : target !== props.docId ? '解锁上级及其继承内容' : '允许访客编辑'))
+}
+function toggleDocSearch() {
+  searchOpen.value = !searchOpen.value
+  if (searchOpen.value) nextTick(() => searchInput.value?.focus())
+}
 function toggle(name) {
   open.value = open.value === name ? '' : name
 }
@@ -785,10 +732,12 @@ const { showTop, scrollTop } = useDocScroll({
 /* 点空白处收起弹层与搜索下拉 */
 function onDocClick(e) {
   if (open.value && !e.target.closest('.pop-menu, .btn-icon')) open.value = ''
-  if (searchOpen.value && !e.target.closest('input, .search-drop')) searchOpen.value = false
+  if (searchOpen.value && !e.target.closest('.doc-search-wrap')) closeSearch()
 }
-onMounted(() => document.addEventListener('click', onDocClick))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+function onFindKey(e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); searchOpen.value = true; nextTick(() => searchInput.value?.focus()) } }
+watch(() => props.docId, () => { closeSearch(); emit('update:keyword', '') })
+onMounted(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onFindKey) })
+onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onFindKey) })
 </script>
 
 <style scoped>
@@ -976,4 +925,18 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     transform: rotate(360deg);
   }
 }
+</style>
+
+<style scoped>
+.doc-search-wrap { position:relative }
+.doc-search-panel { position:absolute;right:0;top:38px;width:360px;max-width:calc(100vw - 32px);padding:12px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:12px;box-shadow:var(--c-pop-shadow);z-index:80 }
+.doc-search-field { display:flex;align-items:center;gap:8px }.doc-search-field input { min-width:0;flex:1;outline:none;background:transparent;font-size:13px;padding:7px 0 }
+.search-scope { font-size:11px;line-height:1.6;color:var(--c-faint);padding:8px 5px }
+.doc-search-results { max-height:50vh;overflow:auto }.search-hit { display:block;width:100%;text-align:left;font-size:12px;line-height:1.7;padding:8px;border-radius:6px }.search-hit:hover{background:var(--c-hover)}
+.pop-item:disabled { opacity:.5;cursor:default }
+@media(max-width:640px){ .doc-search-panel{position:fixed;top:58px;left:12px;right:12px;width:auto;max-width:none}.reader-topbar{padding-left:8px!important;padding-right:8px!important;gap:2px!important}.single-doc-title{max-width:25vw} }
+</style>
+
+<style scoped>
+.doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:6px}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:9px;background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
 </style>

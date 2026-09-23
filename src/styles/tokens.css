@@ -54,7 +54,7 @@
   --para-indent: 0em;             /* 段首缩进，缩进式排版才用 */
   --para-gap: 1.15em;             /* 段间距，段距式排版才用 */
   --cjk-strong-weight: 900;       /* 中文加粗面：900 是宋体 Black */
-  --reading-font: var(--stack-serif);
+  --reading-font: "Noto Sans SC", "Source Han Sans SC", "Heiti SC", -apple-system, sans-serif;
 }
 
 /* 中西文分开选：西文在前、中文在后，浏览器按字符回退，天然分流 */
@@ -181,4 +181,3 @@ body[data-theme="dark"] {
   --color-ds-dark: #93a6ff;
   color-scheme: dark;
 }
-

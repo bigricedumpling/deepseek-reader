@@ -151,8 +151,8 @@
   --crepe-color-hover: #f2f2f2;
   --crepe-color-selected: #e8ecff;
   --crepe-color-inline-area: #ededed;
-  --crepe-font-default: var(--reading-font, "Noto Serif SC", serif);
-  --crepe-font-title: var(--reading-font, "Noto Serif SC", serif);
+  --crepe-font-default: var(--reading-font, "Noto Sans SC", sans-serif);
+  --crepe-font-title: var(--reading-font, "Noto Sans SC", sans-serif);
   --crepe-font-code: var(--font-mono);
   /* Crepe 内部还有不少按这个基准算出来的尺寸，调小一档 */
   --crepe-base-font-size: 14px;
@@ -173,7 +173,7 @@
   max-width: none;
   /* 左右 64px 是给块手柄留的地方，见下面 .milkdown-block-handle */
   padding: 20px 64px 0;
-  font-family: var(--reading-font, "Noto Serif SC", serif);
+  font-family: var(--reading-font, "Noto Sans SC", sans-serif);
   font-size: var(--reading-size, 15.5px);
   line-height: var(--reading-lh, 1.95);
   color: var(--c-text);
@@ -296,13 +296,32 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   color: var(--c-ink);
   margin-block: 2.2em 0.8em;
 }
-.crepe-host .milkdown .ProseMirror h4,
-.crepe-host .milkdown .ProseMirror h5,
-.crepe-host .milkdown .ProseMirror h6 {
+/*
+ * 四、五、六级标题。
+ *
+ * 以前这里三级共用一条 1em 的规则：插进去看不出区别，等于「只有三级标题」。
+ * 现在按字号 + 颜色两级递进 —— 四级还是正文字号，五级略小，
+ * 六级再小一档并转成次级灰，扫一眼就能分出层次。
+ */
+.crepe-host .milkdown .ProseMirror h4 {
   font-size: 1em;
   font-weight: 600;
   color: var(--c-text);
   margin-block: 1.7em 0.6em;
+}
+.crepe-host .milkdown .ProseMirror h5 {
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--c-text);
+  letter-spacing: 0.01em;
+  margin-block: 1.6em 0.55em;
+}
+.crepe-host .milkdown .ProseMirror h6 {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--c-sub);
+  letter-spacing: 0.03em;
+  margin-block: 1.5em 0.5em;
 }
 
 /*
@@ -347,6 +366,35 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   border-radius: 2px;
 }
 
+/*
+ * 正文里的标题折叠。
+ *
+ * 收起来的节是「用装饰盖住」的，不是删掉 —— 文档一个字没动，
+ * 所以 markdown 往返、自动保存、只读访客看到的页面都不受影响。
+ * 折叠状态跟右侧目录共用一份（toc-fold.js），两边收的是同一节。
+ */
+.crepe-host .milkdown .ProseMirror .reader-folded {
+  display: none;
+}
+/*
+ * 收起来的标题左边留一个记号。
+ *
+ * 不用绝对定位：标题左边那一溜是块手柄的地盘（悬停时手柄就浮在那儿），
+ * 记号放在那儿一悬停就被手柄盖住了。直接排在标题文字前面，任何时候都看得见。
+ */
+.crepe-host .milkdown .ProseMirror .reader-foldable-head::before {
+  content: '▾';
+  margin-right: 0.4em;
+  font-size: 0.78em;
+  color: var(--c-faint);
+  cursor: pointer;
+  user-select: none;
+  vertical-align: 0.08em;
+}
+.crepe-host .milkdown .ProseMirror .is-folded-head::before {
+  content: '▸';
+}
+
 /* 分割线 */
 .crepe-host .milkdown .ProseMirror hr {
   border-top: 1px solid var(--c-line);
@@ -358,6 +406,24 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   color: var(--color-ds);
   border-bottom: 1px solid rgba(77, 107, 254, 0.25);
   text-decoration: none;
+}
+
+/*
+ * 代码块的字号。
+ *
+ * 预览态里 pre 是 12.25px、里面的 code 再缩 0.88em（10.78px）；
+ * 可一点进代码块编辑，CodeMirror 用的是块级字号 15.5px —— 同一段代码预览一个样、
+ * 编辑一个样，切过去整块还要长高 90px。这里把两边钉在同一档（0.8em ≈ 12.4px）。
+ */
+.crepe-host .milkdown .milkdown-code-block pre,
+.crepe-host .milkdown .milkdown-code-block .cm-content,
+.crepe-host .milkdown .milkdown-code-block .cm-gutters {
+  font-size: 0.8em;
+  line-height: 1.62;
+}
+/* 代码块里的 code 不再二次缩小（0.88em 那条只留给行内代码） */
+.crepe-host .milkdown .ProseMirror pre code {
+  font-size: inherit;
 }
 
 /* 行内代码 */
@@ -751,4 +817,16 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 /* 选中态用品牌蓝 */
 .crepe-host .milkdown .ProseMirror ::selection {
   background: rgba(77, 107, 254, 0.16);
+}
+/* 块格式入口属于选区工具栏，与行内格式共用一个浮窗。 */
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="block-type"] {
+  width: auto;
+  padding: 0 9px;
+}
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="block-type"] .block-type-label {
+  white-space: nowrap;
+  font: 12px/1.4 var(--font-ui, sans-serif);
+}
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="block-type"] .icon {
+  width: auto;
 }

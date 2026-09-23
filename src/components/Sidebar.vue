@@ -1,42 +1,112 @@
 <template>
   <!--
-    收起与展开是同一个 aside，宽度做过渡。
-    原来是 v-if / v-else 两个 aside，切换时整个节点被替换，宽度是硬跳的，
-    跟右边目录的 transition: width 也不一致。
+    桌面端横向排知识库栏与文档树；手机端知识库列表改为弹窗。
   -->
-  <aside
-    class="h-screen flex flex-col flex-shrink-0 bg-[var(--c-panel)] border-r border-[var(--c-line)] select-none z-30 relative overflow-hidden transition-[width] duration-[220ms] ease-out"
-    :style="{ width: (collapsed ? 52 : width) + 'px' }"
-  >
-    <!-- 收起态：只留一条窄栏 -->
-    <div v-if="collapsed" class="flex flex-col items-center h-full w-[52px] py-4 gap-1.5 shrink-0">
-      <button class="brand-logo sm" title="知识库 / 换图标" @click.stop="openKbMenu($event)">
-        <img :src="logo" alt="" />
-      </button>
-      <button class="rail-btn mt-1.5" title="展开侧栏" @click="emit('toggle-collapse')">
-        <PhSidebarSimple :size="17" />
-      </button>
-      <button v-if="!isGuest" class="rail-btn" title="在根目录新建文档" @click="emit('create-doc', '')">
-        <PhPlus :size="17" />
-      </button>
-      <button class="rail-btn" title="检索" @click="expandAndSearch">
-        <PhMagnifyingGlass :size="17" />
-      </button>
-      <div class="w-6 h-px bg-[var(--c-line)] my-2" />
+  <div class="flex h-screen flex-shrink-0">
+    <!-- 手机端以弹窗出现；遮罩只在窄屏显示。 -->
+    <transition name="lib-backdrop">
       <button
-        v-for="f in topFolders"
-        :key="f.path"
-        class="rail-btn"
-        :class="{ 'is-on': folderHasCurrent(f) }"
-        :title="f.name"
-        @click="expandTo(f.path)"
+        v-if="libPanel.open"
+        class="lib-modal-backdrop"
+        aria-label="关闭知识库弹窗"
+        @click="closeLibPanel"
+      />
+    </transition>
+    <!-- 桌面端参与布局，手机端居中显示。 -->
+    <transition name="lib-panel">
+      <aside
+        v-if="libPanel.open"
+        class="lib-panel"
+        :style="{ '--lib-w': libWidth + 'px' }"
+        aria-label="知识库切换"
+        @click.stop="onLibPanelClick"
       >
-        <PhFolderSimple :size="17" :weight="folderHasCurrent(f) ? 'fill' : 'regular'" />
-      </button>
-      <div class="flex-1" />
-      <button class="rail-btn" title="展开侧栏" @click="emit('toggle-collapse')">
-        <PhCaretDoubleRight :size="15" />
-      </button>
+        <div class="lib-panel-head">
+          <span class="lib-panel-title"><span class="lib-title-desktop">知识库</span><span class="lib-title-mobile">切换知识库</span></span>
+          <span class="lib-panel-head-acts">
+            <button v-if="!isGuest" class="icon-btn" title="新建知识库" @click.stop="createLib">
+              <PhPlus :size="14" />
+            </button>
+            <button class="icon-btn" title="关闭知识库" aria-label="关闭知识库" @click="closeLibPanel">
+              <PhCaretDoubleLeft :size="15" class="lib-close-desktop" />
+              <PhX :size="15" class="lib-close-mobile" />
+            </button>
+          </span>
+        </div>
+
+        <input ref="libIconInput" type="file" accept="image/*" class="hidden" @change="onPickLibIcon" />
+
+        <!-- 拖拽条：调面板宽度，松手后写回注册表 -->
+        <div class="lib-panel-resize" title="拖动调整知识库栏宽度" @mousedown.stop="startLibResize" />
+
+        <div class="lib-panel-list">
+          <div
+            v-for="(lib, i) in libPanel.libs"
+            :key="lib.path"
+            class="lib-row"
+            :class="{ 'is-current': isCurrentLib(lib), 'is-dragging': libDrag.from === i }"
+            :draggable="!isGuest"
+            @dragstart.stop="onLibDragStart(i, $event)"
+            @dragover.prevent.stop="onLibDragOver(i)"
+            @dragend.stop="onLibDragEnd"
+          >
+            <!-- 每个知识库用自己的图标 -->
+            <img class="lib-row-icon" :src="lib.icon || siteIcon" alt="" />
+
+
+            <button class="lib-row-name" :title="lib.name" @click="goLib(lib)">
+              <input
+                v-if="!isGuest && renaming === lib.name"
+                ref="renameInput"
+                class="lib-row-input"
+                :value="renameText"
+                spellcheck="false"
+                @click.stop
+                @input="renameText = $event.target.value"
+                @keydown.enter.prevent="commitRename(lib)"
+                @keydown.esc.stop.prevent="cancelRename"
+                @blur="commitRename(lib)"
+              />
+              <template v-else>
+                <span class="lib-row-text">{{ lib.name }}</span>
+                <span class="lib-row-meta">{{ lib.docs }} 篇</span>
+              </template>
+            </button>
+
+            <PhEyeSlash v-if="lib.shared === false" :size="13" class="share-eye" title="不对外展示" />
+            <PhLock v-if="lib.locked" :size="13" class="share-eye" title="已锁定" />
+            <!-- 与侧边栏一致：悬停出现三个点，操作收进菜单 -->
+            <button
+              class="icon-btn xs acts-btn"
+              title="更多操作"
+              @click.stop="openLibMenu(lib, $event)"
+            >
+              <PhDotsThree :size="16" weight="bold" />
+            </button>
+          </div>
+        </div>
+      </aside>
+    </transition>
+
+    <!--
+      收起与展开是同一个 aside，宽度做过渡。
+      原来是 v-if / v-else 两个 aside，切换时整个节点被替换，宽度是硬跳的，
+      跟右边目录的 transition: width 也不一致。
+    -->
+    <aside
+    class="h-screen flex flex-col flex-shrink-0 bg-[var(--c-panel)] border-r border-[var(--c-line)] select-none z-30 relative overflow-hidden transition-[width] duration-[220ms] ease-out"
+    :class="{ 'is-reader-rail': collapsed }"
+    :style="{ width: (collapsed ? 44 : width) + 'px' }"
+  >
+    <!--
+      收起态：只留图标本身，不再另给一条竖向工具条。
+      展开入口不靠专门的按钮 —— 点图标、点检索、点下面任一目录都能展开并进入，
+      所以那条竖着的「展开/收起」图标是多余的。
+      也不放"新建文档"：收起时本来就不是干活的状态。
+    -->
+    <div v-if="collapsed" class="reader-rail">
+      <button class="brand-logo sm" title="展开侧栏" @click.stop="onRailLogo"><img :src="logo" alt="" /></button>
+      <RailToc />
     </div>
 
     <!-- 展开态 -->
@@ -47,77 +117,50 @@
         整个塞进去会撑爆配额，而且侧栏里只显示 22px，没必要留原图。
       -->
       <div class="px-4 pt-5 pb-3 flex items-start gap-2.5 shrink-0">
-        <button class="brand-logo" title="知识库 / 换图标" @click.stop="openKbMenu($event)">
+        <button class="brand-logo" title="打开知识库" @click.stop="openLibPanel">
           <img :src="logo" alt="" />
         </button>
-        <input ref="logoInput" type="file" accept="image/*" class="hidden" @change="onPickLogo" />
         <div class="min-w-0 flex-1">
           <input
             v-for="(line, i) in brandLines"
             :key="i"
             v-model="brandLines[i]"
             class="brand-line brand-input"
+            :class="i === 0 ? 'is-title' : 'is-sub'"
             spellcheck="false"
-            :title="'第 ' + (i + 1) + ' 行标题，可以直接改'"
+            :readonly="isGuest || !currentLibEditable"
+            :title="'第 ' + (i + 1) + ' 行，可以直接改'"
             @keydown.enter.prevent="$event.target.blur()"
+            @change="onBrandEdited(i, $event.target.value)"
           />
         </div>
-        <button class="icon-btn -mr-1" title="收起侧栏" @click="emit('toggle-collapse')">
+        <!--
+          展开知识库：放在收起按钮左边，与它同尺寸同排。
+          当前是哪个库、共有几个，走 tooltip 提示，不占版面。
+        -->
+        <button
+          class="icon-btn"
+          :title="'知识库：' + (currentLib || '未选择') + '（共 ' + libPanel.libs.length + ' 个）'"
+          @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"
+        >
+          <PhStack :size="16" :weight="libPanel.open ? 'fill' : 'regular'" />
+        </button>
+        <!--
+          收起侧栏时把知识库面板一起收掉。
+          两栏各管各的开合是一开始的想法，但收起了侧栏、左边却还杵着一个面板，
+          看着就是没收干净 —— 收起是"把这块收掉"的意思，范围该覆盖整块。
+        -->
+        <button class="icon-btn -mr-1" title="收起侧栏" @click.stop="collapseAllUI">
           <PhSidebarSimple :size="16" />
         </button>
       </div>
-
-
-    <!--
-      logo 菜单：两级。
-      第一级就两个选择（切换知识库 / 替换图标）；选"切换"之后面板就地翻到库列表，
-      顶上给一个返回箭头 —— 一个面板两层内容，不用算第二个浮层的位置。
-    -->
-    <transition name="pop">
-      <div v-if="kbMenu.open" class="kb-menu ui-font" :style="kbMenu.style" @click.stop>
-        <!-- 两级内容之间也走一点过渡：换页时淡入 + 轻微横移 -->
-        <transition name="kb-swap" mode="out-in">
-          <div v-if="kbMenu.page === 'root'" key="root" class="kb-page">
-            <button class="kb-item" @click="kbMenu.page = 'list'">
-              <PhStack :size="14" class="kb-item-icon" />
-              <span class="kb-item-name">切换知识库</span>
-              <PhCaretRight :size="11" class="kb-item-arrow" />
-            </button>
-          <button class="kb-item" @click="pickLogo">
-            <PhImage :size="14" class="kb-item-icon" />
-            <span class="kb-item-name">替换图标</span>
-          </button>
-          </div>
-
-          <div v-else key="list" class="kb-page">
-            <button class="kb-back" @click="kbMenu.page = 'root'">
-              <PhCaretLeft :size="12" />
-              知识库
-            </button>
-            <button
-              v-for="lib in kbMenu.libs"
-              :key="lib.name"
-              class="kb-item is-lib"
-          :class="{ 'is-current': lib.current, 'is-soon': lib.soon }"
-          :disabled="lib.current || lib.soon"
-          @click="goLib(lib)"
-        >
-          <img class="kb-item-logo" :src="lib.icon || siteIcon" alt="" />
-          <span class="kb-item-name">{{ lib.name }}</span>
-          <PhCheck v-if="lib.current" :size="12" weight="bold" />
-              <span v-else-if="lib.soon" class="kb-soon">待建</span>
-            </button>
-          </div>
-        </transition>
-      </div>
-    </transition>
-
+    <button class="manage-entry ui-font" @click="goEntry"><PhSquaresFour :size="15" /><span>切换入口</span><PhCaretRight :size="13" class="entry-chevron" /></button>
     <!-- 新建文档（新建目录在下面工具条那一排的文件夹按钮，不重复放） -->
-    <div v-if="!isGuest" class="px-3 pt-2 pb-3">
+    <div v-if="currentLibEditable" class="px-3 pt-2 pb-3">
       <button
         class="newdoc-btn w-full h-9 flex items-center justify-center gap-1.5 rounded-lg text-[13px] text-[var(--c-ink)]"
         title="在根目录新建文档"
-        @click="emit('create-doc', '')"
+        @click="emit('create-doc', currentLib || '')"
       >
         <PhPlus :size="13" weight="bold" />
         新建文档
@@ -131,7 +174,7 @@
         <button
           class="icon-btn"
           :class="{ 'is-active': searchOpen }"
-          title="在当前列表里筛选"
+          title="搜索当前知识库文档"
           @click="toggleSearch"
         >
           <PhMagnifyingGlass :size="15" />
@@ -176,7 +219,7 @@
         <button class="icon-btn" title="重新扫描磁盘（在 app 外面改了文件之后点一下）" @click="rescan">
           <PhArrowClockwise :size="15" />
         </button>
-        <button v-if="!isGuest" class="icon-btn" title="新建分类" @click="emit('create-category')">
+        <button v-if="currentLibEditable" class="icon-btn" title="新建分类" @click="emit('create-category', currentLib || '')">
           <PhFolderSimplePlus :size="16" />
         </button>
       </span>
@@ -189,7 +232,7 @@
           ref="searchEl"
           v-model="query"
           class="w-full h-7 px-2.5 rounded-md bg-[var(--c-field)] border border-[var(--c-line)] text-[12.5px] outline-none focus:border-[var(--color-ds)]/50 transition-colors"
-          placeholder="筛选文档"
+          placeholder="搜索文档名或路径"
           @keydown.esc="closeSearch"
         />
       </div>
@@ -202,6 +245,7 @@
           v-for="it in menuItems"
           :key="it.id"
           class="tree-menu-item"
+          :disabled="it.disabled"
           :class="{ danger: it.danger }"
           @click="onMenuPick(it)"
         >
@@ -231,6 +275,7 @@
       <template v-if="groupMode === 'tree'">
         <DocTree
           :nodes="nodes"
+          :parent="currentLib || ''"
           :current-path="currentPath"
           :collapsed="collapsedCats"
           :query="query"
@@ -253,12 +298,20 @@
           :key="doc.file"
           class="doc-row group/doc"
           :class="{ 'is-on': doc.file === currentPath }"
+          :draggable="store.canEdit(doc)"
+          @dragstart="tree.start(doc, $event)"
+          @dragover="tree.overRow(doc, $event)"
+          @drop.prevent="tree.drop()"
+          @dragend="tree.end()"
           @click="emit('select', doc.file)"
         >
           <button class="doc-title" :title="doc.file">
             <span class="truncate">{{ doc.name }}</span>
             <span v-if="doc.dir" class="doc-dir">{{ doc.dir }}</span>
           </button>
+          <PhEyeSlash v-if="doc.shared === false" :size="11" class="share-eye" title="不对外展示" />
+          <PhLock v-if="doc.locked" :size="11" class="share-eye" title="已锁定" />
+          <button class="icon-btn xs acts-btn" title="更多操作" @click.stop="tree.openMenu('file', doc, $event)"><PhDotsThree :size="16" /></button>
         </div>
         <p v-if="!visibleCount" class="text-[12px] text-[var(--c-faint)] px-3 py-3 text-center">
           {{ query ? '没有匹配的文档' : '还没有文档' }}
@@ -267,7 +320,22 @@
 
       </nav>
     </template>
-  </aside>
+    </aside>
+
+    <!-- 新建 / 删除知识库的确认框：用站内统一那套，不用浏览器原生弹窗 -->
+    <AppDialog
+      :open="libDialog.open"
+      :mode="libDialog.danger ? 'confirm' : 'prompt'"
+      :title="libDialog.title"
+      :message="libDialog.message"
+      :placeholder="libDialog.placeholder"
+      :initial="libDialog.initial"
+      :confirm-text="libDialog.confirmText"
+      :danger="libDialog.danger"
+      @confirm="libDialog.onConfirm && libDialog.onConfirm($event)"
+      @cancel="closeLibDialog"
+    />
+  </div>
 </template>
 
 <script setup>
@@ -275,13 +343,15 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, p
 // 菜单里的图标：树的操作、分组与排序
 import {
   PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
-  PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
+  PhSquaresFour, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
   PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
-  PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
-  PhHandGrabbing
+  PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
+  PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree
 } from '@phosphor-icons/vue'
+import RailToc from './RailToc.vue'
 import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
+import AppDialog from './AppDialog.vue'
 import { API_BASE } from '../utils/api'
 const props = defineProps({
   nodes: { type: Array, required: true },
@@ -299,6 +369,7 @@ const emit = defineEmits([
 const store = useDocsStore()
 /** 访客（分享链接进来的人）：新建、改名、删除这些入口一律不显示 */
 const isGuest = computed(() => store.isGuest)
+const currentLibEditable = computed(() => store.canEdit(libPanel.libs.find(l => l.name === currentLib.value)))
 
 /*
  * 左上角的名字与图标 —— 从服务端读，不存 localStorage。
@@ -309,62 +380,543 @@ const isGuest = computed(() => store.isGuest)
  * 所以「按实例分开键名」也解决不了。改成服务端按实例给：品牌从哪来由服务端决定，
  * 前端只负责显示；本地改只改当前这次会话，不落盘。
  */
-/** 图标存成 data URL 放 localStorage，先缩到这个边长，配额才扛得住 */
-const LOGO_SIZE = 96
-
 /*
  * 品牌来自构建时注入的 VITE_BRAND（形如「第一行|第二行」），
  * 与 VITE_BASE 一个机制 —— 每个实例构建自己的那一份，不依赖运行时环境变量，
  * 也不经过 localStorage（同域名下两个站点共用一个存储，写回就会串味）。
  */
-const brandLines = ref(
-  String(import.meta.env.VITE_BRAND || '').split('|').filter(Boolean).length
-    ? String(import.meta.env.VITE_BRAND).split('|')
-    : ['Agent（设计方向）', '笔试题交付']
+/*
+ * 标题两行。
+ *
+ * 第一行不是一份独立数据 —— 它就是"当前知识库的名字"，真源在服务端的注册表里
+ * （.知识库.json）。这里只是一份显示副本，改它等于改库名（改名会同步重命名文件夹）。
+ * 第二行是副标题，纯粹给人看的，不参与任何同步。
+ *
+ * 以前这两行存在 localStorage 里，和目录名、注册表各存一份，
+ * 于是"改了标题目录不动、改了目录标题不动"——那才是根子上的病。
+ */
+/* 副标题的兜底：某个库没写 sub 时用它 */
+const FALLBACK_SUB = String(import.meta.env.VITE_BRAND || '').split('|')[1] || ''
+const brandLines = ref(['', FALLBACK_SUB])
+
+const libIconInput = ref(null)
+
+/* ---------- 知识库面板：列出所有库，可切换 / 改名 / 换图标 / 管可见性 ---------- */
+
+const libPanel = reactive({ open: false, libs: [], busy: '' })
+
+/** 当前所在的知识库：文档根的名字（每个实例一个根，所以直接问服务端） */
+/** 当前库的完整信息（图标、说明），从注册表同步过来 */
+const currentLibIcon = ref('')
+
+const currentLib = ref(
+  (() => {
+    try {
+      const lib = String(new URLSearchParams(location.search).get('lib') || '').trim()
+      return lib === '业务面' ? '面试准备' : lib
+    } catch {
+      return ''
+    }
+  })()
 )
 
-const logoInput = ref(null)
+async function loadLibs() {
+  try {
+    const res = await fetch(API_BASE + '/api/libs', { cache: 'no-store' })
+    const data = await res.json()
+    libPanel.libs = (data?.data?.libs || []).filter((l) => l && l.name)
+    applyConfig(data?.data?.config)
+    applyCurrentLib()
+  } catch {
+    libPanel.libs = []
+  }
+}
 
-/* ---------- logo 菜单：切换知识库 / 替换图标 ---------- */
+/**
+ * 把"当前库"的信息摊到各处显示：标题第一行、侧栏图标。
+ *
+ * 全部从同一份数据派生，所以改任何一处（标题、库列表、图标）之后
+ * 只要重新调一次它，三处就一致了 —— 不需要两两之间接同步线。
+ */
+function applyCurrentLib() {
+  const lib = libPanel.libs.find((l) => l.name === currentLib.value)
+  if (!lib) return
+  brandLines.value[0] = lib.name
+  /* 副标题也按库走：每个知识库各说各的，不再共用主库那一句 */
+  brandLines.value[1] = lib.sub || FALLBACK_SUB
+  currentLibIcon.value = lib.icon || ''
+  /*
+   * 浏览器标签页也跟着走：标题换成当前知识库名，图标换成它的 icon。
+   * 切库之后标签页还挂着上一个库的名字，等于对外显示错了身份。
+   */
+  document.title = lib.name
+  if (lib.icon) {
+    let link = document.querySelector('link[rel="icon"]')
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.href = lib.icon
+  }
+}
 
-const kbMenu = reactive({ open: false, page: 'root', style: {}, libs: [] })
+/*
+ * 面板宽度：从注册表来，拖拽时先改本地（跟手），松手再写回。
+ * 不另开 localStorage 副本 —— 偏好和知识库同源，少一份副本就少一处不一致。
+ */
+const libWidth = ref(236)
 
-async function openKbMenu(e) {
-  if (kbMenu.open) {
-    kbMenu.open = false
+function applyConfig(cfg) {
+  if (!cfg) return
+  if (typeof cfg.panelWidth === 'number') libWidth.value = cfg.panelWidth
+}
+
+async function saveLibConfig(patch) {
+  try {
+    await fetch(API_BASE + '/api/lib/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch)
+    })
+  } catch {
+    /* 存不上就只当次生效 */
+  }
+}
+
+/*
+ * 拖拽排序：顺序是使用者的意图，存进注册表（不存 localStorage）。
+ * 拖的时候就地预览（数组换位），松手一次性写回，只发一个请求。
+ */
+const libDrag = reactive({ from: -1, over: -1 })
+
+function onLibDragStart(i, ev) {
+  if (isGuest.value) return
+  libDrag.from = i
+  ev.dataTransfer.effectAllowed = 'move'
+  /* Firefox 要求必须 setData 才会开始拖 */
+  try { ev.dataTransfer.setData('text/plain', String(i)) } catch { /* 忽略 */ }
+}
+
+function onLibDragOver(i) {
+  if (libDrag.from < 0 || libDrag.from === i) return
+  const list = libPanel.libs
+  const [moved] = list.splice(libDrag.from, 1)
+  list.splice(i, 0, moved)
+  libDrag.from = i
+}
+
+async function onLibDragEnd() {
+  if (libDrag.from < 0) return
+  libDrag.from = -1
+  libDrag.over = -1
+  try {
+    const res = await fetch(API_BASE + '/api/lib/order', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: libPanel.libs.map((l) => l.name) })
+    })
+    const data = await res.json()
+    if (data.ok) libPanel.libs = data.data.libs || libPanel.libs
+  } catch {
+    /* 存不上就只当次生效 */
+  }
+}
+
+function startLibResize(e) {
+  const x0 = e.clientX
+  const w0 = libWidth.value
+  const move = (ev) => {
+    libWidth.value = Math.max(180, Math.min(420, w0 + (ev.clientX - x0)))
+  }
+  const up = () => {
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+    saveLibConfig({ panelWidth: libWidth.value })
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+}
+
+/*
+ * 新建知识库：建目录 + 写注册表一步到位（服务端做），
+ * 名字先用 prompt 问 —— 建完立刻切过去，看到的就是刚建的那个空库。
+ */
+/*
+ * 新建知识库的弹窗状态。
+ *
+ * 以前用 window.prompt —— 浏览器原生框，样式和站内完全不搭，
+ * 而且不能带说明文字。站内有 AppDialog（支持 prompt 模式），直接用它。
+ */
+const libDialog = reactive({
+  open: false,
+  title: '',
+  message: '',
+  placeholder: '',
+  initial: '',
+  confirmText: '确定',
+  danger: false,
+  onConfirm: null
+})
+
+function closeLibDialog() {
+  libDialog.open = false
+  libDialog.onConfirm = null
+}
+
+function askLibDialog(opts) {
+  Object.assign(libDialog, {
+    open: true,
+    title: '', message: '', placeholder: '', initial: '',
+    confirmText: '确定', danger: false, onConfirm: null
+  }, opts)
+}
+
+async function createLib() {
+  askLibDialog({
+    title: '新建知识库',
+    message: '会同时建一个同名文件夹。建好之后可以在这里给它换图标、管对外可见性。',
+    placeholder: '知识库名字',
+    confirmText: '新建',
+    onConfirm: (value) => { closeLibDialog(); doCreateLib(value) }
+  })
+}
+
+async function doCreateLib(value) {
+  const to = String(value || '').trim()
+  if (!to) return
+  try {
+    const res = await fetch(API_BASE + '/api/lib', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: to })
+    })
+    const data = await res.json()
+    if (!data.ok) throw new Error(data.error || '新建失败')
+    libPanel.libs = data.data.libs || []
+    const made = libPanel.libs.find((l) => l.name === to)
+    if (made) await goLib(made)
+  } catch (e) {
+    window.alert(String(e.message || e))
+  }
+}
+
+/*
+ * 收起态点图标只展开文档侧栏；展开态的品牌图标才打开知识库栏。
+ */
+/** 收起整个左区：知识库面板 + 文档栏 */
+function collapseAllUI() {
+  libPanel.open = false
+  emit('toggle-collapse')
+}
+
+function onRailLogo() {
+  if (props.collapsed) emit('toggle-collapse')
+}
+
+const isMobileLibView = () => window.matchMedia('(max-width: 820px)').matches
+
+function closeLibPanel() {
+  libPanel.open = false
+  if (tree.menu.open) tree.closeMenu()
+}
+
+function openLibPanel() {
+  libPanel.open = true
+  loadLibs()
+}
+
+function isCurrentLib(lib) {
+  if (!currentLib.value) {
+    /* 还没问出来时，用标题第一行兜底比一下，至少不闪 */
+    return lib.name === brandLines.value[0]
+  }
+  return lib.name === currentLib.value
+}
+
+/*
+ * 切换知识库：只换地址栏里的 ?lib=<库名>，然后重新拉树。
+ *
+ * 不换实例、不换根目录 —— 一个知识库就是根下的一个文件夹，
+ * 选了它侧边栏就只显示它（服务端按 ?lib= 裁剪），路径仍然相对文档根，
+ * 所以文档读取、保存那一整套不用改。
+ */
+async function goLib(lib) {
+  if (!lib) return
+  const name = lib.path || lib.name
+  if (isCurrentLib(lib)) {
+    if (isMobileLibView()) closeLibPanel()
     return
   }
-  const r = e.currentTarget.getBoundingClientRect()
-  kbMenu.style = { left: Math.round(r.left) + 'px', top: Math.round(r.bottom + 6) + 'px' }
-  kbMenu.page = 'root'
-  kbMenu.libs = []
-  kbMenu.open = true
+  // 切库会清空当前文档缓存，必须先等最新内容落盘。
+  if (store.currentPath && (store.isDirty || store.saving) && !(await store.save())) return
+  /*
+   * 桌面保持知识库栏，便于连续切换；手机在完成切换后关闭弹窗。
+   */
+  const url = new URL(location.href)
+  url.searchParams.set('lib', name)
+  /* 换库之后当前这篇多半不属于新库，交给 ensureCurrent 重新挑一篇 */
+  history.replaceState(null, '', url.toString())
+  currentLib.value = name
+  applyCurrentLib()
+  /*
+   * 用 switchLib 而不是 loadAll：它会先把"当前这篇"清掉再拉新库的树。
+   * 不清的话地址栏会出现"路径属于 A 库、?lib= 指向 B 库"的自相矛盾状态。
+   */
+  await store.switchLib()
+  if (isMobileLibView()) closeLibPanel()
+}
+
+/*
+ * 知识库的「…」菜单：复用侧边栏那一套浮层（tree.menu），
+ * 所以位置、样式、点别处关掉的行为都一样，不用另造一个。
+ */
+function openLibMenu(lib, ev) {
+  tree.openMenu('lib', { name: lib.name, path: lib.path, docs: lib.docs, shared: lib.shared, locked: lib.locked, lockedAt: lib.lockedAt }, ev)
+}
+
+/*
+ * 面板上的点击也要能把「…」菜单收起来。
+ *
+ * 菜单的关闭靠"文档上的下一次点击"，而面板容器带 @click.stop ——
+ * 点击在面板范围内根本到不了 document，于是点了别处菜单还挂着。
+ * 这里在面板自己这一层补一次关闭。
+ */
+function onLibPanelClick() {
+  if (tree.menu.open) tree.closeMenu()
+}
+
+/*
+ * 就地改名：点铅笔那一行变成输入框，回车或失焦提交，Esc 取消。
+ * 不用弹窗 —— 改名是个高频小动作，弹一层窗打断节奏。
+ */
+const renaming = ref('')
+const renameText = ref('')
+const renameInput = ref(null)
+
+function startRename(lib) {
+  renaming.value = lib.name
+  renameText.value = lib.name
+  nextTick(() => {
+    const el = Array.isArray(renameInput.value) ? renameInput.value[0] : renameInput.value
+    el?.focus?.()
+    el?.select?.()
+  })
+}
+
+function cancelRename() {
+  renaming.value = ''
+  renameText.value = ''
+}
+
+/** 两个改名入口共用这一条流程；当前库改名会使所有文档路径失效。 */
+async function renameLib(from, to) {
+  if (!from || !to || to === from) return
+  if (to.includes('/') || to.startsWith('.')) throw new Error('知识库名不能带斜杠或以点开头')
+  const active = from === currentLib.value
+  if (active && (store.isDirty || store.saving) && !(await store.save())) {
+    throw new Error(store.error || '保存失败，未改名知识库')
+  }
+  libPanel.busy = from
   try {
-    const res = await fetch(API_BASE + '/kb.json', { cache: 'no-store' })
+    const res = await fetch(API_BASE + '/api/lib/name', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to })
+    })
     const data = await res.json()
-    kbMenu.libs = (Array.isArray(data?.libs) ? data.libs : []).filter((l) => l && l.href)
-  } catch {
-    /* 读不到就只显示"替换图标" */
+    if (!data.ok) throw new Error(data.error || '改名失败')
+    libPanel.libs = data.data.libs || []
+    /* 改的是当前库：换到新名字，再把标题与图标从同一份数据重新摊一次 */
+    if (active) {
+      currentLib.value = to
+      const url = new URL(location.href)
+      url.searchParams.set('lib', to)
+      history.replaceState(null, '', url.toString())
+      await store.switchLib()
+    }
+    applyCurrentLib()
+  } finally {
+    libPanel.busy = ''
   }
 }
 
-function goLib(lib) {
-  if (!lib || lib.current) return
-  kbMenu.open = false
-  location.href = lib.href
+/** 提交改名：服务端重命名文件夹，并把分享状态与图标表一起搬走 */
+async function commitRename(lib) {
+  const to = String(renameText.value || '').trim()
+  const from = lib.name
+  if (renaming.value !== from) return
+  renaming.value = ''
+  if (!to || to === from) return
+  try {
+    await renameLib(from, to)
+  } catch (e) {
+    window.alert(String(e.message || e))
+  }
 }
 
-function pickLogo() {
-  kbMenu.open = false
-  logoInput?.click()
+/** 标题第一行改库名，第二行保存为该库的副标题。 */
+async function onBrandEdited(i, value) {
+  const v = String(value || '').trim()
+  if (i === 1) {
+    if (!currentLib.value) return
+    try {
+      const res = await fetch(API_BASE + '/api/lib/meta', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: currentLib.value, sub: v })
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || '副标题保存失败')
+      libPanel.libs = data.data.libs || []
+      applyCurrentLib()
+    } catch (e) {
+      applyCurrentLib()
+      window.alert(String(e.message || e))
+    }
+    return
+  }
+  if (i !== 0) return
+  if (!v || v === currentLib.value) {
+    brandLines.value[0] = currentLib.value
+    return
+  }
+  try {
+    await renameLib(currentLib.value, v)
+  } catch (e) {
+    brandLines.value[0] = currentLib.value
+    window.alert(String(e.message || e))
+  }
 }
 
-/* 点别处关掉 */
-function onDocClickClose() {
-  kbMenu.open = false
+/** 换某个知识库的图标 */
+const libIconTarget = ref(null)
+function pickLibIcon(lib) {
+  libIconTarget.value = lib
+  const el = Array.isArray(libIconInput.value) ? libIconInput.value[0] : libIconInput.value
+  if (!el) return
+  el.value = ''
+  el.click()
 }
-onMounted(() => document.addEventListener('click', onDocClickClose))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClickClose))
+
+async function onPickLibIcon(e) {
+  const file = e.target.files?.[0]
+  const lib = libIconTarget.value
+  e.target.value = ''
+  if (!file || !lib) return
+  const dataUrl = await readAsDataUrl(file)
+  try {
+    const res = await fetch(API_BASE + '/api/lib/meta', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: lib.name, icon: dataUrl })
+    })
+    const data = await res.json()
+    if (data.ok) {
+      libPanel.libs = data.data.libs || []
+      applyCurrentLib()
+    }
+  } catch {
+    /* 换不成就算了 */
+  }
+}
+
+function readAsDataUrl(file) {
+  return new Promise((resolve) => {
+    const fr = new FileReader()
+    fr.onload = () => resolve(String(fr.result || ''))
+    fr.onerror = () => resolve('')
+    fr.readAsDataURL(file)
+  })
+}
+
+/*
+ * 删除知识库 = 把那个文件夹移到回收站（不真删）。
+ * 一次操作就是几百个文件，所以确认框里把篇数写清楚。
+ */
+async function deleteLib(lib) {
+  askLibDialog({
+    title: '删除知识库《' + lib.name + '》',
+    message: '它的 ' + (lib.docs || 0) + ' 篇文档会被移到回收站，可以再捞回来。',
+    confirmText: '移到回收站',
+    danger: true,
+    onConfirm: () => { closeLibDialog(); doDeleteLib(lib) }
+  })
+}
+
+async function doDeleteLib(lib) {
+  libPanel.busy = lib.name
+  try {
+    if (lib.name === currentLib.value && (store.isDirty || store.saving) && !(await store.save())) {
+      throw new Error(store.error || '保存失败，未删除知识库')
+    }
+    const res = await fetch(API_BASE + '/api/lib', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: lib.name })
+    })
+    const data = await res.json()
+    if (!data.ok) throw new Error(data.error || '删除失败')
+    libPanel.libs = data.data.libs || []
+    /* 删的是当前库：换到第一个剩下的库 */
+    if (lib.name === currentLib.value) {
+      const first = libPanel.libs[0]
+      if (first) await goLib(first)
+    }
+  } catch (e) {
+    window.alert(String(e.message || e))
+  } finally {
+    libPanel.busy = ''
+  }
+}
+
+/*
+ * 面板不随"点别处"收起。
+ *
+ * 两栏各有各的开合：面板由它自己的收起按钮（和左上角那个提示）控制，
+ * 侧边栏由它自己的收起按钮与拖宽控制。原先面板会在任何一次文档区点击时收掉，
+ * 于是拖侧边栏宽度、点一下正文，面板也跟着没了 —— 看着就像两者联动。
+ */
+onMounted(() => {
+  /*
+   * 没指定 ?lib= 时选默认库。
+   *
+   * 顺序：先拉库列表，再等树到手 —— 因为旧链接要靠树才能认出"它想进哪个库"
+   * （老链接是 /onlyread/笔试题/xxx，没有 ?lib=，而"笔试题"现在是
+   *  Agent（设计方向）库里的东西）。树还没到就只能退回第一个库。
+   */
+  loadLibs().then(() => {
+    if (currentLib.value) return
+    const pick = () => {
+      const byLegacy = store.legacyLib()
+      const hit = libPanel.libs.find((l) => l.name === byLegacy)
+      const lib = hit || libPanel.libs[0]
+      if (!lib) return
+      currentLib.value = lib.name
+      applyCurrentLib()
+      const url = new URL(location.href)
+      url.searchParams.set('lib', lib.name)
+      history.replaceState(null, '', url.toString())
+      /*
+       * 补上 lib 之后必须重新拉树。
+       *
+       * 最初那次 /api/tree 是不带 lib 拉的（进来时地址栏里还没有），拿到的是整棵树 ——
+       * 于是 /onlyread 这种不带 lib 的地址会显示出根下的几个知识库目录，
+       * 看着就像"知识库和它内部文件夹的关系乱了"。
+       */
+      store.switchLib()
+    }
+    if (store.allFiles.length) pick()
+    else {
+      const stop = watch(
+        () => store.allFiles.length,
+        (n) => { if (n) { stop(); pick() } }
+      )
+      /* 树迟迟不来也不能卡住：一秒后退回第一个库 */
+      setTimeout(() => { stop(); if (!currentLib.value) pick() }, 1200)
+    }
+  })
+})
 /*
  * 自己换过的图标。
  *
@@ -387,41 +939,13 @@ const customLogo = ref(localStorage.getItem(LOGO_STORE) || '')
  * 同时它要是绝对路径：深链（/edit/某目录/某文档）之后相对路径会被解析到那一层去。
  */
 const siteIcon = '__SITE_ICON__'
-const logo = computed(() => customLogo.value || import.meta.env.VITE_LOGO || siteIcon)
-
-/**
- * 换图标。
- *
- * 先等比缩到 96px 再转 data URL：用户随手丢进来的图可能几 MB，
- * 直接存 localStorage 会超配额而且拖慢每次读写；侧栏里只显示 22px，留原图没意义。
+/*
+ * 图标也只有一个真源：当前知识库的 icon 字段（注册表里）。
+ * customLogo 是"这个实例自己的图标"，没有库图标时兜底。
  */
-function onPickLogo(e) {
-  const file = e.target.files?.[0]
-  e.target.value = ''
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    const img = new Image()
-    img.onload = () => {
-      const scale = Math.min(1, LOGO_SIZE / Math.max(img.width, img.height))
-      const w = Math.max(1, Math.round(img.width * scale))
-      const h = Math.max(1, Math.round(img.height * scale))
-      const cv = document.createElement('canvas')
-      cv.width = w
-      cv.height = h
-      cv.getContext('2d').drawImage(img, 0, 0, w, h)
-      try {
-        customLogo.value = cv.toDataURL('image/png')
-        localStorage.setItem(LOGO_STORE, customLogo.value)
-      } catch {
-        /* 存不下就只当次生效，不打断 */
-        customLogo.value = String(reader.result)
-      }
-    }
-    img.src = String(reader.result)
-  }
-  reader.readAsDataURL(file)
-}
+const logo = computed(
+  () => currentLibIcon.value || customLogo.value || import.meta.env.VITE_LOGO || siteIcon
+)
 
 /** 顶层目录：收起态那一列图标用 */
 const topFolders = computed(() => props.nodes.filter((n) => n.type === 'folder'))
@@ -472,6 +996,7 @@ const tree = reactive({
     return i < 0 ? '' : node.file.slice(0, i)
   },
   start(node, e) {
+    if (!store.canEdit(node)) return
     this.drag = {
       kind: node.type === 'folder' ? 'folder' : 'doc',
       path: node.type === 'folder' ? node.path : node.file,
@@ -507,20 +1032,22 @@ const tree = reactive({
     if (i < 0) return
     this.dropAt = { parent, index: i + (y > 0.5 ? 1 : 0) }
   },
-  /** 落在空白处：挪到根目录末尾 */
+  /** 落在空白处：挪到当前知识库根目录末尾。 */
   overRoot(e) {
     if (!this.drag || e.defaultPrevented) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    this.dropInto = ''
+    this.dropInto = currentLib.value || ''
     this.dropAt = null
   },
   async drop() {
+    if (!this.drag) return
     const d = this.drag
     const into = this.dropInto
     const at = this.dropAt
     this.end()
     if (!d) return
+    const visibleMode = sortMode.value
     // 拖过就切手动排序，否则列表会按「按名称」立刻重排，白拖
     sortMode.value = 'manual'
     try {
@@ -542,7 +1069,7 @@ const tree = reactive({
         }
       }
       const key = path.slice(path.lastIndexOf('/') + 1)
-      const names = entriesOf(at.parent)
+      const names = entriesOf(at.parent, visibleMode)
       const from = names.indexOf(key)
       if (from < 0) return
       names.splice(from, 1)
@@ -564,6 +1091,7 @@ const tree = reactive({
   /* ---------- 原位改名 ---------- */
 
   editStart(kind, node) {
+    if (!store.canEdit(node)) return
     this.edit = { kind, node, value: node.name }
   },
   editCancel() {
@@ -599,16 +1127,31 @@ const tree = reactive({
         top: r.bottom + 4 + 'px'
       }
     }
+    /*
+     * 关闭条件：点了菜单外面，或者按了 Esc。
+     *
+     * 以前是"下一次点击就关，不管点在哪" —— 那样在文档区随便点一下，
+     * 甚至点右侧的目录栏、顶栏，菜单都会被收掉，像是被别处的操作打断。
+     * 现在只在点到菜单范围之外时才关；点到菜单自己是走菜单项的动作。
+     */
     const close = () => this.closeMenu()
     this.onKey = (e) => { if (e.key === 'Escape') close() }
+    this.onClick = (e) => {
+      const el = document.querySelector('.tree-menu')
+      if (el && el.contains(e.target)) return
+      close()
+    }
     document.addEventListener('keydown', this.onKey)
-    // 下一次点击（不管点在哪）就关掉；菜单项自己的点击会先跑完动作
-    setTimeout(() => document.addEventListener('click', close, { once: true }), 0)
+    setTimeout(() => document.addEventListener('click', this.onClick), 0)
   },
   closeMenu() {
     if (!this.menu.open) return
     this.menu.open = false
     document.removeEventListener('keydown', this.onKey)
+    if (this.onClick) {
+      document.removeEventListener('click', this.onClick)
+      this.onClick = null
+    }
   }
 })
 provide('tree', tree)
@@ -626,32 +1169,43 @@ async function guardShare(fn) {
 const menuItems = computed(() => {
   if (!tree.menu.open) return []
   const node = tree.menu.node
-  const items = []
-  if (tree.menu.kind === 'folder') {
-    items.push({ id: 'new-doc', label: '新建文档', icon: PhFilePlus }, { id: 'new-folder', label: '新建目录', icon: PhFolderSimplePlus })
+  const kind = tree.menu.kind
+  const path = node?.path || node?.file
+  const inherited = node?.lockedAt && node.lockedAt !== path
+  const items = [
+    { id: 'access-lock', label: inherited ? '解锁上级：' + node.lockedAt : node?.locked ? '解锁' : '锁定', icon: node?.locked ? PhLockOpen : PhLock, disabled: false },
+    { id: 'access-share', label: node?.shared === false ? '对外展示' : '不对外展示', icon: node?.shared === false ? PhEye : PhEyeSlash }
+  ]
+  if (!store.canEdit(node)) return items
+  if (kind === 'lib') {
+    if (!isGuest.value) items.push({ id:'lib-icon',label:'更换图标',icon:PhImage },{ id:'lib-rename',label:'重命名',icon:PhPencilSimple },{ id:'lib-delete',label:'删除知识库',icon:PhTrash,danger:true })
+  } else {
+    if (kind === 'folder') items.push({id:'new-doc',label:'新建文档',icon:PhFilePlus},{id:'new-folder',label:'新建目录',icon:PhFolderSimplePlus})
+    items.push({id:'rename',label:'重命名',icon:PhPencilSimple},{id:'delete',label:kind==='folder'?'删除目录':'删除',icon:PhTrash,danger:true})
   }
-  items.push({ id: 'rename', label: '重命名', icon: PhPencilSimple })
-  // 对外可见性：默认整库都能看，这里只负责把个别标成"不分享"
-  const path = tree.menu.kind === 'folder' ? node?.path : node?.file
-  const priv = path && store.shareInfo.shared?.[path] === false
-  items.push({
-    id: 'share',
-    label: priv ? '恢复对外分享' : '不对外分享',
-    icon: priv ? PhEye : PhEyeSlash
-  })
-  items.push({ id: 'delete', label: tree.menu.kind === 'folder' ? '删除目录' : '删除', icon: PhTrash, danger: true })
   return items
 })
+
+async function goEntry() {
+  if ((store.isDirty || store.saving) && !(await store.save())) return
+  location.assign(API_BASE + '/')
+}
 
 function onMenuPick(item) {
   const kind = tree.menu.kind
   const node = tree.menu.node
   tree.closeMenu()
-  if (!node) return
-  if (item.id === 'share') {
-    const path = kind === 'folder' ? node.path : node.file
-    const priv = store.shareInfo.shared?.[path] === false
-    guardShare(() => store.setShared(path, priv))
+  if (!node || item.disabled) return
+  if (item.id.startsWith('access-')) {
+    store.requestAccess(item.id === 'access-lock' && node.lockedAt ? node.lockedAt : (node.path || node.file), item.id === 'access-lock' ? { locked: !node.locked } : { shared: node.shared === false }, item.label)
+    return
+  }
+  /* 知识库那几个动作：名字就是文件夹名，所以改名 = 重命名文件夹 */
+  if (kind === 'lib') {
+    const lib = { name: node.name, path: node.path, docs: node.docs, shared: node.shared }
+    if (item.id === 'lib-icon') pickLibIcon(lib)
+    else if (item.id === 'lib-rename') startRename(lib)
+    else if (item.id === 'lib-delete') deleteLib(lib)
     return
   }
   if (item.id === 'new-doc') emit('create-doc', node.path)
@@ -661,9 +1215,18 @@ function onMenuPick(item) {
   else if (item.id === 'delete') emit(kind === 'folder' ? 'delete-category' : 'delete-doc', node)
 }
 
-/** 某一层现在是哪些条目（名字列表，目录名 / 带扩展名的文件名），顺序就是服务端给的顺序 */
-function entriesOf(parent) {
-  return (nodesOf(parent) || []).map((n) => (n.type === 'folder' ? n.name : n.file.slice(n.file.lastIndexOf('/') + 1)))
+/** 用用户眼前的顺序算拖拽落点；不然名称/时间视图下会落到另一行。 */
+function entriesOf(parent, mode = sortMode.value) {
+  let nodes = [...(nodesOf(parent) || [])]
+  if (mode !== 'manual' || groupMode.value === 'flat') {
+    const files = nodes.filter((n) => n.type !== 'folder')
+    const folders = nodes.filter((n) => n.type === 'folder')
+    if (mode === 'recent') files.sort((a, b) => (b.mtime || 0) - (a.mtime || 0))
+    else if (mode === 'name') files.sort((a, b) => byName(a, b))
+    if (mode !== 'manual') folders.sort((a, b) => byName(a, b))
+    nodes = [...files, ...folders]
+  }
+  return nodes.map((n) => (n.type === 'folder' ? n.name : n.file.slice(n.file.lastIndexOf('/') + 1)))
 }
 
 /** 从子节点列表里找一个目录，给拖拽算顺序用 */
@@ -674,8 +1237,12 @@ function parentOf(p) {
 
 function nodesOf(parent) {
   let list = props.nodes
-  if (!parent) return list
-  for (const seg of String(parent).split('/')) {
+  const root = currentLib.value || ''
+  if (!parent || parent === root) return list
+  const relative = root && String(parent).startsWith(root + '/')
+    ? String(parent).slice(root.length + 1)
+    : String(parent)
+  for (const seg of relative.split('/')) {
     const hit = (list || []).find((n) => n.type === 'folder' && n.name === seg)
     if (!hit) return []
     list = hit.children
@@ -732,6 +1299,44 @@ watch(
   },
   { immediate: true }
 )
+
+/*
+ * 换库后重置折叠状态 —— 但必须等**新库的树到手**再重置。
+ *
+ * 这里踩过一次：libEpoch 一变就重置，而那一刻 props.nodes 还是旧库的树，
+ * 于是拿旧路径建了折叠集合；等新树到了，里面一个路径都对不上，
+ * 表现就是"一换库（或一改代码）所有文件夹全展开"。
+ *
+ * 所以只先记一个待办，等树真的换了（且内容确实不同）再按新树重置。
+ */
+let libJustSwitched = false
+watch(
+  () => store.libEpoch,
+  () => { libJustSwitched = true }
+)
+watch(
+  () => props.nodes,
+  (nodes) => {
+    if (!libJustSwitched || !nodes.length) return
+    libJustSwitched = false
+    collapseAll(nodes)
+  }
+)
+
+/** 把这棵树里的目录全部收起 */
+function collapseAll(nodes) {
+  const next = new Set()
+  const walk = (list) => {
+    for (const n of list) {
+      if (n.type !== 'folder') continue
+      next.add(n.path)
+      walk(n.children || [])
+    }
+  }
+  walk(nodes)
+  collapsedCats.value = next
+  catsInitialized = true
+}
 
 const menuOpen = ref(false)
 const searchOpen = ref(false)
@@ -847,7 +1452,7 @@ const flatDocs = computed(() => {
   const q = query.value.trim().toLowerCase()
   const list = flatten(props.nodes, '', []).filter((d) => !q || d.name.toLowerCase().includes(q))
   if (sortMode.value === 'recent') list.sort((a, b) => (b.mtime || 0) - (a.mtime || 0))
-  else list.sort(byName)
+  else if (sortMode.value === 'name') list.sort(byName)
   return list
 })
 
@@ -885,105 +1490,162 @@ function relTime(ms) {
 function onDocClick(e) {
   if (!e.target.closest('.side-menu, .icon-btn')) menuOpen.value = false
 }
+function onLibEscape(e) {
+  if (e.key !== 'Escape' || !libPanel.open || !isMobileLibView()) return
+  if (tree.menu.open) {
+    tree.closeMenu()
+    return
+  }
+  closeLibPanel()
+}
 onMounted(() => document.addEventListener('click', onDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+onMounted(() => document.addEventListener('keydown', onLibEscape))
+onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 </script>
 
 <style scoped>
-/* logo 菜单：两级面板，跟应用其他浮层一套质感 */
-/* 两级之间：淡入 + 轻微横移，方向跟着"前进/后退" */
-.kb-swap-enter-active,
-.kb-swap-leave-active {
-  transition: opacity 0.14s ease, transform 0.14s ease;
-}
-.kb-swap-enter-from {
-  opacity: 0;
-  transform: translateX(6px);
-}
-.kb-swap-leave-to {
-  opacity: 0;
-  transform: translateX(-6px);
-}
-
-.kb-menu {
-  position: fixed;
-  z-index: 90;
-  min-width: 196px;
-  padding: 5px;
-  background: var(--c-pop);
-  border: 1px solid var(--c-line);
-  border-radius: 10px;
-  box-shadow: var(--c-pop-shadow);
-}
-.kb-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 7px 8px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  color: var(--c-sub);
-  text-align: left;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.kb-item:hover:not(:disabled) {
-  background: var(--c-hover);
-  color: var(--c-ink);
-}
-.kb-item:disabled {
-  cursor: default;
-}
-.kb-item-icon {
-  color: var(--c-faint);
+/* 遮罩只属于手机弹窗，桌面知识库栏仍按原布局工作。 */
+.lib-modal-backdrop, .lib-title-mobile, .lib-close-mobile { display: none; }
+.lib-backdrop-enter-active, .lib-backdrop-leave-active { transition: opacity 0.2s ease; }
+.lib-backdrop-enter-from, .lib-backdrop-leave-to { opacity: 0; }
+/* 知识库面板：参与布局的一列，规格与内部侧边栏逐项对齐 */
+.lib-panel {
+  position: relative;
+  width: var(--lib-w, 236px);
   flex-shrink: 0;
-}
-.kb-item-name {
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-panel);
+  border-right: 1px solid var(--c-line);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.kb-item-arrow {
-  color: var(--c-faint);
+.lib-panel-enter-active, .lib-panel-leave-active {
+  transition: width 0.22s ease, opacity 0.22s ease;
 }
-.kb-item.is-current {
-  color: var(--c-ink);
+.lib-panel-enter-from, .lib-panel-leave-to {
+  width: 0;
+  opacity: 0;
 }
-.kb-item.is-soon {
-  color: var(--c-faint);
+/* 头部：与侧边栏品牌区同高同内边距，两栏并排时基线齐 */
+.lib-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 52px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--c-line);
 }
-.kb-soon {
-  font-size: 10.5px;
-  color: var(--c-faint);
+.lib-panel-title { font-size: 12.5px; color: var(--c-sub); }
+.lib-panel-head-acts { display: flex; align-items: center; gap: 2px; }
+.lib-panel-list { flex: 1; overflow-y: auto; padding: 10px 8px; }
+/* 拖拽条：贴在面板右缘，与文档栏那条一个做法 */
+.lib-panel-resize {
+  position: absolute;
+  top: 0; bottom: 0; right: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
 }
-.kb-back {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 5px 8px 7px;
-  font-size: 11.5px;
-  color: var(--c-faint);
-}
-.kb-back:hover {
-  color: var(--c-ink);
-}
-.kb-item-logo {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  flex-shrink: 0;
+/* 手机端是居中的知识库弹窗，列表在弹窗内部滚动。 */
+@media (max-width: 820px) {
+  .lib-modal-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 20, 30, 0.42);
+  }
+  .lib-title-desktop, .lib-close-desktop { display: none; }
+  .lib-title-mobile, .lib-close-mobile { display: inline; }
+  .lib-panel {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    bottom: auto;
+    z-index: 60;
+    width: min(420px, calc(100vw - 32px));
+    max-height: min(560px, 76dvh);
+    transform: translate(-50%, -50%);
+    border: 1px solid var(--c-line);
+    border-radius: 16px;
+    background: var(--c-pop);
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22);
+  }
+  .lib-panel-enter-from, .lib-panel-leave-to {
+    transform: translate(-50%, -46%) scale(0.97);
+    opacity: 0;
+  }
+  .lib-panel-enter-active, .lib-panel-leave-active {
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .lib-panel-resize { display: none; }
+  .lib-panel-head { height: 56px; padding-inline: 18px 12px; }
+  .lib-panel-title { font-size: 15px; color: var(--c-ink); }
+  .lib-panel-list { padding: 8px; }
 }
 
-.kb-menu-sep {
-  display: none;
+/* 相邻两行之间留一点缝：不然悬停高亮挨在一起，看着像连成一块 */
+.lib-row + .lib-row { margin-top: 2px; }
+.lib-row {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  transition: background 0.15s ease;
 }
-.kb-menu-title,
-.kb-menu-empty {
-  display: none;
+.lib-row.is-dragging { opacity: 0.45; }
+.lib-row:hover { background: var(--c-hover); }
+.lib-row.is-current { background: var(--c-hover); }
+/* 图标：与侧边栏的文档图标同尺寸（13px），行内不再单独占位 */
+.lib-row-icon { width: 17px; height: 17px; flex-shrink: 0; object-fit: contain; }
+.lib-row-name {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start;
+  text-align: left; padding: 0;
 }
+.lib-row-text {
+  font-size: 12.5px; color: var(--c-ink); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 篇数做成和侧边栏时间戳一样的浅色小字，靠右 */
+.lib-row-meta { font-size: 11px; color: var(--c-faint); margin-top: 1px; }
+/* 就地改名的输入框：同一行同一字号 */
+.lib-row-input {
+  flex: 1; min-width: 0;
+  font-size: 12.5px;
+  color: var(--c-ink);
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  outline: none;
+}
+.lib-row-input:focus { border-color: var(--c-line); }
+/* 行内操作：19px，与侧边栏的 .icon-btn.xs 一致；悬停才出现 */
+.lib-row-act {
+  flex-shrink: 0; width: 19px; height: 19px; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--c-faint); opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+/*
+ * 面板行的操作按钮显隐。
+ *
+ * .acts-btn 自带的规则只认 .cat-row / .doc-row（见 style.css），
+ * 面板的行是 .lib-row，不在那两个选择器里 —— 按钮会一直停在 opacity:0，
+ * 看着就是"知识库里没有三个点"。这里补上自己那一条。
+ */
+.lib-row:hover .acts-btn,
+.lib-row:focus-within .acts-btn { opacity: 1; }
+.lib-row-act:hover { background: var(--c-line); color: var(--c-ink); }
+/* 左上角展开知识库的提示 */
+/*
+ * 标题两行：第一行是主标题，第二行是副标题。
+ * 副标题只是略小一点、颜色淡一点 —— 拉得太小会像注脚，反而看不出是同一组。
+ * 主标题不加粗：这里本身已经是标题位，再加粗整块就太重了。
+ */
+.brand-line.is-title { font-size: 17px; }
+.brand-line.is-sub { font-size: 14.5px; color: var(--c-sub); }
 .home-link {
   display: none;
 }
@@ -1133,4 +1795,14 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   opacity: 0;
   transform: translateY(-4px);
 }
+</style>
+
+<style scoped>
+.is-reader-rail { background:transparent!important; border:0!important; overflow:visible!important; z-index:60 }
+.reader-rail { width:44px; display:flex; align-items:center; flex-direction:column; padding-top:16px }
+.manage-entry { margin:0 12px 10px; padding:8px 10px; display:flex; align-items:center; gap:8px; border:1px solid var(--c-line); border-radius:7px; color:var(--c-sub); font-size:12px; text-align:left; cursor:pointer; background:var(--c-surface) }
+.manage-entry:hover { background:var(--c-field); color:var(--c-text) }
+.manage-entry:focus-visible { outline:2px solid var(--c-ink); outline-offset:2px }
+.entry-chevron { margin-left:auto }
+.tree-menu-item:disabled { opacity:.45; cursor:default }
 </style>

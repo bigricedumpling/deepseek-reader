@@ -26,18 +26,154 @@ if (import.meta.hot) {
 
 import { $prose } from '@milkdown/kit/utils'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
-import { wrapInList } from '@milkdown/kit/prose/schema-list'
+import { lift, wrapIn } from '@milkdown/kit/prose/commands'
+import { wrapInList, liftListItem, sinkListItem } from '@milkdown/kit/prose/schema-list'
+
+/* ------------------------------------------------------------------ *
+ * 改这一块是什么块（菜单里的「转为」和快捷键共用）
+ *
+ * 之前只有「段落 ⇄ 标题」这一种走 setBlockType，标题级别压根没传，
+ * 于是不管按 ⌘⌥2 还是 ⌘⌥3 都落到 heading 的默认级别（1）——
+ * 现象就是「h1 改不成 h2」。这里把级别、代码块、列表、引用一起补齐。
+ * ------------------------------------------------------------------ */
+
+/** 能整块改类型的块：普通文本块，外加代码块（它的内容也是纯文本） */
+function isBlockLike(node) {
+  return !!node && (node.isTextblock || node.type.name === 'code_block')
+}
+
+/** 光标外面还套着引用吗 */
+function inQuote(state) {
+  const { $from } = state.selection
+  for (let d = $from.depth; d > 0; d--) {
+    if ($from.node(d).type.name === 'blockquote') return true
+  }
+  return false
+}
+
+/** 菜单里那几个「标题 / 正文 / 代码块」的目标类型与属性 */
+function targetOf(schema, kind) {
+  if (kind === 'paragraph') return { type: schema.nodes.paragraph, attrs: null }
+  if (kind === 'code_block') return { type: schema.nodes.code_block, attrs: { language: '' } }
+  if (/^h[1-6]$/.test(kind)) {
+    return { type: schema.nodes.heading, attrs: { level: Number(kind.slice(1)) } }
+  }
+  return null
+}
+
+const LIST_KINDS = ['bullet_list', 'ordered_list', 'task_list']
+
+/**
+ * 「当前这一块」是哪一块。
+ *
+ * 两种选区都要认：普通光标（$from 往上找），以及整块选中（NodeSelection）——
+ * 代码块、表格、图片被点选时是后者，selection.$from.depth 是 0，只按光标找会一个都找不到，
+ * 于是「再按一次 ⌘⌥C 变回正文」就没反应了。
+ */
+function blockAnchor(state) {
+  const sel = state.selection
+  if (sel.node) return { node: sel.node, start: sel.from }
+  const $from = sel.$from
+  let depth = $from.depth
+  while (depth > 0 && !isBlockLike($from.node(depth))) depth--
+  if (!depth) return null
+  return { node: $from.node(depth), start: $from.before(depth) }
+}
+
+/** 光标（或选中的块）现在是什么（给菜单打勾、给快捷键判断用） */
+export function blockKindOf(state) {
+  const sel = state.selection
+  if (sel.node) {
+    const node = sel.node
+    if (node.type.name === 'heading') return 'h' + node.attrs.level
+    return node.type.name
+  }
+  const { $from } = sel
+  for (let d = $from.depth; d > 0; d--) {
+    const node = $from.node(d)
+    const name = node.type.name
+    if (name === 'blockquote') return 'blockquote'
+    if (name === 'bullet_list' || name === 'ordered_list') {
+      const item = d + 1 <= $from.depth ? $from.node(d + 1) : null
+      const task = name === 'bullet_list' && item && typeof item.attrs.checked === 'boolean'
+      return task ? 'task_list' : name
+    }
+  }
+  const anchor = blockAnchor(state)
+  if (!anchor) return ''
+  const node = anchor.node
+  if (node.type.name === 'heading') return 'h' + node.attrs.level
+  return isBlockLike(node) ? node.type.name : ''
+}
 
 /** 把光标所在的那一块换成另一种块 */
-function changeBlockType(name) {
+export function turnInto(kind) {
   return (state, dispatch) => {
-    const type = state.schema.nodes[name]
-    if (!type) return false
-    const range = state.selection.$from.blockRange()
-    if (!range) return false
-    if (dispatch) dispatch(state.tr.setBlockType(range.start, range.end, type))
+    const target = targetOf(state.schema, kind)
+    if (!target || !target.type) return false
+    const anchor = blockAnchor(state)
+    if (!anchor) return false
+    const node = anchor.node
+    const start = anchor.start
+    const attrs = target.attrs
+    if (node.type === target.type) {
+      if (!attrs) return false
+      if (kind === 'code_block') return false
+      if (node.attrs.level === attrs.level) return false
+    }
+
+    let tr = state.tr
+    if (node.isTextblock && node.type.name !== 'code_block') {
+      tr = tr.setBlockType(start + 1, start + node.content.size + 1, target.type, attrs)
+    } else {
+      // 代码块（或别的非文本块）→ 文本块：把原内容原样搬过去，内容模型不合就别硬转
+      if (!target.type.validContent(node.content)) return false
+      tr = tr.replaceWith(start, start + node.nodeSize, target.type.create(attrs, node.content, []))
+    }
+    // 代码块里不能带加粗/链接这些标记，转过去的时候一并洗掉
+    if (kind === 'code_block') tr = tr.removeMark(start + 1, start + node.nodeSize - 1)
+    if (dispatch) dispatch(tr.scrollIntoView())
     return true
   }
+}
+
+/** 在列表里往上抬一层（抬到顶层为止） */
+function liftOutOfList(view) {
+  let guard = 0
+  while (inList(view.state) && guard++ < 8) {
+    const item = view.state.schema.nodes.list_item
+    if (!item) return
+    if (!liftListItem(item)(view.state, view.dispatch, view)) return
+  }
+}
+
+/**
+ * 菜单里点一个类型：引用/列表里先抬到顶层，再改。
+ * 不抬的话，「把列表项改成二级标题」改出来的标题还套在列表项里，看起来像没生效。
+ */
+export function applyBlockKind(view, kind) {
+  if (!view) return false
+  view.focus()
+  if (LIST_KINDS.includes(kind)) {
+    if (inList(view.state) && blockKindOf(view.state) !== kind) liftOutOfList(view)
+    const name = kind === 'ordered_list' ? 'ordered_list' : 'bullet_list'
+    return toggleList(name, { task: kind === 'task_list' })(view.state, view.dispatch, view)
+  }
+  liftOutOfList(view)
+  if (kind !== 'blockquote' && inQuote(view.state)) lift(view.state, view.dispatch, view)
+  if (kind === 'blockquote') return wrapQuote(view)
+  return turnInto(kind)(view.state, view.dispatch, view)
+}
+
+/** 段落 ⇄ 引用 */
+function wrapQuote(view) {
+  const quote = view.state.schema.nodes.blockquote
+  if (!quote) return false
+  if (inQuote(view.state)) {
+    lift(view.state, view.dispatch, view)
+    return true
+  }
+  return wrapIn(quote)(view.state, view.dispatch, view)
 }
 
 /** 光标是不是已经在某种列表里 */
@@ -63,7 +199,6 @@ function toggleList(name, { task = false } = {}) {
     }
     if (already) {
       // 已经在里面了：把这一项抬出去，等于关掉列表
-      const { liftListItem } = listHelpers
       return liftListItem(itemType)(state, dispatch, view)
     }
     if (inList(state)) return false
@@ -106,13 +241,6 @@ function moveBlock(dir) {
     }
     return true
   }
-}
-
-/** 列表缩进用的两个命令（懒加载，避免顶层 import 一大堆用不上的） */
-let listHelpers = {}
-async function loadListHelpers() {
-  const mod = await import('@milkdown/kit/prose/schema-list')
-  listHelpers = { liftListItem: mod.liftListItem, sinkListItem: mod.sinkListItem }
 }
 
 /**
@@ -274,10 +402,10 @@ export function insertDocLink(name, relPath, fromDoc) {
   }
 }
 
-const TITLES = { 1: 'h1', 2: 'h2', 3: 'h3', 0: 'paragraph' }
+/* ⌘⌥1…6 / ⌘⌥0：一到六级标题 / 正文；⌘⌥C：代码块 */
+const TITLES = { 0: 'paragraph', 1: 'h1', 2: 'h2', 3: 'h3', 4: 'h4', 5: 'h5', 6: 'h6' }
 
 export function editorShortcuts(props = {}) {
-  loadListHelpers()
   return $prose(
     () =>
       new Plugin({
@@ -293,9 +421,16 @@ export function editorShortcuts(props = {}) {
               return true
             }
 
-            // 改块类型：⌘⌥1/2/3/0
+            // 改块类型：⌘⌥1…6 / ⌘⌥0（改的是「光标所在的这一块」）
             if (mod && event.altKey && TITLES[key]) {
-              return run(changeBlockType(TITLES[key]))
+              event.preventDefault()
+              return applyBlockKind(view, TITLES[key])
+            }
+            // ⌘⌥C：正文 / 标题 → 代码块（再按一次收回正文）
+            if (mod && event.altKey && key.toLowerCase() === 'c') {
+              event.preventDefault()
+              const back = blockKindOf(state) === 'code_block'
+              return applyBlockKind(view, back ? 'paragraph' : 'code_block')
             }
             // 列表 / 待办 / 引用
             if (mod && event.shiftKey && !event.altKey) {
@@ -310,9 +445,8 @@ export function editorShortcuts(props = {}) {
             }
             // 列表里 Tab / ⇧Tab 缩进（不在列表里不动，让浏览器接管）
             if (key === 'Tab' && !mod && !event.altKey && inList(state)) {
-              const { liftListItem, sinkListItem } = listHelpers
               const item = state.schema.nodes.list_item
-              if (!liftListItem || !item) return false
+              if (!item) return false
               run(event.shiftKey ? liftListItem(item) : sinkListItem(item))
               // 不管缩进成没成，列表里的 Tab 都不能掉进正文变成一个制表符
               event.preventDefault()

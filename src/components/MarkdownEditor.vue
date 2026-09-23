@@ -9,10 +9,10 @@
         <button class="lossy-btn" @click="showDiff = !showDiff">
           {{ showDiff ? '收起差异' : '差在哪' }}
         </button>
-        <button class="lossy-btn is-primary" @click="emit('canonize', roundTripText)">
+        <button v-if="!readonly" class="lossy-btn is-primary" @click="emit('canonize', roundTripText)">
           按编辑器规范重排这篇
         </button>
-        <span class="lossy-hint">重排 = 接受上面列出的差异（会改写磁盘上的这份文件），之后这篇就能富文本编辑</span>
+        <span v-if="!readonly" class="lossy-hint">重排 = 接受上面列出的差异（会改写磁盘上的这份文件），之后这篇就能富文本编辑</span>
       </p>
       <ul v-if="showDiff" class="lossy-diff">
         <li v-for="d in diff" :key="d.line">
@@ -32,6 +32,15 @@
       @input="onSourceInput"
     />
     <div v-show="!lossy" ref="host" class="crepe-host"></div>
+
+    <!-- 块左侧那个六点手柄，点一下弹出来的「转为」菜单 -->
+    <BlockTypeMenu
+      v-if="menu"
+      :x="menu.x"
+      :y="menu.y"
+      :groups="menu.groups"
+      @pick="onMenuPick"
+    />
   </div>
 </template>
 
@@ -39,8 +48,13 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Crepe } from '@milkdown/crepe'
 import { renderMermaidSvg } from '../utils/mermaid'
-import { normalizeMarkdown, diffLines } from '../utils/markdown-normalize'
-import { editorShortcuts } from '../utils/editor-shortcuts'
+import { normalizeMarkdown, diffLines, isCosmeticOnly } from '../utils/markdown-normalize'
+import { editorShortcuts, applyBlockKind, blockKindOf } from '../utils/editor-shortcuts'
+import { editorFold, bindFoldView, refreshFolds } from '../utils/editor-fold'
+import { foldKey, isFolded, isFoldable, setFoldable, toggleFold, foldState, foldDoc } from '../utils/toc-fold'
+import BlockTypeMenu from './BlockTypeMenu.vue'
+import { editorViewCtx } from '@milkdown/kit/core'
+import { TextSelection } from '@milkdown/kit/prose/state'
 
 /*
  * 编辑器是在 onMounted 里建出来的实例，组件热更新不会重建它 ——
@@ -109,6 +123,22 @@ onMounted(async () => {
     root: host.value,
     defaultValue: props.value,
     featureConfigs: {
+      [Crepe.Feature.Toolbar]: {
+        buildToolbar: (builder) => {
+          const groups = builder.build()
+          builder.clear()
+          builder.addGroup('block-type', '块格式').addItem('block-type', {
+            label: '转换格式',
+            icon: '<span class="block-type-label">转换格式 <span aria-hidden="true">⌄</span></span>',
+            active: () => false,
+            onRun: () => openSelectionMenu()
+          })
+          for (const group of groups) {
+            const target = builder.addGroup(group.key, group.label)
+            for (const item of group.items) target.addItem(item.key, item)
+          }
+        }
+      },
       [Crepe.Feature.Placeholder]: {
         text: '打斜杠 / 插入标题、表格、代码块',
         mode: 'block'
@@ -133,10 +163,9 @@ onMounted(async () => {
           h1: { label: '一级标题' },
           h2: { label: '二级标题' },
           h3: { label: '三级标题' },
-          // 四级以下没人用，留着只会把菜单拉长
-          h4: null,
-          h5: null,
-          h6: null,
+          h4: { label: '四级标题' },
+          h5: { label: '五级标题' },
+          h6: { label: '六级标题' },
           quote: { label: '引用' },
           divider: { label: '分割线' }
         },
@@ -166,6 +195,8 @@ onMounted(async () => {
   // 访客（分享链接进来的人）是只读的：编辑器层面直接关掉，不靠前端藏按钮
   if (props.readonly) crepe.setReadonly(true)
   crepe.editor.use(editorShortcuts({ docId: props.docId, onOpenDoc: (path) => emit('open-doc', path) }))
+  // 正文里的标题折叠（跟右侧目录共用一份折叠状态）
+  crepe.editor.use(editorFold())
 
   crepe.on((listener) => {
     listener.markdownUpdated((_ctx, md, prev) => {
@@ -181,8 +212,28 @@ onMounted(async () => {
 
   await crepe.create()
 
+  // 折叠装饰要能跟着目录那边的操作重画
+  bindFoldView(viewOf())
+
+  /*
+   * 块手柄上的委托：手柄是 Crepe 自己造的 DOM，点它不会走 Vue 的事件，
+   * 所以在宿主上捕获一层。第一个按钮是「加号」（加点下面插入新块），
+   * 第二个是六点拖拽手柄 —— 单击它弹「转为」菜单，拖动就还给 Crepe 去挪块。
+   */
+  host.value?.addEventListener('pointerdown', onHandleDown, true)
+  host.value?.addEventListener('click', onHandleClick, true)
+  host.value?.addEventListener('click', onHeadingClick, true)
+  document.addEventListener('pointerdown', onDocDown, true)
+  document.addEventListener('keydown', onDocKey)
+  window.addEventListener('scroll', onDocScroll, true)
+
   // 开发期把编辑器和原文快照暴露出来，方便查往返到底差在哪
   if (import.meta.env.DEV) {
+    window.__fold = {
+      state: () => ({ doc: foldDoc.value, folds: foldState.value }),
+      refresh: () => refreshFolds(),
+      view: () => viewOf()
+    }
     window.__crepe = crepe
     window.__baseline = baseline
     window.__normalize = normalizeMarkdown
@@ -198,18 +249,11 @@ onMounted(async () => {
   // （最典型的是表格单元格里的 <br>），这篇就不能自动保存，否则会静默损坏原文
   const roundTrip = normalizeMarkdown(crepe.getMarkdown(), baseline)
   const differs = roundTrip.replace(/\s+$/, '') !== String(baseline).replace(/\s+$/, '')
-  /*
-   * 只读模式不降级。
-   *
-   * 降级成源码编辑的用意是「防止自动保存把原文静默改写」—— 但那是个写回风险，
-   * 只读访客根本不会写回，所以这个风险不存在，降级只剩副作用：
-   * 审阅人打开一篇结构稍复杂的文档，看到的是一屏 markdown 原文而不是排版好的页面。
-   * 那正是他最不该看到的东西。
-   */
-  lossy.value = props.readonly ? false : differs
+  // 只有格式写法不同才让富文本继续工作；真正有内容差异时保留源码编辑。
+  // 打开文档本身绝不自动改写磁盘内容。
+  lossy.value = !props.readonly && differs && !isCosmeticOnly(baseline, roundTrip)
   emit('lossy', lossy.value)
   if (lossy.value) {
-    // 把差异算出来：光说"表达不了"没法让用户决策，得让他看见是哪一行、差在哪
     roundTripText.value = roundTrip
     diff.value = diffLines(baseline, roundTrip, 6)
   }
@@ -232,14 +276,249 @@ onMounted(async () => {
 
   // 表格列宽：把这篇存过的取回来，再挂上拖拽
   colw.load()
-  colw.attach()
+  if (!props.readonly) colw.attach()
 })
+
+/* ------------------------------------------------------------------ *
+ * 块左侧手柄：单击弹出「转为」菜单
+ *
+ * 以前改块类型只有两条路：打斜杠菜单（只能在新块上用）、和 ⌘⌥1/2/3 快捷键（得先知道）。
+ * 结果就是「已经有的一段正文想改成二级标题/代码块」根本找不到入口。
+ * 六点手柄本来就浮在每一块的左边，让它顺手把这件事做了。
+ * ------------------------------------------------------------------ */
+const menu = ref(null)
+let handleDown = null
+
+function viewOf() {
+  try {
+    return crepe?.editor?.ctx?.get(editorViewCtx) || null
+  } catch {
+    return null
+  }
+}
+
+function closeMenu() {
+  menu.value = null
+}
+
+/** 与加粗等操作共用 Crepe 浮窗，保留其维护的编辑器选区。 */
+function openSelectionMenu() {
+  const view = viewOf()
+  if (!view || props.readonly || lossy.value) return
+  if (menu.value) { closeMenu(); return }
+  const button = host.value?.querySelector('[data-toolbar-item="block-type"]')
+  const rect = button?.getBoundingClientRect()
+  if (!rect) return
+  const anchor = view.state.selection.$from
+  const block = anchor.depth ? view.nodeDOM(anchor.before(anchor.depth)) : null
+  const foldInfo = foldInfoOf(block)
+  menu.value = {
+    x: Math.max(8, Math.min(rect.left, window.innerWidth - 186)),
+    y: rect.bottom + 6,
+    groups: menuGroups(blockKindOf(view.state), foldInfo),
+    foldInfo
+  }
+}
+
+/** 手柄纵向中心落在哪个顶级块上（手柄永远贴在某一块的左侧） */
+function topBlockAtRow(clientY) {
+  const pm = host.value?.querySelector('.ProseMirror')
+  if (!pm) return null
+  for (const child of pm.children) {
+    const r = child.getBoundingClientRect()
+    if (clientY >= r.top - 3 && clientY <= r.bottom + 3) return child
+  }
+  return null
+}
+
+/** 顶级标题的折叠键：跟目录面板、正文装饰用的是同一套（级别|文字|同名第几个） */
+function foldInfoOf(el) {
+  if (!el || !/^H[1-6]$/.test(el.tagName)) return null
+  const pm = el.parentElement
+  if (!pm || !pm.classList.contains('ProseMirror')) return null
+  const level = Number(el.tagName.slice(1))
+  const next = el.nextElementSibling
+  const text = el.textContent.trim()
+  let nth = 0
+  for (const child of pm.children) {
+    if (child === el) break
+    if (new RegExp('^H' + level + '$').test(child.tagName) && child.textContent.trim() === text) nth++
+  }
+  const key = foldKey(level, text, nth)
+  const hasSection = !!next && (!/^H[1-6]$/.test(next.tagName) || Number(next.tagName.slice(1)) > level)
+  return { key, folded: isFolded(key), foldable: isFoldable(key), hasSection }
+}
+
+function menuGroups(cur, foldInfo) {
+  const badge = (t) => t
+  const groups = [
+    {
+      label: '转为',
+      items: [
+        { key: 'paragraph', label: '正文', icon: badge('¶') },
+        ...[1, 2, 3, 4, 5, 6].map((n) => ({
+          key: 'h' + n,
+          label: ['一', '二', '三', '四', '五', '六'][n - 1] + '级标题',
+          icon: badge('H' + n)
+        }))
+      ]
+    },
+    {
+      label: '块',
+      items: [
+        { key: 'blockquote', label: '引用', icon: badge('❝') },
+        { key: 'code_block', label: '代码块', icon: badge('{}') }
+      ]
+    },
+    {
+      label: '列表',
+      items: [
+        { key: 'bullet_list', label: '无序列表', icon: badge('•') },
+        { key: 'ordered_list', label: '有序列表', icon: badge('1.') },
+        { key: 'task_list', label: '待办列表', icon: badge('☐') }
+      ]
+    }
+  ]
+  for (const g of groups) {
+    for (const it of g.items) it.active = it.key === cur
+  }
+  if (foldInfo) {
+    groups.push({
+      label: '标题类型',
+      items: [
+        { key: foldInfo.foldable ? 'make_plain' : 'make_foldable',
+          label: foldInfo.foldable ? '转为普通标题' : '转为折叠标题',
+          icon: badge(foldInfo.foldable ? 'H' : '▾') },
+        ...(foldInfo.foldable && foldInfo.hasSection ? [{
+          key: foldInfo.folded ? 'unfold' : 'fold',
+          label: foldInfo.folded ? '展开这一节' : '收起这一节',
+          icon: badge(foldInfo.folded ? '▸' : '▾')
+        }] : [])
+      ]
+    })
+  }
+  return groups
+}
+
+function openBlockMenu(handleEl) {
+  const view = viewOf()
+  if (!view) return
+  const hr = handleEl.getBoundingClientRect()
+  const el = topBlockAtRow(hr.top + hr.height / 2)
+  if (!el) return
+  // 先把光标放进这一块，后面的命令都基于选区
+  let pos = 0
+  try {
+    pos = view.posAtDOM(el, 0)
+    view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos + 1))))
+  } catch {
+    return
+  }
+  const foldInfo = foldInfoOf(el)
+  const W = 176
+  const H = 470
+  menu.value = {
+    x: Math.max(8, Math.min(hr.right + 10, window.innerWidth - W - 8)),
+    y: Math.max(8, Math.min(hr.top, window.innerHeight - H)),
+    groups: menuGroups(blockKindOf(view.state), foldInfo),
+    el,
+    foldInfo
+  }
+}
+
+function onHandleDown(e) {
+  if (props.readonly) return
+  const toolbarItem = e.target?.closest?.('[data-toolbar-item]')
+  if (toolbarItem && toolbarItem.dataset.toolbarItem !== 'block-type') userTyped = true
+  const handle = e.target?.closest?.('.milkdown-block-handle')
+  if (!handle) return
+  const items = handle.querySelectorAll('.operation-item')
+  handleDown = {
+    x: e.clientX,
+    y: e.clientY,
+    // 第二个按钮才是六点拖拽手柄；第一个是「下面插入一块」的加号
+    drag: !!e.target.closest('.operation-item') && e.target.closest('.operation-item') === items[1]
+  }
+}
+
+function onHandleClick(e) {
+  if (props.readonly) return
+  const handle = e.target?.closest?.('.milkdown-block-handle')
+  if (!handle || !handleDown) return
+  const moved = Math.abs(e.clientX - handleDown.x) > 5 || Math.abs(e.clientY - handleDown.y) > 5
+  const isDrag = handleDown.drag
+  handleDown = null
+  // 拖过就是在挪块，不弹菜单
+  if (!isDrag || moved) return
+  e.preventDefault()
+  e.stopPropagation()
+  openBlockMenu(handle)
+}
+
+function onHeadingClick(e) {
+  const heading = e.target?.closest?.('.ProseMirror > h1, .ProseMirror > h2, .ProseMirror > h3, .ProseMirror > h4, .ProseMirror > h5, .ProseMirror > h6')
+  if (!heading || e.clientX > heading.getBoundingClientRect().left + 22) return
+  const info = foldInfoOf(heading)
+  if (!info) return
+  e.preventDefault()
+  e.stopPropagation()
+  toggleFold(info.key)
+}
+
+function onDocDown(e) {
+  if (e.target?.closest?.('.bt-menu, [data-toolbar-item="block-type"]')) return
+  if (menu.value) closeMenu()
+}
+
+/*
+ * 滚动时菜单要跟着走（它用的是固定定位，锚点一动就错位了），所以干脆关掉。
+ * 但菜单自己内部滚动（条目多、窗口矮）不能算 —— 那一下会先把菜单关掉，
+ * 点下去的坐标就落到正文上了，看起来就是「点了没反应」。
+ */
+function onDocScroll(e) {
+  if (!menu.value) return
+  const t = e.target
+  if (t && t.nodeType === 1 && t.closest && t.closest('.bt-menu')) return
+  closeMenu()
+}
+
+function onDocKey(e) {
+  if (e.key === 'Escape') closeMenu()
+}
+
+async function onMenuPick(kind) {
+  const view = viewOf()
+  const info = menu.value?.foldInfo
+  closeMenu()
+  if (!view) return
+  if (kind === 'fold' || kind === 'unfold') {
+    if (info) toggleFold(info.key)
+    return
+  }
+  if (kind === 'make_foldable' || kind === 'make_plain') {
+    if (!info) return
+    try {
+      await setFoldable(info.key, kind === 'make_foldable')
+    } catch (e) {
+      window.alert(String(e.message || e))
+    }
+    return
+  }
+  userTyped = true
+  applyBlockKind(view, kind)
+}
 
 function onSourceInput(e) {
   emit('update:value', e.target.value)
 }
 
 onBeforeUnmount(async () => {
+  host.value?.removeEventListener('pointerdown', onHandleDown, true)
+  host.value?.removeEventListener('click', onHandleClick, true)
+  host.value?.removeEventListener('click', onHeadingClick, true)
+  document.removeEventListener('pointerdown', onDocDown, true)
+  document.removeEventListener('keydown', onDocKey)
+  window.removeEventListener('scroll', onDocScroll, true)
   observer?.disconnect()
   mermaid.stop()
   colw.detach()
@@ -251,5 +530,3 @@ onBeforeUnmount(async () => {
   crepe = null
 })
 </script>
-
-

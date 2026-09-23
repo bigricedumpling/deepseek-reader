@@ -142,27 +142,29 @@ export function renderMarkdown(src, { gaps = true } = {}) {
     .replace(/<\/table>/g, '</table></div>')
 }
 
-/** 抽取 h2 / h3 生成右侧目录 */
+/** 抽取一到六级标题生成右侧目录。 */
 export function extractToc(src) {
   const toc = []
-  const lines = normalizeMathDelimiters(stripFrontMatter(src)).split('\n')
-  let inCode = false
-  for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      inCode = !inCode
-      continue
-    }
-    if (inCode) continue
-    const m = line.match(/^(#{1,3})\s+(.+?)\s*$/)
-    if (!m) continue
-    const level = m[1].length
-    const title = m[2]
-      .replace(/[*`~]/g, '')
+  const tokens = md.parse(normalizeMathDelimiters(stripFrontMatter(src)), {})
+  const plain = (parts) => (parts || []).map((part) => {
+    if (part.children?.length) return plain(part.children)
+    if (['text', 'code_inline', 'image', 'sub', 'sup', 'math_inline'].includes(part.type)) return part.content
+    if (part.type === 'softbreak' || part.type === 'hardbreak') return ' '
+    return ''
+  }).join('')
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const token = tokens[i]
+    if (token.type !== 'heading_open') continue
+    const inline = tokens[i + 1]
+    if (inline?.type !== 'inline') continue
+    const level = Number(token.tag.slice(1))
+    const foldTitle = plain(inline.children).trim()
+    const title = foldTitle
       .replace(/^[§#]+\s*/, '')
       .replace(/^\d+[.、]\s*/, '')
       .trim()
     if (!title) continue
-    toc.push({ level, title, id: slugify(m[2].replace(/[*`~]/g, '').trim()) })
+    toc.push({ level, title, foldTitle, id: slugify(inline.content) })
   }
   return toc
 }

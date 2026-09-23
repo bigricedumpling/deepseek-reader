@@ -24,7 +24,7 @@
         >
           <!-- 小三角：只给有子节的标题，收起/展开目录里的这一枝 -->
           <button
-            v-if="r.children.length"
+            v-if="r.children.length && isFoldable(r.key)"
             class="toc-fold"
             :class="{ 'is-folded': isFolded(r.key) }"
             :title="isFolded(r.key) ? '展开这一节' : '收起这一节'"
@@ -94,7 +94,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { PhSidebarSimple, PhArrowUp, PhCaretDown } from '@phosphor-icons/vue'
-import { foldKey, foldDoc, isFolded, toggleFold, unfoldKeys } from '../utils/toc-fold'
+import { foldKey, foldDoc, isFolded, isFoldable, toggleFold, unfoldKeys } from '../utils/toc-fold'
 
 const props = defineProps({
   toc: { type: Array, default: () => [] },
@@ -118,9 +118,10 @@ const emit = defineEmits(['update:collapsed', 'update:width', 'to-top', 'go-page
 const tree = computed(() => {
   const seen = {}
   const flat = (props.toc || []).map((t, i) => {
-    const k = t.level + '|' + t.title
+    const foldTitle = t.foldTitle || t.title
+    const k = t.level + '|' + foldTitle
     seen[k] = (seen[k] || 0) + 1
-    return { ...t, index: i, key: foldKey(t.level, t.title, seen[k] - 1), children: [] }
+    return { ...t, index: i, key: foldKey(t.level, foldTitle, seen[k] - 1), children: [] }
   })
   const roots = []
   const stack = []
@@ -139,7 +140,7 @@ const rows = computed(() => {
   const walk = (list, depth) => {
     for (const r of list) {
       out.push({ ...r, depth })
-      if (r.children.length && !isFolded(r.key)) walk(r.children, depth + 1)
+      if (r.children.length && (!isFoldable(r.key) || !isFolded(r.key))) walk(r.children, depth + 1)
     }
   }
   walk(tree.value, 0)
@@ -225,7 +226,7 @@ function collect() {
     heads = []
     return
   }
-  heads = [...scroller.querySelectorAll('h1, h2, h3')]
+  heads = [...scroller.querySelectorAll('h1, h2, h3, h4, h5, h6')]
 }
 
 function syncActive() {

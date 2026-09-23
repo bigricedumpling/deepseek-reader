@@ -9,7 +9,7 @@
           :class="{ 'is-drop': tree.dropInto === node.path, 'is-on': containsCurrent(node), 'is-dragging': isDragging(node) }"
           :data-level="depth"
           :style="{ paddingLeft: 8 + depth * 11 + 'px' }"
-          :draggable="!store.isGuest"
+          :draggable="store.canEdit(node)"
           @click="emit('toggle', node.path)"
           @dragstart="tree.start(node, $event)"
           @dragover="tree.overRow(node, $event)"
@@ -35,15 +35,15 @@
             @keydown.esc.prevent="tree.editCancel()"
             @blur="tree.editCommit()"
           />
-          <span v-else class="cat-name ml-2 text-[12.5px] text-[var(--c-sub)] truncate" :title="node.name">{{ node.name }}</span>
+          <span v-else class="cat-name ml-2 text-[12.5px] text-[var(--c-sub)] truncate" :title="node.name" :draggable="store.canEdit(node)">{{ node.name }}</span>
           <PhEyeSlash
-            v-if="store.shareInfo.shared?.[node.path] === false"
+            v-if="node.shared === false"
             :size="11"
             class="share-eye"
-            title="不对外分享"
+            title="不对外展示"
           />
+          <PhLock v-if="node.locked" :size="11" class="share-eye" title="已锁定" />
           <button
-            v-if="!store.isGuest"
             class="icon-btn xs acts-btn"
             title="更多操作"
             @click.stop="tree.openMenu('folder', node, $event)"
@@ -86,7 +86,7 @@
         :class="{ 'is-on': node.file === currentPath, 'is-dragging': isDragging(node), 'is-pdf': node.type === 'pdf' }"
         :data-level="depth"
         :style="{ paddingLeft: 26 + depth * 11 + 'px' }"
-        :draggable="!store.isGuest"
+        :draggable="store.canEdit(node)"
         @dragstart="tree.start(node, $event)"
         @dragover="tree.overRow(node, $event)"
         @drop.prevent="tree.drop()"
@@ -105,23 +105,25 @@
         <button
           v-else
           :class="node.type === 'pdf' || node.type === 'h5' ? 'pdf-title' : 'doc-title'"
+          :draggable="store.canEdit(node)"
           :title="node.file"
           @click="emit('select', node.file)"
-          @dblclick="tree.editStart('doc', node)"
+          @dblclick="store.canEdit(node) && tree.editStart('doc', node)"
         >
           <PhFilePdf v-if="node.type === 'pdf'" :size="13" class="doc-kind" />
           <PhFileHtml v-else-if="node.type === 'h5'" :size="13" class="doc-kind" />
           <span class="truncate">{{ node.name }}</span>
         </button>
         <PhEyeSlash
-          v-if="store.shareInfo.shared?.[node.file] === false"
+          v-if="node.shared === false"
           :size="11"
           class="share-eye"
-          title="不对外分享"
+          title="不对外展示"
         />
+        <PhLock v-if="node.locked" :size="11" class="share-eye" title="已锁定" />
         <span class="doc-time">{{ relTime(node.mtime) }}</span>
         <button
-          v-if="!store.isGuest" class="icon-btn xs acts-btn"
+          class="icon-btn xs acts-btn"
           title="更多操作"
           @click.stop="tree.openMenu('file', node, $event)"
         >
@@ -136,7 +138,7 @@
 
 <script setup>
 import { ref, computed, inject, nextTick, watch } from 'vue'
-import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree, PhEyeSlash } from '@phosphor-icons/vue'
+import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree, PhLock, PhEyeSlash } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
 
 const props = defineProps({
@@ -221,13 +223,8 @@ function isCollapsed(path) {
 /** 当前这篇在不在这个目录底下：图标实心 + 目录名高亮 */
 function containsCurrent(node) {
   if (!props.currentPath) return false
-  const walk = (n) => (n.type === 'doc' ? n.file === props.currentPath : (n.children || []).some(walk))
+  const walk = (n) => (n.type !== 'folder' ? n.file === props.currentPath : (n.children || []).some(walk))
   return (node.children || []).some(walk)
-}
-
-function parentDir(node) {
-  const i = node.file.lastIndexOf('/')
-  return i < 0 ? '' : node.file.slice(0, i)
 }
 
 /* ---------- 原位改名 ---------- */
@@ -254,28 +251,6 @@ watch(
     el?.select?.()
   }
 )
-
-/**
- * 提交改名。空值或没变就当作取消。
- *
- * 开头必须核对 editing 是不是还停在同一个目标上：回车会触发一次提交，
- * 紧接着 blur 又触发一次，第二次拿的还是改名前的旧路径，接口会报「文档不存在」。
- * 先把 editing 清掉，就等于给后面那次上了锁。
- */
-async function commitRename(kind, node) {
-  const key = kind === 'doc' ? 'doc:' + node.file : 'cat:' + node.path
-  if (editing.value !== key) return
-  editing.value = ''
-  const el = Array.isArray(editEl.value) ? editEl.value[0] : editEl.value
-  const next = (el?.value || '').trim()
-  if (!next || next === node.name) return
-  try {
-    if (kind === 'doc') await store.renameDoc(node.file, next)
-    else await store.renameCategory(node.path, next)
-  } catch (e) {
-    store.error = String(e.message || e)
-  }
-}
 
 /* ---------- 相对时间 ---------- */
 

@@ -7,7 +7,7 @@
  *
  * 三条原则：
  *   1. **默认不分享**：没勾过的节点一律不给外人看（最小暴露）。
- *   2. **子级继承**：离自己最近的那条显式设置说了算（"存档/论文与文献": true 会盖住 "存档": false）。
+ *   2. **子级继承**：任意上级隐藏时，子级不能单独公开。
  *   3. **服务端强制**：前端藏起来只是体验，真正拦人的是这里 —— 猜 URL 也拿不到。
  */
 import fs from 'node:fs'
@@ -17,7 +17,10 @@ import crypto from 'node:crypto'
 const SHARE_FILE = '.分享.json'
 
 /** 编辑模式的密码（可以用环境变量覆盖，默认就是本机用的这个） */
-export const EDIT_PASSWORD = process.env.READER_PASSWORD || 'zongzi'
+function readPasswordFile() {
+  try { return fs.readFileSync(new URL('../.admin-password', import.meta.url), 'utf8').trim() } catch { return '' }
+}
+export const EDIT_PASSWORD = process.env.READER_PASSWORD || readPasswordFile()
 
 export function createShare(root) {
   const file = path.join(root, SHARE_FILE)
@@ -29,13 +32,14 @@ export function createShare(root) {
         return {
           tokens: raw.tokens && typeof raw.tokens === 'object' ? raw.tokens : {},
           shared: raw.shared && typeof raw.shared === 'object' ? raw.shared : {},
+          locked: raw.locked && typeof raw.locked === 'object' ? raw.locked : {},
           editable: raw.editable && typeof raw.editable === 'object' ? raw.editable : {}
         }
       }
     } catch {
       /* 还没有这个文件，或者读坏了：当成"什么都没分享" */
     }
-    return { tokens: {}, shared: {}, editable: {} }
+    return { tokens: {}, shared: {}, editable: {}, locked: {} }
   }
 
   let state = load()
@@ -93,29 +97,38 @@ export function createShare(root) {
     reloadIfChanged()
     if (!rel) return true
     const parts = String(rel).split('/').filter(Boolean)
-    for (let i = parts.length; i >= 1; i--) {
+    let visible = false
+    for (let i = 1; i <= parts.length; i++) {
       const key = parts.slice(0, i).join('/')
-      const v = state.shared[key]
-      if (v === true) return true
-      if (v === false) return false
+      if (!Object.hasOwn(state.shared, key)) continue
+      if (state.shared[key] === false) return false
+      if (state.shared[key] === true) visible = true
     }
-    // 没标过就是对外可见 —— 默认分享整个库，"个别不分享"靠往上标 false。
-    // （离自己最近的那条显式设置说了算，所以"面试 不分享、但 面试/公开示例 分享"也表达得出来。）
-    return true
+    return visible
   }
 
-  /** 这个路径允许访客编辑吗（二期才真正开放写，这里先把开关存好） */
-  function isEditable(rel) {
+
+  function lockedAt(rel) {
     reloadIfChanged()
-    if (!rel) return false
     const parts = String(rel).split('/').filter(Boolean)
-    for (let i = parts.length; i >= 1; i--) {
+    for (let i = 1; i <= parts.length; i++) {
       const key = parts.slice(0, i).join('/')
-      const v = state.editable[key]
-      if (v === true) return isShared(key)
-      if (v === false) return false
+      if (state.locked[key] === true) return key
     }
-    return false
+    return ''
+  }
+  function isLocked(rel) { return !!lockedAt(rel) }
+  function isEditable(rel) { return !!rel && isShared(rel) && !isLocked(rel) }
+  function setLocked(rel, value) {
+    reloadIfChanged()
+    const parent = rel.split('/').slice(0, -1).join('/')
+    if (!value && parent && isLocked(parent)) throw new Error('请先解锁上级：' + lockedAt(parent))
+    state.locked[rel] = !!value
+    save()
+  }
+  function status(rel) { return { shared: isShared(rel), locked: isLocked(rel), lockedAt: lockedAt(rel) } }
+  function decorate(nodes) {
+    return nodes.map(n => ({ ...n, ...status(n.path || n.file), ...(n.children ? { children: decorate(n.children) } : {}) }))
   }
 
   /** 过滤给访客看的树：不分享的整枝剪掉（不是隐藏，是根本不下发） */
@@ -142,17 +155,10 @@ export function createShare(root) {
   function setShared(rel, on) {
     const key = String(rel || '').replace(/^\/+|\/+$/g, '')
     if (!key) return
-    if (on) {
-      const parts = key.split('/')
-      let blocked = false
-      for (let i = 1; i < parts.length; i++) {
-        if (state.shared[parts.slice(0, i).join('/')] === false) blocked = true
-      }
-      if (blocked) state.shared[key] = true
-      else delete state.shared[key]
-    } else {
-      state.shared[key] = false
-    }
+    reloadIfChanged()
+    const parent = key.split('/').slice(0, -1).join('/')
+    if (on && parent && !isShared(parent)) throw new Error('请先将上级目录设为对外展示')
+    state.shared[key] = !!on
     save()
   }
 
@@ -164,34 +170,63 @@ export function createShare(root) {
     save()
   }
 
+  /**
+   * 路径改名/移动之后，把分享与可编辑的设置一起搬到新路径上。
+   *
+   * 不搬会出事：判断可见性是「从自己逐级往上找最近的一条显式设置」，
+   * 所以把 面试/x.md 挪出 面试/ 之后，它就不再受 面试=false 约束，
+   * 而"没标过 = 可见" —— 一篇本来不公开的稿子，一拖就对外可见了。
+   * 子路径（整棵目录被挪走）要跟着一起搬。
+   *
+   * from 与 to 都是相对文档根的路径；两者相同就什么都不做。
+   */
+  function rename(from, to) {
+    const a = String(from || '').replace(/^\/+|\/+$/g, '')
+    const b = String(to || '').replace(/^\/+|\/+$/g, '')
+    if (!a || !b || a === b) return
+    let changed = false
+    reloadIfChanged()
+    const inherited = status(a)
+    for (const table of [state.shared, state.editable, state.locked]) {
+      const moves = []
+      for (const key of Object.keys(table)) {
+        if (key === a || key.startsWith(a + '/')) moves.push([key, b + key.slice(a.length)])
+      }
+      for (const [oldKey, newKey] of moves) {
+        table[newKey] = table[oldKey]
+        delete table[oldKey]
+        changed = true
+      }
+    }
+    state.shared[b] = inherited.shared
+    state.locked[b] = inherited.locked
+    save()
+  }
+
   function snapshot() {
     reloadIfChanged()
     return {
+      locked: { ...state.locked },
       shared: { ...state.shared },
-      editable: { ...state.editable },
-      ownerToken: token('owner'),
-      guestToken: token('guest')
+      editable: { ...state.editable }
     }
   }
 
-  return { isShared, isEditable, filterTree, setShared, setEditable, snapshot, token, rotate, load: () => ({ ...state }) }
+  return { isLocked, lockedAt, setLocked, status, decorate, isShared, isEditable, filterTree, setShared, setEditable, rename, snapshot, token, rotate, load: () => ({ ...state }) }
 }
 
-/**
- * 这次请求算谁。
- *
- * 本地测试最省事的分法：
- *   - 进程带了 FORCE_GUEST（那就是"另一个进程扮演别人"）→ 客人；
- *   - 带对 guest token → 客人；带对 owner token → 我；
- *   - 从本机来、又没带 token → 我（本地 dev 照旧，什么都不用配）；
- *   - 其余（公网、没凭证）→ 客人。
- */
+/** 公开视角始终按访客处理；管理请求必须携带有效会话。 */
 export function roleOf(req, url, share, { forceGuest = false } = {}) {
   if (forceGuest) return 'guest'
+  // 公开视角优先于管理会话，避免同一浏览器登录后旧公开链接暴露私有资料。
+  let publicReferer = false
+  try {
+    const ref = new URL(req?.headers?.referer || '')
+    publicReferer = /\/onlyread(?:\/|$)/.test(ref.pathname) || ref.searchParams.get('view') === 'public'
+  } catch {}
+  if (req?.headers?.['x-reader-view'] === 'public' || url?.searchParams?.get('view') === 'public' || publicReferer) return 'guest'
 
   const headers = req?.headers || {}
-  const ip = req?.socket?.remoteAddress || ''
-  const local = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
 
   const cookie = String(headers.cookie || '')
   const pick = (name) => {
@@ -199,46 +234,12 @@ export function roleOf(req, url, share, { forceGuest = false } = {}) {
       .split(';')
       .map((x) => x.trim())
       .find((x) => x.startsWith(name + '='))
-    return hit ? decodeURIComponent(hit.slice(name.length + 1)) : ''
+    try { return hit ? decodeURIComponent(hit.slice(name.length + 1)) : '' }
+    catch { return '' }
   }
 
-  // 路由选定的模式优先：/onlyread 一律客人；/edit 只有本机认（远端不能自称主人）
-  const mode = String(headers['x-reader-mode'] || pick('reader_mode') || '')
-  if (mode === 'guest') return 'guest'
-  if (mode === 'owner') {
-    /*
-     * 两条路进编辑：
-     *
-     *   1. owner token —— 公网上可靠的一条。挂在查询串或 x-reader-token 头上，
-     *      比密码长得多，也不会被浏览器记住之后到处粘。
-     *   2. 密码 —— 本地 dev 用着方便。
-     *
-     * 注意：挂在 nginx 后面时 remoteAddress 恒为 127.0.0.1，local 判断失去区分度，
-     * 所以这里不再拿它当安全边界，密码本身就是那道门。
-     */
-    /*
-     * token 三个来源：查询串、自定义头、cookie。
-     * cookie 那一条是给 iframe 用的 —— pdf 与 h5 的预览是浏览器自己发的请求，
-     * 带不了 x-reader-token 头，没有它就只能显示一屏 403。
-     */
-    const tok = String(
-      url?.searchParams?.get('token') || headers['x-reader-token'] || pick('reader_token') || ''
-    )
-    if (tok && tok === share.token('owner')) return 'owner'
-    const given = String(headers['x-reader-pass'] || pick('reader_pass') || '')
-    return given === EDIT_PASSWORD ? 'owner' : 'denied'
-  }
-
-  // 分享链接带的 token
-  const given = String(
-    url?.searchParams?.get('token') || headers['x-reader-token'] || pick('reader_token') || ''
-  )
-  if (given) {
-    if (given === share.token('guest')) return 'guest'
-    if (given === share.token('owner')) return 'owner'
-    return 'guest'
-  }
-
-  // 没声明模式、也没有 token：一律拒绝（这个项目必须显式选 /edit 或 /onlyread）
-  return 'denied'
+  const tok = String(headers['x-reader-token'] || pick('reader_session') || '')
+  if (tok && tok === share.token('owner')) return 'owner'
+  // 旧入口仅作地址兼容，不再决定编辑权限。无凭据只获得公开内容。
+  return 'guest'
 }

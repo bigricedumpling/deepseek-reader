@@ -2,20 +2,18 @@
   "title": "知识库",
   "libs": [
     {
-      "name": "笔试调研",
-      "desc": "网页数据 / 评测基准 / 训练数据构造与筛选的调研与结论。",
-      "href": "/",
-      "meta": "调研 · 笔试 · 存档",
-      "icon": "/favicon.svg",
-      "current": true
+      "name": "Agent（设计方向）",
+      "desc": "已锁定的笔试交付与调研资料。",
+      "href": "/deepseek/reader/onlyread/",
+      "meta": "公开 · 已锁定",
+      "icon": "/deepseek/reader/lib-agent.svg"
     },
     {
-      "name": "个人计划",
-      "desc": "待接入：日常计划与记录。",
-      "href": "/kb/plan/",
-      "meta": "占位",
-      "icon": "/icon-plan.svg",
-      "soon": true
+      "name": "示例知识库",
+      "desc": "可直接体验文档编辑与排版。",
+      "href": "/deepseek/reader/onlyread/示例知识库/开始使用/欢迎体验?lib=示例知识库",
+      "meta": "公开 · 可编辑",
+      "icon": "/deepseek/reader/lib-demo.svg"
     }
   ]
 }
