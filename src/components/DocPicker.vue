@@ -108,7 +108,7 @@ function folderOf(file) {
   background: var(--c-pop);
   border: 1px solid var(--c-line);
   border-radius: var(--radius-surface);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 14px 40px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--c-pop-shadow);
   overflow: hidden;
   animation: pick-in 0.15s ease-out;
 }

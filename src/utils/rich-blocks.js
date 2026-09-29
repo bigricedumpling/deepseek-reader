@@ -1,3 +1,5 @@
+import { h, render } from 'vue'
+import { iconNames } from './icon-catalog.js'
 import { $nodeSchema, $remark, $prose } from '@milkdown/kit/utils'
 import MarkdownIt from 'markdown-it'
 import { assetUrl, API_BASE } from './api.js'
@@ -9,10 +11,22 @@ const inline = new MarkdownIt({html:false,linkify:true})
 export function parseRichBlock(raw){try{const v=JSON.parse(raw);if(v.version!==1||!['callout','columns','figure','card'].includes(v.type))return null;if(JSON.stringify(v).length>200000)return null;for(const key of ['content','left','right','icon','src','alt','caption','title','description','id'])if(v[key]!==undefined&&typeof v[key]!=='string')return null;return v}catch{return null}}
 export function richMarkdown(value){return '\n```reader-block\n'+JSON.stringify(value,null,2)+'\n```\n'}
 function safeUrl(value){return /^(https?:\/\/|\/api\/file\?)/.test(value||'')?assetUrl(value):''}
+function calloutIcon(value) {
+ const icon=document.createElement('span');icon.className='rich-callout-icon';icon.contentEditable='false'
+ icon.title='更换提示块图标';icon.setAttribute('role','button');icon.setAttribute('aria-label','更换提示块图标');icon.tabIndex=0
+ const valueIcon=value.icon??'💡'
+ if(valueIcon.startsWith('icon:')){
+  const host=document.createElement('div');render(h(iconNames[valueIcon.slice(5)]||iconNames.file,{size:22,weight:'fill'}),host)
+  icon.append(host.firstElementChild.cloneNode(true));render(null,host)
+ }else if(/^(data:image\/|\/|https?:\/\/)/.test(valueIcon)){
+  const img=document.createElement('img');img.src=assetUrl(valueIcon);img.alt='';img.width=img.height=22;img.style.objectFit='contain';icon.append(img)
+ }else icon.textContent=valueIcon||'＋'
+ return icon
+}
 export function richDOM(value){
  const root=document.createElement('div');root.className='reader-rich-block reader-rich-'+value.type;root.dataset.readerBlock=JSON.stringify(value);root.contentEditable='false'
  const text=(parent,raw)=>{const d=document.createElement('div');d.innerHTML=inline.render(String(raw||''));parent.append(d)}
- if(value.type==='callout'){const icon=document.createElement('span');icon.textContent=value.icon||'💡';icon.className='rich-callout-icon';root.append(icon);text(root,value.content)}
+ if(value.type==='callout'){root.append(calloutIcon(value));text(root,value.content)}
  if(value.type==='columns'){text(root,value.left);text(root,value.right)}
  if(value.type==='figure'){root.style.textAlign=['left','center','right'].includes(value.align)?value.align:'center';const fig=document.createElement('figure');fig.style.width=Math.max(20,Math.min(100,Number(value.width)||100))+'%';const img=document.createElement('img');img.src=safeUrl(value.src);img.alt=String(value.alt||'');img.loading='lazy';fig.append(img);const caption=document.createElement('figcaption');caption.textContent=value.caption||'';fig.append(caption);root.append(fig)}
  if(value.type==='card'){const a=document.createElement('a');a.textContent=value.title||'打开文档';a.href='#';a.onclick=async e=>{e.preventDefault();try{const res=await fetch(API_BASE+'/api/resolve?id='+encodeURIComponent(value.id));const out=await res.json();if(out.ok)window.dispatchEvent(new CustomEvent('reader-open-document',{detail:out.data.path}));else a.title=out.error}catch{a.title='暂时无法打开文档'}};root.append(a);text(root,value.description)}
@@ -47,7 +61,7 @@ export const calloutSchema=$nodeSchema('reader_callout',ctx=>({
  attrs:{value:{default:'',validate:'string'}},
  parseDOM:[{tag:'div[data-reader-callout]',contentElement:'.rich-callout-content',getAttrs:dom=>({value:dom.dataset.readerCallout})}],
  toDOM:node=>['div',{'class':'reader-rich-block reader-rich-callout','data-reader-callout':node.attrs.value},
-  ['span',{'class':'rich-callout-icon',contenteditable:'false',title:'双击编辑提示块设置'},parseRichBlock(node.attrs.value)?.icon||'💡'],
+  calloutIcon(parseRichBlock(node.attrs.value)||{}),
   ['div',{'class':'rich-callout-content'},0]],
  parseMarkdown:{match:()=>false,runner:()=>{}},
  toMarkdown:{match:node=>node.type.name==='reader_callout',runner:(state,node)=>state.addNode('code',undefined,calloutValue(node,ctx),{lang:'reader-block'})}

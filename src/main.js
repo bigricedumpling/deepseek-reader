@@ -18,6 +18,7 @@ import App from './App.vue'
 import EntryPage from './components/EntryPage.vue'
 import './style.css'
 import './styles/shapes.css'
+import './styles/surfaces.css'
 import { resolveEntry } from './utils/routes'
 
 // 首页保留身份选择；旧 /edit 兼容管理入口，/onlyread 始终使用访客视角。

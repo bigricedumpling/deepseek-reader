@@ -55,12 +55,13 @@
       :groups="menu.groups"
       @pick="onMenuPick"
     />
+    <IconPicker v-if="calloutPicker" :anchor="calloutPicker.anchor" :save="saveCalloutIcon" @close="calloutPicker=null" />
     <TextStyleMenu v-if="styleMenu" :x="styleMenu.x" :y="styleMenu.y" @pick="onStylePick" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Crepe } from '@milkdown/crepe'
 import { renderMermaidSvg } from '../utils/mermaid'
 import { normalizeMarkdown, diffLines, isCosmeticOnly } from '../utils/markdown-normalize'
@@ -69,6 +70,7 @@ import { editorFold, bindFoldView, refreshFolds } from '../utils/editor-fold'
 import { foldKey, isFolded, isFoldable, setFoldable, toggleFold, foldState, foldDoc } from '../utils/toc-fold'
 import BlockTypeMenu from './BlockTypeMenu.vue'
 import TextStyleMenu from './TextStyleMenu.vue'
+import IconPicker from './IconPicker.vue'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
@@ -359,6 +361,8 @@ onMounted(async () => {
   window.addEventListener('reader-open-document', openRichDoc)
   window.addEventListener('reader-restore-version', restoreVersion)
   host.value?.addEventListener('dblclick', editRich)
+  host.value?.addEventListener('click', openCalloutIcon)
+  host.value?.addEventListener('keydown', onCalloutIconKey, true)
 
   // 开发期把编辑器和原文快照暴露出来，方便查往返到底差在哪
   if (import.meta.env.DEV) {
@@ -433,10 +437,31 @@ function viewOf() {
 
 function restoreVersion(e){if(!props.readonly&&e.detail.path===props.docFile)emit('restore',e.detail.content)}
 function openRichDoc(e){emit('open-doc',e.detail)}
+const calloutPicker=shallowRef(null)
+function openCalloutIcon(e){
+ if(props.readonly||lossy.value)return
+ const anchor=e.target.closest('.rich-callout-icon'),el=anchor?.closest('[data-reader-callout], [data-reader-block]'),view=viewOf()
+ if(!el||!view)return
+ const pos=view.posAtDOM(el,0)-(el.hasAttribute('data-reader-callout')?1:0),node=view.state.doc.nodeAt(pos)
+ if(!node||!['reader_callout','reader_block'].includes(node.type.name))return
+ e.preventDefault();e.stopPropagation()
+ calloutPicker.value={anchor,pos,node,path:props.docFile}
+}
+function onCalloutIconKey(e){if((e.key==='Enter'||e.key===' ')&&e.target.closest('.rich-callout-icon'))openCalloutIcon(e)}
+function saveCalloutIcon(icon){
+ const target=calloutPicker.value,view=viewOf()
+ if(props.readonly||!view||!target||target.path!==props.docFile)throw Error('文档已切换，请重新选择图标')
+ // A shallow reference is used below: never replace a block that changed while the picker was open.
+ const node=view.state.doc.nodeAt(target.pos)
+ if(node!==target.node)throw Error('提示块已变化，请重新打开图标选择器')
+ const raw=node.type.name==='reader_callout'?calloutValue(node,crepe.editor.ctx):node.attrs.value
+ const value=JSON.stringify({...JSON.parse(raw),icon})
+ userTyped=true;view.dispatch(view.state.tr.setNodeMarkup(target.pos,undefined,{...node.attrs,value}))
+}
 function editRich(e){
  if(props.readonly)return
  const view=viewOf(),el=e.target.closest('[data-reader-block], [data-reader-callout]');if(!el||!view)return
- if(el.hasAttribute('data-reader-callout')&&!e.target.closest('.rich-callout-icon'))return
+ if(el.hasAttribute('data-reader-callout')||e.target.closest('.rich-callout-icon'))return
  let pos=view.posAtDOM(el,0);if(el.hasAttribute('data-reader-callout'))pos--
  const node=view.state.doc.nodeAt(pos);if(!node||!['reader_block','reader_callout'].includes(node.type.name))return
  const raw=node.type.name==='reader_callout'?calloutValue(node,crepe.editor.ctx):node.attrs.value
@@ -717,6 +742,8 @@ onBeforeUnmount(async () => {
   window.removeEventListener('reader-open-document', openRichDoc)
   window.removeEventListener('reader-restore-version', restoreVersion)
   host.value?.removeEventListener('dblclick', editRich)
+  host.value?.removeEventListener('click', openCalloutIcon)
+  host.value?.removeEventListener('keydown', onCalloutIconKey, true)
   host.value?.removeEventListener('pointerdown', onHandleDown, true)
   host.value?.removeEventListener('click', onHandleClick, true)
   host.value?.removeEventListener('click', onHeadingClick, true)

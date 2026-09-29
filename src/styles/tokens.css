@@ -40,7 +40,8 @@
   --c-chip: #f5f5f5;       /* 小按钮 */
   --c-chip-hover: #ededed;
   --c-pop: #ffffff;        /* 弹出层 */
-  --c-pop-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.1);
+  --c-overlay: rgba(20, 24, 30, 0.08);
+  --c-pop-shadow: 0 2px 6px rgba(0, 0, 0, 0.025), 0 8px 24px rgba(0, 0, 0, 0.045);
 
   --font-sans: "Weixin", "PingFang SC", "Hiragino Sans GB", -apple-system,
     BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -159,7 +160,7 @@ body[data-theme="sepia"] {
   --c-chip: rgba(90, 74, 40, 0.08);
   --c-chip-hover: rgba(90, 74, 40, 0.14);
   --c-pop: #faf5e9;
-  --c-pop-shadow: 0 2px 8px rgba(90, 74, 40, 0.1), 0 10px 32px rgba(90, 74, 40, 0.14);
+  --c-pop-shadow: 0 2px 6px rgba(90, 74, 40, 0.025), 0 8px 24px rgba(90, 74, 40, 0.045);
   color-scheme: light;
 }
 
@@ -180,7 +181,8 @@ body[data-theme="dark"] {
   --c-chip: rgba(255, 255, 255, 0.08);
   --c-chip-hover: rgba(255, 255, 255, 0.14);
   --c-pop: #2b2c31;
-  --c-pop-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 8px 28px rgba(0, 0, 0, 0.45);
+  --c-pop-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.18);
+  --c-overlay: rgba(0, 0, 0, 0.20);
   --color-ds: #7a92ff;
   --color-ds-dark: #93a6ff;
   color-scheme: dark;

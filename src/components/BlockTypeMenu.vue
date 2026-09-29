@@ -59,7 +59,7 @@ const emit = defineEmits(['pick'])
   background: var(--c-pop, #fff);
   border: 1px solid var(--c-line-soft, #ececec);
   border-radius: var(--radius-surface);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05), 0 12px 36px rgba(0, 0, 0, 0.13);
+  box-shadow: var(--c-pop-shadow);
 }
 .bt-group {
   margin: 2px 0 1px;

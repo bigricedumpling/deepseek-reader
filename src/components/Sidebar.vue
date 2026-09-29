@@ -1535,7 +1535,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
     z-index: 59;
     width: 100%;
     height: 100%;
-    background: rgba(15, 20, 30, 0.42);
+    background: var(--c-overlay);
   }
   .lib-title-desktop, .lib-close-desktop { display: none; }
   .lib-title-mobile, .lib-close-mobile { display: inline; }
@@ -1551,7 +1551,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
     border: 1px solid var(--c-line);
     border-radius: var(--radius-row);
     background: var(--c-pop);
-    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22);
+    box-shadow: var(--c-pop-shadow);
   }
   .lib-panel-enter-from, .lib-panel-leave-to {
     transform: translate(-50%, -46%) scale(0.97);

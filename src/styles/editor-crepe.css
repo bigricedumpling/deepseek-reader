@@ -879,3 +879,10 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .crepe-host .milkdown .ProseMirror .rich-callout-content>p{max-width:none;margin:0;padding:0;min-height:1.7em}
 .crepe-host .milkdown .ProseMirror .rich-callout-content>p+p{margin-top:.45em}
 .rich-callout-icon{user-select:none;line-height:1.7;cursor:pointer}
+
+/* Callout identity is a clickable control; body editing stays independent. */
+.editor-shell .rich-callout-icon{display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:28px;cursor:pointer;border-radius:6px}
+.editor-shell .rich-callout-icon:hover{background:var(--c-hover)}
+.editor-shell .rich-callout-icon:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}
+.editor-shell [contenteditable="false"] .rich-callout-icon{cursor:default}
+.editor-shell [contenteditable="false"] .rich-callout-icon:hover{background:none}
