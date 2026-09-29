@@ -72,8 +72,8 @@ import TextStyleMenu from './TextStyleMenu.vue'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
-import { richBlockRemark, richBlockSchema } from '../utils/rich-blocks'
-import { editorViewCtx } from '@milkdown/kit/core'
+import { richBlockRemark, richBlockSchema, calloutSchema, calloutKeys, calloutValue, richMarkdown } from '../utils/rich-blocks'
+import { editorViewCtx, parserCtx } from '@milkdown/kit/core'
 import { TextSelection } from '@milkdown/kit/prose/state'
 import { API_BASE, assetUrl } from '../utils/api'
 
@@ -322,7 +322,7 @@ onMounted(async () => {
   crepe.editor.config(configureInlineStyleMarkdown)
   crepe.editor.use(imagePaste(uploadImage,message=>{uploadError.value=message}))
   crepe.editor.use(columnsRemark).use(columnSchema).use(columnsSchema).use(columnsDrag)
-  crepe.editor.use(richBlockRemark).use(richBlockSchema)
+  crepe.editor.use(richBlockRemark).use(calloutSchema).use(richBlockSchema).use(calloutKeys)
   crepe.editor.use(inlineStyleRemark).use(textColorMark).use(highlightMark).use(underlineMark)
   // 正文里的标题折叠（跟右侧目录共用一份折叠状态）
   crepe.editor.use(editorFold())
@@ -433,12 +433,27 @@ function viewOf() {
 
 function restoreVersion(e){if(!props.readonly&&e.detail.path===props.docFile)emit('restore',e.detail.content)}
 function openRichDoc(e){emit('open-doc',e.detail)}
-function editRich(e){if(props.readonly)return;const el=e.target.closest('[data-reader-block]'),view=viewOf();if(!el||!view)return;const pos=view.posAtDOM(el,0);window.dispatchEvent(new CustomEvent('reader-edit-block',{detail:{path:props.docFile,pos,value:JSON.parse(el.dataset.readerBlock),raw:el.dataset.readerBlock}}))}
+function editRich(e){
+ if(props.readonly)return
+ const view=viewOf(),el=e.target.closest('[data-reader-block], [data-reader-callout]');if(!el||!view)return
+ if(el.hasAttribute('data-reader-callout')&&!e.target.closest('.rich-callout-icon'))return
+ let pos=view.posAtDOM(el,0);if(el.hasAttribute('data-reader-callout'))pos--
+ const node=view.state.doc.nodeAt(pos);if(!node||!['reader_block','reader_callout'].includes(node.type.name))return
+ const raw=node.type.name==='reader_callout'?calloutValue(node,crepe.editor.ctx):node.attrs.value
+ window.dispatchEvent(new CustomEvent('reader-edit-block',{detail:{path:props.docFile,pos,value:JSON.parse(raw),raw:JSON.stringify(JSON.parse(raw))}}))
+}
 function insertRich(e){
  const view=viewOf(),d=e.detail;if(!view||props.readonly||lossy.value||d.path!==props.docFile)return
- const value=JSON.stringify(d.value,null,2);let tr=view.state.tr
- if(Number.isInteger(d.pos)){const node=tr.doc.nodeAt(d.pos);if(node?.type.name!=='reader_block'||JSON.stringify(JSON.parse(node.attrs.value))!==d.previous){uploadError.value='该内容已变化，请重新打开';return}tr=tr.setNodeMarkup(d.pos,undefined,{value})}
- else tr=tr.replaceSelectionWith(view.state.schema.nodes.reader_block.create({value}))
+ const replacement=crepe.editor.ctx.get(parserCtx)(richMarkdown(d.value)).firstChild
+ if(!replacement)return
+ let tr=view.state.tr
+ if(Number.isInteger(d.pos)){
+  const node=tr.doc.nodeAt(d.pos)
+  if(!node||!['reader_block','reader_callout'].includes(node.type.name)){uploadError.value='该内容已变化，请重新打开';return}
+  const raw=node.type.name==='reader_callout'?calloutValue(node,crepe.editor.ctx):node.attrs.value
+  if(JSON.stringify(JSON.parse(raw))!==d.previous){uploadError.value='该内容已变化，请重新打开';return}
+  tr=tr.replaceWith(d.pos,d.pos+node.nodeSize,replacement)
+ }else tr=tr.replaceSelectionWith(replacement)
  userTyped=true;view.dispatch(tr.scrollIntoView());view.focus()
 }
 function closeMenu() {

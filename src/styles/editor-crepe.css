@@ -872,3 +872,10 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .crepe-host .milkdown .ProseMirror .reader-column .milkdown-image-block{width:100%;max-width:100%}
 .reader-column-drop{position:fixed;z-index:9999;width:3px;background:var(--color-ds);pointer-events:none;border-radius:3px}
 @media(max-width:640px){.crepe-host .milkdown .ProseMirror .reader-columns{grid-template-columns:1fr;gap:20px}}
+
+/* Editable callout: the icon is decoration; the body is real editor content. */
+.crepe-host .milkdown .ProseMirror .reader-rich-callout{align-items:flex-start}
+.rich-callout-content{flex:1;min-width:0}
+.crepe-host .milkdown .ProseMirror .rich-callout-content>p{max-width:none;margin:0;padding:0;min-height:1.7em}
+.crepe-host .milkdown .ProseMirror .rich-callout-content>p+p{margin-top:.45em}
+.rich-callout-icon{user-select:none;line-height:1.7;cursor:pointer}
