@@ -177,7 +177,9 @@ function onAux(e, file) {
   opacity: 0;
   transform: translateX(6px) scale(0.96);
 }
-.tab-leave-active {
+.doc-tab.tab-leave-active {
+  /* Must beat .doc-tab position:relative: leaving tabs stop reserving space
+     before TransitionGroup measures the remaining tabs for its FLIP move. */
   position: absolute;
 }
 .doc-tab {
