@@ -64,5 +64,5 @@ onBeforeUnmount(()=>{scroller?.removeEventListener('scroll',onScroll);cancelAnim
 .rail-toc-stop span{height:1.5px;flex-shrink:0;border-radius:2px;background:var(--c-faint);opacity:.26;transition:opacity .15s,background .15s}
 .rail-toc-stop.active span{opacity:.85;background:var(--c-ink)}
 .rail-toc-stop:hover span,.rail-toc-stop:focus-visible span{opacity:1;background:var(--color-ds)}
-.rail-toc-hint{position:fixed;transform:translateY(-50%);z-index:90;max-width:min(230px,calc(100vw - 64px));padding:5px 9px;border:1px solid var(--c-line);border-radius:6px;background:var(--c-pop);box-shadow:0 2px 8px #0000000d;color:var(--c-sub);font-size:11.5px;line-height:1.5;pointer-events:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rail-toc-hint{position:fixed;transform:translateY(-50%);z-index:90;max-width:min(230px,calc(100vw - 64px));padding:5px 9px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-pop);box-shadow:0 2px 8px #0000000d;color:var(--c-sub);font-size:11.5px;line-height:1.5;pointer-events:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 </style>

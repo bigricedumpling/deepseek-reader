@@ -58,7 +58,7 @@ const emit = defineEmits(['pick'])
   padding: 5px;
   background: var(--c-pop, #fff);
   border: 1px solid var(--c-line-soft, #ececec);
-  border-radius: 10px;
+  border-radius: var(--radius-surface);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05), 0 12px 36px rgba(0, 0, 0, 0.13);
 }
 .bt-group {
@@ -75,7 +75,7 @@ const emit = defineEmits(['pick'])
   width: 100%;
   padding: 6px 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--c-text, #333);
   font-size: 12.5px;

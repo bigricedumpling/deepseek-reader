@@ -1,0 +1,33 @@
+/* Shared shell geometry. Editor content and its internal controls keep their own shapes. */
+:root {
+  --radius-control: 10px;
+  --radius-surface: 18px;
+  --radius-row: 22px;
+  --radius-dialog: 32px;
+  --corner-ui: superellipse(2);
+}
+:where(*):not(:where(.editor-shell, .editor-shell *)),
+:where(*):not(:where(.editor-shell, .editor-shell *))::before,
+:where(*):not(:where(.editor-shell, .editor-shell *))::after {
+  corner-shape: var(--corner-ui);
+}
+.ui-round-control { border-radius:var(--radius-control)!important }
+.ui-round-surface { border-radius:var(--radius-surface)!important }
+.ui-round-dialog { border-radius:var(--radius-dialog)!important }
+:is(.reader-dialog,.access-dialog,.app-dialog,.pick) { border-radius:var(--radius-dialog)!important }
+:is(.pop-menu,.side-menu,.tree-menu,.identity-menu,.doc-search-panel,.bt-menu,.text-style-menu) { border-radius:var(--radius-surface)!important }
+:is(.entry-option,.kb-card,.lib-row) { border-radius:var(--radius-row)!important }
+/* Dots, radio controls and slider thumbs are circles, not rounded rectangles. */
+.doc-tab-dot, .state-switch::after, input[type=radio] { corner-shape:round }
+input[type=range]::-webkit-slider-thumb { corner-shape:round }
+input[type=range]::-moz-range-thumb { corner-shape:round }
+@media(max-width:720px) { .lib-panel{border-radius:var(--radius-dialog)!important} }
+/* Native continuous corners apply directly to the fill, without blurring text
+   or clipping floating child menus. Older browsers retain the SVG fill fallback. */
+@supports (corner-shape:superellipse(2)) {
+  .doc-tab::before,.newdoc-btn::before,.reader-button::before,.doc-row::before,.lib-row::before {
+    filter:none;
+    border-radius:inherit!important;
+    corner-shape:inherit;
+  }
+}

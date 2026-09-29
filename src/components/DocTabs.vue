@@ -188,7 +188,7 @@ function onAux(e, file) {
   flex-shrink: 0;
   max-width: 220px;
   position: relative;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   transition: background 0.15s;
 }
 .doc-tab:hover {
@@ -231,7 +231,7 @@ function onAux(e, file) {
   width: 18px;
   height: 18px;
   margin-right: 4px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--c-faint);
   opacity: 0;
   transition: opacity 0.15s;

@@ -107,7 +107,7 @@ function folderOf(file) {
   flex-direction: column;
   background: var(--c-pop);
   border: 1px solid var(--c-line);
-  border-radius: 11px;
+  border-radius: var(--radius-surface);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 14px 40px rgba(0, 0, 0, 0.14);
   overflow: hidden;
   animation: pick-in 0.15s ease-out;
@@ -154,7 +154,7 @@ function folderOf(file) {
   gap: 9px;
   width: 100%;
   padding: 7px 9px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   text-align: left;
 }
 .pick-row.is-active { background: var(--c-hover); }
@@ -191,7 +191,7 @@ function folderOf(file) {
   font-family: var(--font-mono);
   font-size: 10.5px;
   padding: 0 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: var(--c-field);
   margin-right: 3px;
 }

@@ -104,7 +104,7 @@ onMounted(async () => {
 .kb-logo {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 .kb-title {
   font-family: var(--stack-serif, serif);
@@ -120,7 +120,7 @@ onMounted(async () => {
 }
 .kb-theme-btn {
   padding: 3px 9px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   font-size: 11.5px;
   color: var(--c-faint);
   transition: background 0.15s ease, color 0.15s ease;
@@ -148,7 +148,7 @@ onMounted(async () => {
   padding: 16px 18px;
   background: var(--c-pop);
   border: 1px solid var(--c-line);
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   text-decoration: none;
   color: inherit;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
@@ -193,7 +193,7 @@ onMounted(async () => {
   font-size: 11px;
   background: var(--c-field);
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--c-sub);
 }
 </style>

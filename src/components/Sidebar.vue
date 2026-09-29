@@ -158,7 +158,7 @@
     <!-- 新建文档（新建目录在下面工具条那一排的文件夹按钮，不重复放） -->
     <div v-if="currentLibEditable" class="px-3 pt-2 pb-3">
       <button
-        class="newdoc-btn w-full h-9 flex items-center justify-center gap-1.5 rounded-lg text-[13px] text-[var(--c-ink)]"
+        class="newdoc-btn w-full h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
         title="在根目录新建文档"
         @click="emit('create-doc', currentLib || '')"
       >
@@ -231,7 +231,7 @@
         <input
           ref="searchEl"
           v-model="query"
-          class="w-full h-7 px-2.5 rounded-md bg-[var(--c-field)] border border-[var(--c-line)] text-[12.5px] outline-none focus:border-[var(--color-ds)]/50 transition-colors"
+          class="w-full h-7 px-2.5 ui-round-control bg-[var(--c-field)] border border-[var(--c-line)] text-[12.5px] outline-none focus:border-[var(--color-ds)]/50 transition-colors"
           placeholder="搜索文档名或路径"
           @keydown.esc="closeSearch"
         />
@@ -348,6 +348,8 @@
 </template>
 
 <script setup>
+import {setFavicon} from '../utils/favicon'
+
 import AgentSettings from './AgentSettings.vue'
 import ContentIcon from './ContentIcon.vue'
 import IconPicker from './IconPicker.vue'
@@ -463,15 +465,7 @@ function applyCurrentLib() {
    * 切库之后标签页还挂着上一个库的名字，等于对外显示错了身份。
    */
   document.title = lib.name
-  if (lib.icon) {
-    let link = document.querySelector('link[rel="icon"]')
-    if (!link) {
-      link = document.createElement('link')
-      link.rel = 'icon'
-      document.head.appendChild(link)
-    }
-    link.href = lib.icon
-  }
+
 }
 
 /*
@@ -940,6 +934,7 @@ const siteIcon = '__SITE_ICON__'
 const logo = computed(
   () => currentLibIcon.value || customLogo.value || import.meta.env.VITE_LOGO || siteIcon
 )
+watch(logo, setFavicon, {immediate:true})
 
 /** 顶层目录：收起态那一列图标用 */
 const topFolders = computed(() => props.nodes.filter((n) => n.type === 'folder'))
@@ -1554,7 +1549,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
     max-height: min(560px, 76dvh);
     transform: translate(-50%, -50%);
     border: 1px solid var(--c-line);
-    border-radius: 16px;
+    border-radius: var(--radius-row);
     background: var(--c-pop);
     box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22);
   }
@@ -1577,7 +1572,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   display: flex; align-items: center; gap: 10px;
   min-height: 46px;
   padding: 8px 10px;
-  border-radius: 18px;
+  border-radius: var(--radius-row);
   transition: background 0.15s ease;
 }
 .lib-row.is-dragging { opacity: 0.45; }
@@ -1602,14 +1597,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   color: var(--c-ink);
   background: var(--c-surface);
   border: 1px solid var(--c-line);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   padding: 2px 6px;
   outline: none;
 }
 .lib-row-input:focus { border-color: var(--c-line); }
 /* 行内操作：19px，与侧边栏的 .icon-btn.xs 一致；悬停才出现 */
 .lib-row-act {
-  flex-shrink: 0; width: 19px; height: 19px; border-radius: 5px;
+  flex-shrink: 0; width: 19px; height: 19px; border-radius: var(--radius-control);
   display: flex; align-items: center; justify-content: center;
   color: var(--c-faint); opacity: 0;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
@@ -1649,7 +1644,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   width: 100%;
   padding: 1px 4px;
   margin-left: -4px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: transparent;
   border: 1px solid transparent;
   outline: none;
@@ -1669,7 +1664,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   height: 22px;
   margin-top: 3px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   overflow: hidden;
   transition: box-shadow 0.14s ease;
 }
@@ -1705,7 +1700,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--c-faint);
   transition: color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
@@ -1731,7 +1726,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   width: 148px;
   padding: 5px;
   background: var(--c-pop);
-  border-radius: 10px;
+  border-radius: var(--radius-surface);
   box-shadow: var(--c-pop-shadow);
 }
 .side-menu-title {
@@ -1746,7 +1741,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   justify-content: space-between;
   width: 100%;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   font-size: 12.5px;
   color: var(--c-text);
   text-align: left;
@@ -1779,7 +1774,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 <style scoped>
 .is-reader-rail { background:transparent!important; border:0!important; overflow:visible!important; z-index:60 }
 .reader-rail { width:44px; display:flex; align-items:center; flex-direction:column; padding-top:16px }
-.manage-entry { margin:0 12px 10px; padding:8px 10px; display:flex; align-items:center; gap:8px; border:1px solid var(--c-line); border-radius:7px; color:var(--c-sub); font-size:12px; text-align:left; cursor:pointer; background:var(--c-surface) }
+.manage-entry { margin:0 12px 10px; padding:8px 10px; display:flex; align-items:center; gap:8px; border:1px solid var(--c-line); border-radius:var(--radius-control); color:var(--c-sub); font-size:12px; text-align:left; cursor:pointer; background:var(--c-surface) }
 .manage-entry:hover { background:var(--c-field); color:var(--c-text) }
 .manage-entry:focus-visible { outline:2px solid var(--c-ink); outline-offset:2px }
 .entry-chevron { margin-left:auto }
@@ -1787,6 +1782,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 </style>
 
 <style scoped>
-.workspace-footer{position:relative;flex-shrink:0;padding-top:8px;border-top:0}.workspace-footer .manage-entry{width:calc(100% - 24px);border:0;background:transparent;margin-bottom:12px}.workspace-footer .manage-entry span{flex:1}.identity-menu{position:absolute;bottom:60px;left:12px;right:12px;padding:6px;background:var(--c-pop);box-shadow:var(--c-pop-shadow);border:0;border-radius:10px;z-index:50}.identity-menu button{display:block;width:100%;padding:9px;text-align:left;font-size:12px;border-radius:6px}.identity-menu button:hover{background:var(--c-hover)}
+.workspace-footer{position:relative;flex-shrink:0;padding-top:8px;border-top:0}.workspace-footer .manage-entry{width:calc(100% - 24px);border:0;background:transparent;margin-bottom:12px}.workspace-footer .manage-entry span{flex:1}.identity-menu{position:absolute;bottom:60px;left:12px;right:12px;padding:6px;background:var(--c-pop);box-shadow:var(--c-pop-shadow);border:0;border-radius:var(--radius-surface);z-index:50}.identity-menu button{display:block;width:100%;padding:9px;text-align:left;font-size:12px;border-radius:var(--radius-control)}.identity-menu button:hover{background:var(--c-hover)}
 </style>
-<style scoped>.lib-icon-edit{display:grid;place-items:center;padding:5px;border-radius:7px;margin-left:-5px}.lib-icon-edit:not(:disabled):hover{background:var(--c-hover)}.lib-icon-edit:disabled{cursor:default}.workspace-footer .manage-entry{gap:10px;padding:10px 8px}.workspace-footer .manage-entry:hover{background:var(--c-hover)}</style>
+<style scoped>.lib-icon-edit{display:grid;place-items:center;padding:5px;border-radius:var(--radius-control);margin-left:-5px}.lib-icon-edit:not(:disabled):hover{background:var(--c-hover)}.lib-icon-edit:disabled{cursor:default}.workspace-footer .manage-entry{gap:10px;padding:10px 8px}.workspace-footer .manage-entry:hover{background:var(--c-hover)}</style>

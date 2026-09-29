@@ -43,8 +43,8 @@ async function submit() {
 </script>
 <style scoped>
 .access-backdrop { position:fixed; inset:0; background:#0004; z-index:150; display:grid; place-items:center; padding:20px }
-.access-dialog { width:min(360px,100%); padding:24px; border-radius:16px; background:var(--c-pop); box-shadow:var(--c-pop-shadow); color:var(--c-text) }
+.access-dialog { width:min(360px,100%); padding:24px; border-radius:var(--radius-row); background:var(--c-pop); box-shadow:var(--c-pop-shadow); color:var(--c-text) }
 h2 { font-size:17px; margin-bottom:10px } p { font-size:12px; overflow-wrap:anywhere; margin-bottom:14px; color:var(--c-sub) } label { display:block; font-size:12px; margin-bottom:6px }
-input { width:100%; border:1px solid var(--c-line); padding:9px; border-radius:7px; background:var(--c-field) }
+input { width:100%; border:1px solid var(--c-line); padding:9px; border-radius:var(--radius-control); background:var(--c-field) }
 .access-actions { display:flex; justify-content:flex-end; gap:18px; margin-top:18px; font-size:13px }.access-error{color:#c44;margin-top:10px}
 </style>

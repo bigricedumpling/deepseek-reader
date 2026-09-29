@@ -26,10 +26,10 @@ const emit = defineEmits(['pick'])
 </script>
 
 <style scoped>
-.text-style-menu { position:fixed; z-index:60; width:250px; padding:10px; border:1px solid var(--c-line); border-radius:10px; background:var(--c-pop); box-shadow:var(--c-pop-shadow) }
+.text-style-menu { position:fixed; z-index:60; width:250px; padding:10px; border:1px solid var(--c-line); border-radius:var(--radius-surface); background:var(--c-pop); box-shadow:var(--c-pop-shadow) }
 .text-style-menu p { margin:1px 0 7px; font-size:11px; color:var(--c-sub) }
 .style-row { display:flex; align-items:center; gap:6px; margin-bottom:12px }
-.style-row button, .style-underline { cursor:pointer; border:1px solid var(--c-line); background:var(--c-surface); border-radius:5px }
+.style-row button, .style-underline { cursor:pointer; border:1px solid var(--c-line); background:var(--c-surface); border-radius:var(--radius-control) }
 .style-swatch { width:25px; height:25px; font-size:15px; font-weight:700 }
 .style-highlight { width:25px; height:25px }
 .style-reset { height:25px; padding:0 6px; color:var(--c-sub); font-size:10px }

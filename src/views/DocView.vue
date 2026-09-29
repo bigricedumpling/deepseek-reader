@@ -282,7 +282,7 @@
     <!-- 出错提示 -->
     <div
       v-if="error && !store.conflict"
-      class="mx-6 mb-1 px-3.5 py-2.5 rounded-lg bg-[var(--c-field)] ring-1 ring-[var(--c-line)] flex items-start gap-2.5 shrink-0"
+      class="mx-6 mb-1 px-3.5 py-2.5 ui-round-control bg-[var(--c-field)] ring-1 ring-[var(--c-line)] flex items-start gap-2.5 shrink-0"
     >
       <PhWarningCircle :size="15" class="text-[#d9534f] mt-[1px] shrink-0" />
       <span class="ui-font flex-1 text-[12.5px] leading-relaxed text-[#c0392b]">{{ error }}</span>
@@ -763,7 +763,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   z-index: 40;
   padding: 6px;
   background: var(--c-pop);
-  border-radius: 10px;
+  border-radius: var(--radius-surface);
   box-shadow: var(--c-pop-shadow);
 }
 .pop-menu.is-panel {
@@ -777,7 +777,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   width: 100%;
   text-align: left;
   padding: 7px 11px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   font-size: 12.5px;
   color: var(--c-text);
   transition: background 0.12s, color 0.12s, transform 0.12s;
@@ -828,7 +828,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   min-width: 0;
   height: 28px;
   padding: 0 9px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--c-field);
   font-size: 11px;
   color: var(--c-sub);
@@ -837,7 +837,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .share-copy {
   height: 28px;
   padding: 0 10px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--color-ds);
   color: #fff;
   font-size: 11.5px;
@@ -854,7 +854,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   align-items: center;
   gap: 4px;
   padding: 4px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   font-size: 12px;
   color: var(--c-text);
   background: var(--c-chip);
@@ -937,17 +937,17 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 
 <style scoped>
 .doc-search-wrap { position:relative }
-.doc-search-panel { position:absolute;right:0;top:38px;width:360px;max-width:calc(100vw - 32px);padding:12px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:12px;box-shadow:var(--c-pop-shadow);z-index:80 }
+.doc-search-panel { position:absolute;right:0;top:38px;width:360px;max-width:calc(100vw - 32px);padding:12px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:var(--radius-surface);box-shadow:var(--c-pop-shadow);z-index:80 }
 .doc-search-field { display:flex;align-items:center;gap:8px }.doc-search-field input { min-width:0;flex:1;outline:none;background:transparent;font-size:13px;padding:7px 0 }
 .search-scope { font-size:11px;line-height:1.6;color:var(--c-faint);padding:8px 5px }
-.doc-search-results { max-height:50vh;overflow:auto }.search-hit { display:block;width:100%;text-align:left;font-size:12px;line-height:1.7;padding:8px;border-radius:6px }.search-hit:hover{background:var(--c-hover)}
+.doc-search-results { max-height:50vh;overflow:auto }.search-hit { display:block;width:100%;text-align:left;font-size:12px;line-height:1.7;padding:8px;border-radius:var(--radius-control) }.search-hit:hover{background:var(--c-hover)}
 .search-hit small { display:block; font-size:10px; color:var(--c-faint) }
 .pop-item:disabled { opacity:.5;cursor:default }
 @media(max-width:640px){ .doc-search-panel{position:fixed;top:58px;left:12px;right:12px;width:auto;max-width:none}.reader-topbar{padding-left:8px!important;padding-right:8px!important;gap:2px!important}.single-doc-title{max-width:25vw} }
 </style>
 
 <style scoped>
-.doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:6px}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:9px;background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
+.doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
 </style>
 
-<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:9px}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}</style>
+<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}</style>

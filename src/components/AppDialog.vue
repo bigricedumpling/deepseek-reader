@@ -6,7 +6,7 @@
       @mousedown.self="onCancel"
     >
       <transition name="pop" appear>
-        <div class="w-[380px] bg-[var(--c-surface)] rounded-xl shadow-[0_12px_48px_rgba(0,0,0,0.16)] p-6">
+        <div role="dialog" aria-modal="true" :aria-label="title" class="app-dialog w-[380px] bg-[var(--c-surface)] ui-round-dialog shadow-[0_12px_48px_rgba(0,0,0,0.16)] p-6">
           <h3 class="text-[15px] font-medium text-[var(--c-ink)] mb-2">{{ title }}</h3>
           <p v-if="message" class="text-[12.5px] leading-relaxed text-[var(--c-sub)] mb-4">
             {{ message }}
@@ -16,7 +16,7 @@
             v-if="mode === 'prompt'"
             ref="inputEl"
             v-model="draft"
-            class="w-full h-9 px-3 mb-4 rounded-lg bg-[var(--c-field)] outline-none text-[13px] text-[var(--c-ink)] focus:ring-1 focus:ring-[var(--color-ds)]/50"
+            class="w-full h-9 px-3 mb-4 ui-round-control bg-[var(--c-field)] outline-none text-[13px] text-[var(--c-ink)] focus:ring-1 focus:ring-[var(--color-ds)]/50"
             :placeholder="placeholder"
             @keydown.enter.prevent="onConfirm"
             @keydown.esc.prevent="onCancel"
@@ -28,7 +28,7 @@
             <button class="btn-text" @click="onCancel">取消</button>
             <button v-if="altText" class="btn-text" @click="emit('alt')">{{ altText }}</button>
             <button
-              class="px-3.5 h-7 rounded-md text-[12.5px] text-white transition-colors"
+              class="px-3.5 h-7 ui-round-control text-[12.5px] text-white transition-colors"
               :class="danger ? 'bg-[#d9534f] hover:bg-[#c9302c]' : 'bg-ds hover:bg-ds-dark'"
               :disabled="mode === 'prompt' && !draft.trim()"
               @click="onConfirm"

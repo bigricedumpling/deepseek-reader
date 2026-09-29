@@ -34,7 +34,7 @@
           </button>
           <span v-else class="toc-fold is-empty" />
           <button
-            class="toc-item ui-font flex-1 min-w-0 text-left rounded-md text-pretty"
+            class="toc-item ui-font flex-1 min-w-0 text-left ui-round-control text-pretty"
             :class="[
               r.level === 3 ? 'px-2 py-1 text-[12.5px]' : 'px-2 py-1.5 text-[13.5px]',
               activeIndex === r.index ? 'is-active' : ''
@@ -323,7 +323,7 @@ watch(
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--c-faint);
   opacity: 0;
   pointer-events: none;
@@ -352,7 +352,7 @@ watch(
   width: 16px;
   height: 16px;
   margin-top: 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   color: var(--c-faint);
   transition: transform 0.15s ease, color 0.15s ease;
 }
