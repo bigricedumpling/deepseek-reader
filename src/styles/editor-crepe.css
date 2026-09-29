@@ -824,9 +824,51 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
   padding: 0 9px;
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="block-type"] .block-type-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   white-space: nowrap;
   font: 12px/1.4 var(--font-ui, sans-serif);
+}
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="block-type"] .block-type-label svg {
+  width: 12px;
+  height: 12px;
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="block-type"] .icon {
   width: auto;
 }
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="reader-style"] .text-style-trigger {
+  display:inline-flex;
+  flex-direction:column;
+  align-items:center;
+  font-size:15px;
+  font-weight:700;
+  line-height:1;
+}
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="reader-style"] .text-style-trigger span {
+  width:14px;
+  height:3px;
+  margin-top:2px;
+  border-radius:2px;
+  background:linear-gradient(90deg,#c94c4c,#b86b22,#368568,#356ccc,#8256b8);
+}
+
+.crepe-host .milkdown .ProseMirror .reader-rich-block p:last-child{margin-bottom:0}.crepe-host .milkdown .ProseMirror .reader-rich-block h3:first-child{margin-top:0}.crepe-host .milkdown .ProseMirror .reader-rich-block{text-align:left}
+
+/* The document title has its own hierarchy; section headings stay compact. */
+.crepe-host .milkdown .ProseMirror > h1:first-of-type{font-size:clamp(30px,3.5vw,44px);font-weight:750;line-height:1.22;letter-spacing:-.025em;margin-top:12px;margin-bottom:1em}
+@media(max-width:720px){.crepe-host .milkdown .ProseMirror > h1:first-of-type{font-size:30px}}
+
+/* Images are blocks: keep the same breathing room before and after. */
+.crepe-host .milkdown .ProseMirror .milkdown-image-block{margin-block:1.4em!important;padding-block:0}
+.crepe-host .milkdown .ProseMirror .milkdown-image-block + p{margin-top:1.4em!important}
+.crepe-host .milkdown .ProseMirror p:has(+ .milkdown-image-block){margin-bottom:1.4em!important}
+.reader-upload-status{display:inline-block;padding:3px 8px;background:var(--c-field);border-radius:8px;color:var(--c-faint);font:12px var(--font-sans)}
+
+.crepe-host .milkdown .ProseMirror .reader-columns{display:grid;grid-template-columns:repeat(var(--column-count,2),minmax(0,1fr));gap:24px;margin:1.4em auto;max-width:var(--measure);align-items:start}
+.crepe-host .milkdown .ProseMirror .reader-column{min-width:0;min-height:40px;position:relative}
+.crepe-host .milkdown .ProseMirror .reader-column> :first-child{margin-top:0!important}
+.crepe-host .milkdown .ProseMirror .reader-column> :last-child{margin-bottom:0!important}
+.crepe-host .milkdown .ProseMirror .reader-column .milkdown-image-block{width:100%;max-width:100%}
+.reader-column-drop{position:fixed;z-index:9999;width:3px;background:var(--color-ds);pointer-events:none;border-radius:3px}
+@media(max-width:640px){.crepe-host .milkdown .ProseMirror .reader-columns{grid-template-columns:1fr;gap:20px}}

@@ -12,6 +12,7 @@ fs.writeFileSync(path.join(root,'.分享.json'),JSON.stringify({shared:{Public:t
 const {handleApi,share}=await import('../server/content-api.js')
 const {roleOf}=await import('../server/share.js')
 async function request(method,url,body,role='guest'){
+ if(method==='PUT'&&url==='/api/doc'&&!body.revision){const doc=await request('GET','/api/doc?path='+encodeURIComponent(body.path),null,'owner');body={...body,revision:doc.data.revision}}
  const req=Readable.from(body?[Buffer.from(JSON.stringify(body))]:[]);Object.assign(req,{method,url,headers:{'content-type':'application/json'},socket:{remoteAddress:'test'}})
  return new Promise(resolve=>handleApi(req,{statusCode:200,setHeader(){},end(s){resolve({status:this.statusCode,...JSON.parse(s)})}},{role}))
 }

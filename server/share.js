@@ -2,8 +2,7 @@
  * 分享状态：谁能看到什么。
  *
  * 只需要区分两种身份（我 / 别人），所以这里**没有权限矩阵** —— 只有一份「哪些节点对外」的开关，
- * 加两个 token。状态写在 DOCS_ROOT/.分享.json，跟 .顺序.json / .表宽.json 一个路子：
- * 一个真源、可备份、能用 git 看变化，不引入数据库、不引入用户表。
+ * 权限状态统一存入 SQLite；会话凭据保存在代码目录的私有运行目录。
  *
  * 三条原则：
  *   1. **默认不分享**：没勾过的节点一律不给外人看（最小暴露）。
@@ -13,6 +12,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import {fileURLToPath} from 'node:url'
+import { workspace, atomicWrite } from './storage/workspace.js'
 
 const SHARE_FILE = '.分享.json'
 
@@ -24,20 +25,29 @@ export const EDIT_PASSWORD = process.env.READER_PASSWORD || readPasswordFile()
 
 export function createShare(root) {
   const file = path.join(root, SHARE_FILE)
+  const repo=workspace(root)
+  const authName=crypto.createHash('sha256').update(root).digest('hex').slice(0,16)+'.json'
+  const authFile=path.join(fileURLToPath(new URL('../.runtime/',import.meta.url)),authName)
+  const encodedLegacy=path.resolve(new URL('../.runtime/',import.meta.url).pathname,authName)
+  if(!fs.existsSync(authFile)&&fs.existsSync(encodedLegacy))atomicWrite(authFile,fs.readFileSync(encodedLegacy))
+  let credentials={}
+  try { credentials=JSON.parse(fs.readFileSync(authFile,'utf8')) } catch {}
 
   function load() {
     try {
-      const raw = JSON.parse(fs.readFileSync(file, 'utf8'))
+      const raw = repo.getJSON('access', {}, SHARE_FILE)
+      if(raw.tokens && Object.keys(raw.tokens).length && !Object.keys(credentials).length) {credentials=raw.tokens;atomicWrite(authFile,JSON.stringify(credentials))}
+      if(raw.tokens){delete raw.tokens;repo.setJSON('access',raw);if(fs.existsSync(file)){const legacy=JSON.parse(fs.readFileSync(file,'utf8'));delete legacy.tokens;atomicWrite(file,JSON.stringify(legacy,null,2))}}
       if (raw && typeof raw === 'object') {
         return {
-          tokens: raw.tokens && typeof raw.tokens === 'object' ? raw.tokens : {},
+          tokens: credentials,
           shared: raw.shared && typeof raw.shared === 'object' ? raw.shared : {},
           locked: raw.locked && typeof raw.locked === 'object' ? raw.locked : {},
           editable: raw.editable && typeof raw.editable === 'object' ? raw.editable : {}
         }
       }
-    } catch {
-      /* 还没有这个文件，或者读坏了：当成"什么都没分享" */
+    } catch (error) {
+      throw new Error('权限数据无法读取，已停止修改以保留原数据', { cause:error })
     }
     return { tokens: {}, shared: {}, editable: {}, locked: {} }
   }
@@ -60,32 +70,24 @@ export function createShare(root) {
    * 本地测试是"两个进程"，部署后是"我本机勾、服务器生效"，
    * 不重新读盘就会出现"我勾了，别人那头还是看不到"。
    */
-  function reloadIfChanged() {
-    const now = mtimeOf()
-    if (now !== mtime) {
-      mtime = now
-      state = load()
-    }
-    return state
-  }
-
+  function reloadIfChanged() { state=load(); return state }
   function save() {
-    fs.writeFileSync(file, JSON.stringify(state, null, 2) + '\n', 'utf8')
-    mtime = mtimeOf()
+    const {tokens,...content}=state
+    repo.setJSON('access',content)
   }
 
   /** 令牌：第一次用到时生成，之后一直用同一个（撤销 = 重新生成） */
   function token(kind) {
     if (!state.tokens[kind]) {
       state.tokens[kind] = crypto.randomBytes(16).toString('hex')
-      save()
+      credentials=state.tokens;atomicWrite(authFile,JSON.stringify(credentials))
     }
     return state.tokens[kind]
   }
 
   function rotate(kind) {
     state.tokens[kind] = crypto.randomBytes(16).toString('hex')
-    save()
+    credentials=state.tokens;atomicWrite(authFile,JSON.stringify(credentials))
     return state.tokens[kind]
   }
 

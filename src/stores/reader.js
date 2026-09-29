@@ -157,7 +157,7 @@ export const useReaderStore = defineStore('reader', () => {
    * 把设置落到 DOM 与 localStorage。
    *
    * 集中在一处是这套东西唯一的意义：以前散在两个组件里，
-   * 加一个设置就得记得改三四个地方，漏一处就是「点了没反应」。
+   * 加一个设置就得记得改三四个地方，漏一处就是点了没反应。
    */
   function apply() {
     const b = document.body

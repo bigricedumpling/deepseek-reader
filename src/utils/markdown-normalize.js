@@ -367,6 +367,16 @@ export function normalizeMarkdown(input, original, { spacing = true } = {}) {
   const lines = restoreOriginalLines(escape(out.join('\n')).split('\n'), original)
   const finalLines = spacing ? adoptOriginalSpacing(lines, original) : lines
   const text = finalLines.join('\n').replace(/\n+$/, '')
+  // 编辑器会省略文末的空白段落。初始化往返检查时保留原来的占位，
+  // 避免仅因最后一个 <br /> 就把完整图文降级为源码；实际编辑不恢复已删空行。
+  if (spacing && original) {
+    const originalLines = String(original).split('\n')
+    let removedBreak = false
+    while (originalLines.length && (!originalLines.at(-1).trim() || /^\s*<br\s*\/?>\s*$/i.test(originalLines.at(-1)))) {
+      if (originalLines.pop().trim()) removedBreak = true
+    }
+    if (removedBreak && originalLines.join('\n').trimEnd() === text.trimEnd()) return String(original)
+  }
   const tail = original ? (String(original).match(/\n+$/) || [''])[0] : '\n'
   return text + tail
 }

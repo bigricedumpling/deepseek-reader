@@ -132,6 +132,12 @@ code, pre, kbd { font-family: var(--font-mono); }
 
 mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; }
 
+.ProseMirror > .search-flash { animation: search-flash 1.6s ease-out; }
+@keyframes search-flash {
+  0%, 45% { background-color: rgba(255, 226, 120, .38); }
+  100% { background-color: transparent; }
+}
+
 /* ============================================================
    通用组件（极简）
    ============================================================ */
@@ -598,3 +604,46 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
     right: 0;
   }
 }
+
+/* Shared small dialogs for metadata, icons, and safe conflict resolution. */
+.reader-modal-shade{position:fixed;inset:0;background:#0005;z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.reader-dialog{width:460px;max-width:100%;max-height:90dvh;overflow:auto;background:var(--c-pop);color:var(--c-text);border:1px solid var(--c-line);border-radius:15px;padding:22px;box-shadow:var(--c-pop-shadow);font-family:var(--font-sans);font-size:13px}
+.reader-dialog header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;font-size:16px}.reader-dialog header button{font-size:22px;padding:0 5px}.reader-dialog p{font-size:12px;color:var(--c-sub);line-height:1.7;margin:12px 0}.reader-dialog label{display:block;margin:12px 0}.reader-dialog input:not([type=checkbox]):not([type=file]):not([type=range]),.reader-dialog textarea,.reader-dialog select{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--c-line);border-radius:7px;background:var(--c-field);margin-top:6px;outline:none}.reader-dialog textarea{min-height:70px;resize:vertical}.reader-dialog input[type=checkbox]{margin-right:8px}.reader-dialog footer{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:15px}.reader-dialog button{cursor:pointer}.reader-dialog button:disabled{opacity:.5;cursor:wait}.reader-button{display:inline-flex!important;align-items:center;justify-content:center;padding:8px 12px;border-radius:7px;background:var(--c-active);color:var(--color-ds);cursor:pointer}.reader-dialog .reader-error{color:#c94c4c}
+@media print{.reader-modal-shade{display:none!important}}
+
+.reader-rich-block{position:relative;margin:1.2em 0;line-height:1.7;font-size:inherit}.reader-rich-block p:first-child{margin-top:0}.reader-rich-block p:last-child{margin-bottom:0}.reader-rich-callout{display:flex;align-items:flex-start;gap:14px;padding:18px 20px;background:var(--c-field);border-radius:9px}.rich-callout-icon{flex-shrink:0}.reader-rich-columns{display:grid;grid-template-columns:1fr 1fr;gap:28px}.reader-rich-columns>div{min-width:0}.reader-rich-figure figure{display:inline-block;margin:0}.reader-rich-figure img{display:block;width:100%;height:auto;border-radius:6px}.reader-rich-figure figcaption{font:12px var(--font-sans);color:var(--c-faint);margin-top:9px;line-height:1.6}.reader-rich-card{border:1px solid var(--c-line);border-radius:10px;padding:18px 20px}.reader-rich-card>a{font-weight:600;color:var(--c-ink);text-decoration:none}.reader-rich-card>div{color:var(--c-sub);font-size:13px;margin-top:6px}.reader-rich-block.ProseMirror-selectednode{outline:2px solid var(--color-ds);outline-offset:3px}@media(max-width:640px){.reader-rich-columns{grid-template-columns:1fr;gap:12px}}@media print{.reader-rich-columns{grid-template-columns:1fr}.reader-rich-block{break-inside:avoid}}
+
+/* The portfolio's SVG alpha shaping is applied to surfaces, never to text. */
+*,*::before,*::after{corner-shape:superellipse(1.5)}
+.doc-tab,.newdoc-btn,.reader-button{isolation:isolate}
+.doc-tab::before,.newdoc-btn::before,.reader-button::before{content:'';position:absolute;inset:1px;z-index:-1;background:var(--smooth-fill,transparent);border-radius:12px;filter:url(#reader-superellipse);pointer-events:none}
+.doc-tab{background:transparent!important;border:0!important;border-radius:17px!important}
+.doc-tab:hover{--smooth-fill:color-mix(in srgb,var(--c-ink) 6%,var(--c-surface))}.doc-tab.is-active{--smooth-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-surface))}
+.newdoc-btn{position:relative;background:transparent!important;border:0!important;box-shadow:none!important;--smooth-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-panel))}.newdoc-btn:hover{--smooth-fill:color-mix(in srgb,var(--c-ink) 9%,var(--c-panel))}
+.reader-button{position:relative;background:transparent!important;--smooth-fill:color-mix(in srgb,var(--color-ds) 12%,var(--c-pop));border:0!important}
+.reader-dialog,.side-menu,.identity-menu,.reader-rich-card{border:0!important}
+.reader-dialog{border-radius:20px}.reader-rich-card{background:var(--c-field)}
+button:focus-visible{outline:2px solid var(--color-ds);outline-offset:3px}
+
+.reader-button:hover{--smooth-fill:color-mix(in srgb,var(--color-ds) 19%,var(--c-pop))}.reader-dialog{border-radius:24px}.ui-font button,.reader-dialog button{font-weight:400}.workspace-footer .manage-entry{background:var(--c-field)!important;border-radius:14px}.workspace-footer .manage-entry:hover{background:var(--c-chip-hover)!important}
+
+/* One motion system for popovers, dialogs and menus. */
+:root{--motion-enter:180ms;--motion-leave:140ms;--motion-ease:cubic-bezier(.22,1,.36,1)}
+.overlay-enter-active,.overlay-leave-active{transition:opacity var(--motion-enter) ease}
+.overlay-leave-active{transition-duration:var(--motion-leave)}
+.overlay-enter-active>.reader-dialog,.overlay-leave-active>.reader-dialog{transition:transform var(--motion-enter) var(--motion-ease),opacity var(--motion-enter) ease}
+.overlay-enter-from,.overlay-leave-to{opacity:0}
+.overlay-enter-from>.reader-dialog,.overlay-leave-to>.reader-dialog{transform:translateY(5px) scale(.975);opacity:0}
+.pop-enter-active,.fade-enter-active{transition:opacity var(--motion-enter) ease,transform var(--motion-enter) var(--motion-ease)!important}
+.pop-leave-active,.fade-leave-active{transition:opacity var(--motion-leave) ease,transform var(--motion-leave) var(--motion-ease)!important}
+.doc-row,.cat-row{border-radius:14px!important;corner-shape:superellipse(1.5)}
+.lib-row{corner-shape:superellipse(1.5)}
+@media(prefers-reduced-motion:reduce){.overlay-enter-active,.overlay-leave-active,.overlay-enter-active>.reader-dialog,.overlay-leave-active>.reader-dialog,.pop-enter-active,.pop-leave-active,.fade-enter-active,.fade-leave-active{transition:none!important}}
+
+/* Keep the row fill smooth in browsers without native corner-shape support. */
+.doc-row,.lib-row{position:relative;isolation:isolate;background:transparent!important}
+.doc-row::before,.lib-row::before{content:'';position:absolute;inset:1px;z-index:-1;pointer-events:none;background:var(--row-fill,transparent);filter:url(#reader-superellipse);border-radius:12px;transition:background var(--motion-enter) ease}
+.lib-row::before{border-radius:17px}
+.doc-row:hover,.lib-row:hover,.lib-row.is-current{--row-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-panel))}
+.doc-row.is-on{--row-fill:color-mix(in srgb,var(--color-ds) 10%,var(--c-panel))}
+.doc-tab-dot{corner-shape:round}

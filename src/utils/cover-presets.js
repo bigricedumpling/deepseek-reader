@@ -1,0 +1,3 @@
+export const coverPalettes=[['#c8dcca','#e9d4b8','#a4bec4'],['#c9c8ee','#f0cfd7','#b9dce5'],['#dcbda6','#c97861','#eadcc0'],['#abc2d8','#dce4ed','#b8b5d3'],['#bdcbb4','#e6e1b8','#a0bdb4'],['#eed7c6','#e9bfc4','#d3c6da'],['#b3c5cc','#a6b4c3','#e0d6c9'],['#dfc781','#d9ad93','#e9dcc6']]
+export const coverShapes=[['mist','柔雾'],['mesh','色域'],['ribbon','流线'],['grain','颗粒']]
+export function randomCover(){return {type:'gradient',preset:coverShapes[Math.floor(Math.random()*coverShapes.length)][0],colors:[...coverPalettes[Math.floor(Math.random()*coverPalettes.length)]],seed:Math.floor(Math.random()*1000),animated:false,height:'medium',position:50}}

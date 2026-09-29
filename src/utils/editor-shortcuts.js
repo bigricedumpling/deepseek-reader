@@ -30,11 +30,11 @@ import { lift, wrapIn } from '@milkdown/kit/prose/commands'
 import { wrapInList, liftListItem, sinkListItem } from '@milkdown/kit/prose/schema-list'
 
 /* ------------------------------------------------------------------ *
- * 改这一块是什么块（菜单里的「转为」和快捷键共用）
+ * 改这一块是什么块（菜单里的转为和快捷键共用）
  *
- * 之前只有「段落 ⇄ 标题」这一种走 setBlockType，标题级别压根没传，
+ * 之前只有段落 ⇄ 标题这一种走 setBlockType，标题级别压根没传，
  * 于是不管按 ⌘⌥2 还是 ⌘⌥3 都落到 heading 的默认级别（1）——
- * 现象就是「h1 改不成 h2」。这里把级别、代码块、列表、引用一起补齐。
+ * 现象就是h1 改不成 h2。这里把级别、代码块、列表、引用一起补齐。
  * ------------------------------------------------------------------ */
 
 /** 能整块改类型的块：普通文本块，外加代码块（它的内容也是纯文本） */
@@ -51,7 +51,7 @@ function inQuote(state) {
   return false
 }
 
-/** 菜单里那几个「标题 / 正文 / 代码块」的目标类型与属性 */
+/** 菜单里那几个标题 / 正文 / 代码块的目标类型与属性 */
 function targetOf(schema, kind) {
   if (kind === 'paragraph') return { type: schema.nodes.paragraph, attrs: null }
   if (kind === 'code_block') return { type: schema.nodes.code_block, attrs: { language: '' } }
@@ -64,11 +64,11 @@ function targetOf(schema, kind) {
 const LIST_KINDS = ['bullet_list', 'ordered_list', 'task_list']
 
 /**
- * 「当前这一块」是哪一块。
+ * 当前这一块是哪一块。
  *
  * 两种选区都要认：普通光标（$from 往上找），以及整块选中（NodeSelection）——
  * 代码块、表格、图片被点选时是后者，selection.$from.depth 是 0，只按光标找会一个都找不到，
- * 于是「再按一次 ⌘⌥C 变回正文」就没反应了。
+ * 于是再按一次 ⌘⌥C 变回正文就没反应了。
  */
 function blockAnchor(state) {
   const sel = state.selection
@@ -149,7 +149,7 @@ function liftOutOfList(view) {
 
 /**
  * 菜单里点一个类型：引用/列表里先抬到顶层，再改。
- * 不抬的话，「把列表项改成二级标题」改出来的标题还套在列表项里，看起来像没生效。
+ * 不抬的话，把列表项改成二级标题改出来的标题还套在列表项里，看起来像没生效。
  */
 export function applyBlockKind(view, kind) {
   if (!view) return false
@@ -351,9 +351,11 @@ function relativePath(fromDoc, target) {
 export function resolveDocHref(href, fromDoc) {
   const raw = String(href || '').split('#')[0]
   if (!raw || /^[a-z]+:/i.test(raw) || raw.startsWith('/')) return ''
-  if (!/\.md$/i.test(raw)) return ''
+  if (!/\.(md|pdf|html?)$/i.test(raw)) return ''
+  let decoded
+  try { decoded = decodeURIComponent(raw) } catch { return '' }
   const parts = String(fromDoc || '').split('/').slice(0, -1)
-  for (const seg of decodeURIComponent(raw).split('/')) {
+  for (const seg of decoded.split('/')) {
     if (seg === '.' || seg === '') continue
     if (seg === '..') parts.pop()
     else parts.push(seg)
@@ -421,7 +423,7 @@ export function editorShortcuts(props = {}) {
               return true
             }
 
-            // 改块类型：⌘⌥1…6 / ⌘⌥0（改的是「光标所在的这一块」）
+            // 改块类型：⌘⌥1…6 / ⌘⌥0（改的是光标所在的这一块）
             if (mod && event.altKey && TITLES[key]) {
               event.preventDefault()
               return applyBlockKind(view, TITLES[key])

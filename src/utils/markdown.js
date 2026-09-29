@@ -1,3 +1,4 @@
+import {layoutText} from './column-format'
 import MarkdownIt from 'markdown-it'
 import taskLists from 'markdown-it-task-lists'
 import sub from 'markdown-it-sub'
@@ -5,6 +6,7 @@ import sup from 'markdown-it-sup'
 import footnote from 'markdown-it-footnote'
 import texmath from 'markdown-it-texmath'
 import katex from 'katex'
+import { assetUrl } from './api.js'
 
 const md = new MarkdownIt({
   html: true,
@@ -24,7 +26,7 @@ const md = new MarkdownIt({
  * AI 工具输出的 markdown 常用 \(…\) 表行内公式、\[…\] 表独立公式，
  * 而不是 markdown 世界惯用的 $…$。这里转成 $ 形式再交给同一个渲染器。
  *
- * 恪守「宁可不转、绝不错转」：代码块、行内代码、HTML 块一律豁免。
+ * 恪守宁可不转、绝不错转：代码块、行内代码、HTML 块一律豁免。
  */
 function normalizeMathDelimiters(src) {
   const text = String(src ?? '')
@@ -84,6 +86,13 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
     tokens[idx].attrSet('rel', 'noopener noreferrer')
   }
   return defaultLinkOpen(tokens, idx, options, env, self)
+}
+
+const defaultImage = md.renderer.rules.image || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+md.renderer.rules.image = function (tokens, idx, options, env, self) {
+  const src = tokens[idx].attrGet('src')
+  if (src) tokens[idx].attrSet('src', assetUrl(src))
+  return defaultImage(tokens, idx, options, env, self)
 }
 
 /* ---------- Front matter ---------- */
@@ -171,9 +180,22 @@ export function extractToc(src) {
 
 /** 搜索结果高亮（返回 HTML 片段） */
 export function highlight(text, kw) {
-  if (!kw) return text
+  const escape = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  if (!kw) return escape(text)
   const safe = String(kw).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return String(text).replace(new RegExp(safe, 'gi'), (m) => `<mark>${m}</mark>`)
+  let at = 0, out = ''
+  for (const match of String(text).matchAll(new RegExp(safe, 'gi'))) {
+    out += escape(String(text).slice(at, match.index)) + `<mark>${escape(match[0])}</mark>`
+    at = match.index + match[0].length
+  }
+  return out + escape(String(text).slice(at))
+}
+
+function searchLineText(line) {
+  return line
+    .replace(/<\/?(?:span|mark|u|strong|em|sup|sub|s|del|ins|br)(?:\s[^>]*)?>/gi, '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
 }
 
 /**
@@ -186,17 +208,29 @@ export function searchDocs(docs, keyword) {
   if (!kw) return []
   const results = []
   for (const doc of docs) {
-    const lines = String(doc.raw || '').split('\n')
+    const lines = layoutText(doc.raw).split('\n')
     const hits = []
+    let ordinal = 0
     lines.forEach((line, i) => {
-      if (!line.toLowerCase().includes(kw)) return
-      if (hits.length >= 12) return
-      const clean = line.replace(/^[#>\-*\s]+/, '').trim()
-      if (!clean) return
-      hits.push({
-        line: i + 1,
-        text: clean.length > 140 ? clean.slice(0, 140) + '…' : clean
-      })
+      const visible = searchLineText(line)
+      const lower = visible.toLowerCase()
+      let from = lower.indexOf(kw)
+      let occurrence = 0
+      while (from >= 0) {
+        occurrence++
+        if (hits.length < 20) {
+          const start = Math.max(0, from - 55)
+          const clean = (start ? '…' : '') + visible.slice(start, from + kw.length + 75).replace(/^[#>\-*\s]+/, '').trim()
+          if (clean) hits.push({
+            line: i + 1,
+            ordinal,
+            occurrence,
+            text: clean.length > 140 ? clean.slice(0, 140) + '…' : clean
+          })
+        }
+        ordinal++
+        from = lower.indexOf(kw, from + kw.length)
+      }
     })
     if (hits.length) results.push({ id: doc.id, title: doc.title, hits })
   }

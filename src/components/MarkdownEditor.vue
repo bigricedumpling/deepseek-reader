@@ -1,5 +1,17 @@
 <template>
   <div class="editor-shell">
+    <p v-if="uploadError" class="lossy-note ui-font" role="alert">图片未保存：{{ uploadError }}</p>
+    <div v-if="hasTransientImages" class="lossy-note ui-font" role="alert">
+      这篇有 {{ transientImageCount }} 张图片只记录了浏览器临时地址。正文和图片位置仍在，原图需从截图重新选择。
+      <details v-if="!readonly" class="mt-2">
+        <summary>按原位置逐张替换图片</summary>
+        <div v-for="item in transientImages" :key="item.src" class="my-1 flex items-center gap-2">
+          <span>第 {{ item.index }} 张，第 {{ item.line }} 行</span>
+          <button class="lossy-btn" @click="chooseReplacement(item.src)">选择原图</button>
+        </div>
+      </details>
+      <input ref="replacementInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="replaceImage" />
+    </div>
     <div v-if="lossy" class="lossy-note ui-font">
       <p>
         这篇里有编辑器逐字还原不了的结构，所以改成了源码编辑：内容照常编辑和自动保存，
@@ -9,10 +21,12 @@
         <button class="lossy-btn" @click="showDiff = !showDiff">
           {{ showDiff ? '收起差异' : '差在哪' }}
         </button>
-        <button v-if="!readonly" class="lossy-btn is-primary" @click="emit('canonize', roundTripText)">
+        <button v-if="!readonly" class="lossy-btn" @click="chooseNewImage">插入图片</button>
+        <input ref="newImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="insertNewImage" />
+        <button v-if="!readonly && !hasTransientImages" class="lossy-btn is-primary" @click="emit('canonize', roundTripText)">
           按编辑器规范重排这篇
         </button>
-        <span v-if="!readonly" class="lossy-hint">重排 = 接受上面列出的差异（会改写磁盘上的这份文件），之后这篇就能富文本编辑</span>
+        <span v-if="!readonly && !hasTransientImages" class="lossy-hint">重排 = 接受上面列出的差异（会改写磁盘上的这份文件），之后这篇就能富文本编辑</span>
       </p>
       <ul v-if="showDiff" class="lossy-diff">
         <li v-for="d in diff" :key="d.line">
@@ -33,7 +47,7 @@
     />
     <div v-show="!lossy" ref="host" class="crepe-host"></div>
 
-    <!-- 块左侧那个六点手柄，点一下弹出来的「转为」菜单 -->
+    <!-- 块左侧那个六点手柄，点一下弹出来的转为菜单 -->
     <BlockTypeMenu
       v-if="menu"
       :x="menu.x"
@@ -41,6 +55,7 @@
       :groups="menu.groups"
       @pick="onMenuPick"
     />
+    <TextStyleMenu v-if="styleMenu" :x="styleMenu.x" :y="styleMenu.y" @pick="onStylePick" />
   </div>
 </template>
 
@@ -53,8 +68,14 @@ import { editorShortcuts, applyBlockKind, blockKindOf } from '../utils/editor-sh
 import { editorFold, bindFoldView, refreshFolds } from '../utils/editor-fold'
 import { foldKey, isFolded, isFoldable, setFoldable, toggleFold, foldState, foldDoc } from '../utils/toc-fold'
 import BlockTypeMenu from './BlockTypeMenu.vue'
+import TextStyleMenu from './TextStyleMenu.vue'
+import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
+import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
+import { imagePaste } from '../utils/editor-images'
+import { richBlockRemark, richBlockSchema } from '../utils/rich-blocks'
 import { editorViewCtx } from '@milkdown/kit/core'
 import { TextSelection } from '@milkdown/kit/prose/state'
+import { API_BASE, assetUrl } from '../utils/api'
 
 /*
  * 编辑器是在 onMounted 里建出来的实例，组件热更新不会重建它 ——
@@ -79,7 +100,7 @@ const props = defineProps({
   /** 文档在仓库里的相对路径，列宽旁路文件用它做键 */
   docFile: { type: String, default: '' }
 })
-const emit = defineEmits(['update:value', 'lossy', 'canonize', 'pick-doc', 'open-doc'])
+const emit = defineEmits(['update:value', 'lossy', 'canonize', 'restore', 'pick-doc', 'open-doc'])
 
 const host = ref(null)
 const srcEl = ref(null)
@@ -96,6 +117,20 @@ const lossy = ref(false)
 const roundTripText = ref('')
 const diff = ref([])
 const showDiff = ref(false)
+const uploadError = ref('')
+const replacementInput = ref(null)
+const newImageInput = ref(null)
+let replacementSrc = ''
+let newImagePosition = 0
+let newImageBaseline = ''
+const transientImages = computed(() => {
+  const source = String(props.value)
+  return [...source.matchAll(/!\[[^\]]*\]\((blob:[^)]+)\)/g)].map((match, index) => ({
+    src: match[1], index: index + 1, line: source.slice(0, match.index).split('\n').length
+  }))
+})
+const transientImageCount = computed(() => transientImages.value.length)
+const hasTransientImages = computed(() => transientImageCount.value > 0)
 let crepe = null
 let observer = null
 /**
@@ -118,20 +153,96 @@ function normalize(s) {
   return String(s || '').replace(/\s+/g, ' ').trim()
 }
 
+async function uploadImage(file) {
+  uploadError.value = ''
+  if (props.readonly || !props.docFile) throw new Error('当前文档不能上传图片')
+  if (file.size > 10 * 1024 * 1024) throw new Error('图片超过 10 MB')
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+      reader.onerror = () => reject(new Error('无法读取图片'))
+      reader.readAsDataURL(file)
+    })
+    const res = await fetch(API_BASE + '/api/asset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: props.docFile, mime: file.type, data })
+    })
+    const out = await res.json()
+    if (!res.ok || !out.ok) throw new Error(out.error || '服务器未保存图片')
+    return out.data.url || '/api/file?path=' + encodeURIComponent(out.data.path) + '&doc=' + encodeURIComponent(props.docFile)
+  } catch (error) {
+    uploadError.value = error.message || '上传失败'
+    throw error
+  }
+}
+
+function chooseReplacement(src) {
+  replacementSrc = src
+  if (replacementInput.value) {
+    replacementInput.value.value = ''
+    replacementInput.value.click()
+  }
+}
+
+async function replaceImage(event) {
+  const file = event.target.files?.[0]
+  const oldSrc = replacementSrc
+  if (!file || !oldSrc) return
+  try {
+    const url = await uploadImage(file)
+    if (!String(props.value).includes(oldSrc)) throw new Error('图片位置已变化，请重新选择')
+    emit('update:value', String(props.value).replace(oldSrc, url))
+  } catch (error) {
+    uploadError.value = error.message || '替换失败'
+  }
+}
+
+function chooseNewImage() {
+  newImageBaseline = String(props.value)
+  newImagePosition = srcEl.value?.selectionStart ?? newImageBaseline.length
+  if (newImageInput.value) {
+    newImageInput.value.value = ''
+    newImageInput.value.click()
+  }
+}
+
+async function insertNewImage(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  try {
+    const url = await uploadImage(file)
+    if (String(props.value) !== newImageBaseline) throw new Error('正文已变化，请重新选择插入位置')
+    const label = file.name.replace(/\.[^.]+$/, '').replace(/[\[\]()\r\n]/g, '').slice(0, 80) || '图片'
+    const image = `\n![${label}](${url})\n`
+    emit('update:value', newImageBaseline.slice(0, newImagePosition) + image + newImageBaseline.slice(newImagePosition))
+  } catch (error) {
+    uploadError.value = error.message || '插入失败'
+  }
+}
+
 onMounted(async () => {
   crepe = new Crepe({
     root: host.value,
     defaultValue: props.value,
     featureConfigs: {
+      [Crepe.Feature.ImageBlock]: { onUpload: uploadImage, proxyDomURL: assetUrl },
       [Crepe.Feature.Toolbar]: {
         buildToolbar: (builder) => {
           const groups = builder.build()
           builder.clear()
           builder.addGroup('block-type', '块格式').addItem('block-type', {
             label: '转换格式',
-            icon: '<span class="block-type-label">转换格式 <span aria-hidden="true">⌄</span></span>',
+            icon: '<span class="block-type-label">转换格式 <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></span>',
             active: () => false,
             onRun: () => openSelectionMenu()
+          })
+          builder.addGroup('reader-style', '文字样式').addItem('reader-style', {
+            label: '文字颜色、高光与下划线',
+            icon: '<span class="text-style-trigger" aria-hidden="true">A<span></span></span>',
+            active: () => false,
+            onRun: () => openStyleMenu()
           })
           for (const group of groups) {
             const target = builder.addGroup(group.key, group.label)
@@ -144,6 +255,19 @@ onMounted(async () => {
         mode: 'block'
       },
       [Crepe.Feature.BlockEdit]: {
+        blockHandle: {
+          getPlacement: () => 'left',
+          getOffset: () => 16,
+          getPosition: ({ active }) => {
+            // Use the first line box, not the whole block or its top edge.
+            const el=active.el, rect=el.getBoundingClientRect()
+            const text=el.matches('p,h1,h2,h3,h4,h5,h6,pre')?el:el.querySelector('p,h1,h2,h3,h4,h5,h6,pre')||el
+            const style=getComputedStyle(text), textRect=text.getBoundingClientRect()
+            const lineHeight=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.5
+            const top=textRect.top+(parseFloat(style.paddingTop)||0)
+            return {x:rect.left,y:top,left:rect.left,right:rect.right,top,bottom:top+lineHeight,width:rect.width,height:lineHeight}
+          }
+        },
         /*
          * 斜杠菜单里多一组：插入本知识库的其他文档。
          * 插进去的是一条普通的 markdown 链接，点击时由 editor-shortcuts 的
@@ -195,6 +319,11 @@ onMounted(async () => {
   // 访客（分享链接进来的人）是只读的：编辑器层面直接关掉，不靠前端藏按钮
   if (props.readonly) crepe.setReadonly(true)
   crepe.editor.use(editorShortcuts({ docId: props.docId, onOpenDoc: (path) => emit('open-doc', path) }))
+  crepe.editor.config(configureInlineStyleMarkdown)
+  crepe.editor.use(imagePaste(uploadImage,message=>{uploadError.value=message}))
+  crepe.editor.use(columnsRemark).use(columnSchema).use(columnsSchema).use(columnsDrag)
+  crepe.editor.use(richBlockRemark).use(richBlockSchema)
+  crepe.editor.use(inlineStyleRemark).use(textColorMark).use(highlightMark).use(underlineMark)
   // 正文里的标题折叠（跟右侧目录共用一份折叠状态）
   crepe.editor.use(editorFold())
 
@@ -217,8 +346,8 @@ onMounted(async () => {
 
   /*
    * 块手柄上的委托：手柄是 Crepe 自己造的 DOM，点它不会走 Vue 的事件，
-   * 所以在宿主上捕获一层。第一个按钮是「加号」（加点下面插入新块），
-   * 第二个是六点拖拽手柄 —— 单击它弹「转为」菜单，拖动就还给 Crepe 去挪块。
+   * 所以在宿主上捕获一层。第一个按钮是加号（加点下面插入新块），
+   * 第二个是六点拖拽手柄 —— 单击它弹转为菜单，拖动就还给 Crepe 去挪块。
    */
   host.value?.addEventListener('pointerdown', onHandleDown, true)
   host.value?.addEventListener('click', onHandleClick, true)
@@ -226,6 +355,10 @@ onMounted(async () => {
   document.addEventListener('pointerdown', onDocDown, true)
   document.addEventListener('keydown', onDocKey)
   window.addEventListener('scroll', onDocScroll, true)
+  window.addEventListener('reader-insert-block', insertRich)
+  window.addEventListener('reader-open-document', openRichDoc)
+  window.addEventListener('reader-restore-version', restoreVersion)
+  host.value?.addEventListener('dblclick', editRich)
 
   // 开发期把编辑器和原文快照暴露出来，方便查往返到底差在哪
   if (import.meta.env.DEV) {
@@ -280,13 +413,14 @@ onMounted(async () => {
 })
 
 /* ------------------------------------------------------------------ *
- * 块左侧手柄：单击弹出「转为」菜单
+ * 块左侧手柄：单击弹出转为菜单
  *
  * 以前改块类型只有两条路：打斜杠菜单（只能在新块上用）、和 ⌘⌥1/2/3 快捷键（得先知道）。
- * 结果就是「已经有的一段正文想改成二级标题/代码块」根本找不到入口。
+ * 结果就是已经有的一段正文想改成二级标题/代码块根本找不到入口。
  * 六点手柄本来就浮在每一块的左边，让它顺手把这件事做了。
  * ------------------------------------------------------------------ */
 const menu = ref(null)
+const styleMenu = ref(null)
 let handleDown = null
 
 function viewOf() {
@@ -297,8 +431,57 @@ function viewOf() {
   }
 }
 
+function restoreVersion(e){if(!props.readonly&&e.detail.path===props.docFile)emit('restore',e.detail.content)}
+function openRichDoc(e){emit('open-doc',e.detail)}
+function editRich(e){if(props.readonly)return;const el=e.target.closest('[data-reader-block]'),view=viewOf();if(!el||!view)return;const pos=view.posAtDOM(el,0);window.dispatchEvent(new CustomEvent('reader-edit-block',{detail:{path:props.docFile,pos,value:JSON.parse(el.dataset.readerBlock),raw:el.dataset.readerBlock}}))}
+function insertRich(e){
+ const view=viewOf(),d=e.detail;if(!view||props.readonly||lossy.value||d.path!==props.docFile)return
+ const value=JSON.stringify(d.value,null,2);let tr=view.state.tr
+ if(Number.isInteger(d.pos)){const node=tr.doc.nodeAt(d.pos);if(node?.type.name!=='reader_block'||JSON.stringify(JSON.parse(node.attrs.value))!==d.previous){uploadError.value='该内容已变化，请重新打开';return}tr=tr.setNodeMarkup(d.pos,undefined,{value})}
+ else tr=tr.replaceSelectionWith(view.state.schema.nodes.reader_block.create({value}))
+ userTyped=true;view.dispatch(tr.scrollIntoView());view.focus()
+}
 function closeMenu() {
   menu.value = null
+}
+
+function openStyleMenu() {
+  const view = viewOf()
+  if (!view || view.state.selection.empty || props.readonly || lossy.value) return
+  const button = host.value?.querySelector('[data-toolbar-item="reader-style"]')
+  const rect = button?.getBoundingClientRect()
+  if (!rect) return
+  closeMenu()
+  styleMenu.value = {
+    x: Math.max(8, Math.min(rect.left, window.innerWidth - 258)),
+    y: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 148)),
+    from: view.state.selection.from,
+    to: view.state.selection.to
+  }
+}
+
+function onStylePick(kind, tone) {
+  const view = viewOf()
+  const selection = styleMenu.value
+  styleMenu.value = null
+  if (!view || !selection || props.readonly) return
+  const { from, to } = selection
+  if (from >= to || to > view.state.doc.content.size) return
+  const type = view.state.schema.marks[kind === 'color' ? 'readerColor' : kind === 'highlight' ? 'readerHighlight' : 'readerUnderline']
+  if (!type) return
+  const tr = view.state.tr.removeMark(from, to, type)
+  if (kind === 'underline') {
+    let hadUnderline = false
+    view.state.doc.nodesBetween(from, to, (node) => {
+      if (node.isText && type.isInSet(node.marks)) hadUnderline = true
+    })
+    if (!hadUnderline) tr.addMark(from, to, type.create())
+  } else if (tone) {
+    tr.addMark(from, to, type.create({ tone }))
+  }
+  userTyped = true
+  view.dispatch(tr)
+  view.focus()
 }
 
 /** 与加粗等操作共用 Crepe 浮窗，保留其维护的编辑器选区。 */
@@ -436,7 +619,7 @@ function onHandleDown(e) {
   handleDown = {
     x: e.clientX,
     y: e.clientY,
-    // 第二个按钮才是六点拖拽手柄；第一个是「下面插入一块」的加号
+    // 第二个按钮才是六点拖拽手柄；第一个是下面插入一块的加号
     drag: !!e.target.closest('.operation-item') && e.target.closest('.operation-item') === items[1]
   }
 }
@@ -466,16 +649,18 @@ function onHeadingClick(e) {
 }
 
 function onDocDown(e) {
-  if (e.target?.closest?.('.bt-menu, [data-toolbar-item="block-type"]')) return
+  if (e.target?.closest?.('.bt-menu, .text-style-menu, [data-toolbar-item="block-type"], [data-toolbar-item="reader-style"]')) return
   if (menu.value) closeMenu()
+  styleMenu.value = null
 }
 
 /*
  * 滚动时菜单要跟着走（它用的是固定定位，锚点一动就错位了），所以干脆关掉。
  * 但菜单自己内部滚动（条目多、窗口矮）不能算 —— 那一下会先把菜单关掉，
- * 点下去的坐标就落到正文上了，看起来就是「点了没反应」。
+ * 点下去的坐标就落到正文上了，看起来就是点了没反应。
  */
 function onDocScroll(e) {
+  if (styleMenu.value && !e.target?.closest?.('.text-style-menu')) styleMenu.value = null
   if (!menu.value) return
   const t = e.target
   if (t && t.nodeType === 1 && t.closest && t.closest('.bt-menu')) return
@@ -483,7 +668,7 @@ function onDocScroll(e) {
 }
 
 function onDocKey(e) {
-  if (e.key === 'Escape') closeMenu()
+  if (e.key === 'Escape') { closeMenu(); styleMenu.value = null }
 }
 
 async function onMenuPick(kind) {
@@ -513,6 +698,10 @@ function onSourceInput(e) {
 }
 
 onBeforeUnmount(async () => {
+  window.removeEventListener('reader-insert-block', insertRich)
+  window.removeEventListener('reader-open-document', openRichDoc)
+  window.removeEventListener('reader-restore-version', restoreVersion)
+  host.value?.removeEventListener('dblclick', editRich)
   host.value?.removeEventListener('pointerdown', onHandleDown, true)
   host.value?.removeEventListener('click', onHandleClick, true)
   host.value?.removeEventListener('click', onHeadingClick, true)

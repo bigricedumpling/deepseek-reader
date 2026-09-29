@@ -5,6 +5,7 @@
     于是切深色时只有编辑器内部变色，侧栏、工具条、目录、底栏全是白的。
   -->
   <div class="flex h-screen w-full overflow-hidden bg-[var(--c-surface)]">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="reader-superellipse" x="-20%" y="-30%" width="140%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 12 -4"/></filter></defs></svg>
     <Sidebar
       :nodes="store.treeNodes"
       :current-path="store.currentPath"
@@ -47,6 +48,7 @@
         @update:keyword="store.searchKeyword = $event"
         @input="onEdit"
         @jump="onJump"
+        @create-doc="askCreateDocInCurrentLib"
         @reload="store.reload()"
       />
     </main>
@@ -104,6 +106,8 @@ import TocPanel from './components/TocPanel.vue'
 import AppDialog from './components/AppDialog.vue'
 import { useDocsStore } from './stores/docs'
 import { useReaderStore } from './stores/reader'
+import { scrollToTarget } from './utils/scroll-target'
+import { foldedKeys, unfoldKeys } from './utils/toc-fold'
 
 const store = useDocsStore()
 /** 当前这篇是不是 pdf：右栏显示它的书签目录，点击跳页 */
@@ -169,7 +173,7 @@ function ensureSafe() {
     }
     ask({
       title: '有没保存的改动',
-      message: '「' + store.currentMeta.name + '」改过还没保存。',
+      message: '' + store.currentMeta.name + '改过还没保存。',
       confirmText: '保存并继续',
       altText: '丢弃改动',
       onConfirm: async () => {
@@ -193,7 +197,7 @@ function askCreateCategory(parent) {
   const target = parent || ''
   ask({
     mode: 'prompt',
-    title: target ? '在「' + target + '」下新建目录' : '在根目录下新建目录',
+    title: target ? '在' + target + '下新建目录' : '在根目录下新建目录',
     placeholder: '目录名，例如 参考资料',
     confirmText: '创建',
     onConfirm: async (name) => {
@@ -205,7 +209,7 @@ function askCreateCategory(parent) {
 
 function askDeleteCategory(folder) {
   ask({
-    title: '删除目录「' + folder.name + '」',
+    title: '删除目录' + folder.name + '',
     message:
       '整个目录会连同里面的东西一起挪到 .回收站，文件不会被真删掉，想找回随时可以。',
     confirmText: '删除',
@@ -220,13 +224,13 @@ function askDeleteCategory(folder) {
 async function askCreateDoc(dir) {
   // 目录从哪来：根部按钮传当前知识库路径，目录行传它所在的目录。
   // 没传参时也**默认根目录** —— 以前会悄悄落到"当前文档所在目录"，
-  // 于是按了根部的按钮、对话框里却写着「在『笔试』下新建文档」，很莫名其妙。
+  // 于是按了根部的按钮、对话框里却写着在『笔试』下新建文档，很莫名其妙。
   const target = dir == null ? '' : dir
   // 先处理未保存的改动，再问名字，顺序反了会让人白填一次
   if (!(await ensureSafe())) return
   ask({
     mode: 'prompt',
-    title: target ? '在「' + target + '」下新建文档' : '在根目录下新建文档',
+    title: target ? '在' + target + '下新建文档' : '在根目录下新建文档',
     placeholder: '文档名（就是文件名）',
     confirmText: '创建',
     onConfirm: async (name) => {
@@ -236,10 +240,14 @@ async function askCreateDoc(dir) {
   })
 }
 
+function askCreateDocInCurrentLib() {
+  return askCreateDoc(new URLSearchParams(location.search).get('lib') || '')
+}
+
 function askDeleteDoc(doc) {
   const editingThis = doc.file === store.currentPath && store.isDirty
   ask({
-    title: '删除文档「' + doc.name + '」',
+    title: '删除文档' + doc.name + '',
     message:
       '文件不会被真删掉，会从 ' + doc.file + ' 挪到 .回收站 里，想找回随时可以。' +
       (editingThis ? '\n\n注意：这篇正文有改动还没保存，删掉之后这些改动也没了。' : ''),
@@ -483,29 +491,45 @@ function focusSearch() {
   }
 }
 
-async function onJump({ id, keyword }) {
-  // 搜索结果跳转同样要过未保存检查，否则一搜一跳就把改动冲掉了
-  if (!(await ensureSafe())) return
-  await jumpTo(id, keyword)
+async function onJump({ id, keyword, hit }) {
+  // 当前文档内定位不会离开编辑器，不应因为尚未自动保存而弹出离开确认。
+  if (id !== store.currentPath && !(await ensureSafe())) return
+  await jumpTo(id, keyword, hit)
 }
 
-async function jumpTo(id, keyword) {
-  await store.select(id)
-  setTimeout(() => {
-    const root = document.getElementById('main-scroll-container')
-    if (!root) return
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    let node
-    while ((node = walker.nextNode())) {
-      if (node.textContent.toLowerCase().includes(keyword.toLowerCase())) {
-        const el = node.parentElement
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        el.style.transition = 'background .4s'
-        el.style.background = 'rgba(255,246,194,.7)'
-        setTimeout(() => (el.style.background = ''), 1600)
-        break
-      }
+function findSearchBlock(root, keyword, ordinal) {
+  const needle = keyword.toLocaleLowerCase()
+  let seen = 0, first = null
+  for (const block of root.children) {
+    if (block.classList.contains('prosemirror-virtual-cursor')) continue
+    const text = block.textContent.toLocaleLowerCase()
+    let at = text.indexOf(needle)
+    while (at >= 0) {
+      if (!first) first = block
+      if (seen++ === ordinal) return block
+      at = text.indexOf(needle, at + needle.length)
     }
-  }, 380)
+  }
+  return first
+}
+
+async function jumpTo(id, keyword, hit) {
+  if (id !== store.currentPath) await store.select(id)
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    const root = document.getElementById('main-scroll-container')
+    const editor = root?.querySelector('.ProseMirror')
+    if (!editor || !keyword) continue
+    const block = findSearchBlock(editor, keyword, hit?.ordinal ?? 0)
+    if (!block) continue
+    if (block.classList.contains('reader-folded')) {
+      unfoldKeys(Object.keys(foldedKeys()))
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    }
+    scrollToTarget(root, block)
+    block.classList.add('search-flash')
+    setTimeout(() => block.classList.remove('search-flash'), 1600)
+    return
+  }
 }
 </script>

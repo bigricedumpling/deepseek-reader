@@ -15,7 +15,7 @@
       </div>
 
       <!-- 目录项 -->
-      <nav ref="navEl" class="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 pb-4">
+      <nav ref="navEl" class="toc-scroll flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 pb-4">
         <div
           v-for="r in rows"
           :key="r.key"
@@ -65,14 +65,7 @@
           <span class="ui-font text-[10.5px] text-[var(--c-faint)] tabular-nums">
             {{ progress }}%
           </span>
-          <button
-            class="toc-top"
-            :class="{ 'is-shown': progress > 4 }"
-            title="回到顶部 T"
-            @click="emit('to-top')"
-          >
-            <PhArrowUp :size="13" />
-          </button>
+
         </div>
       </div>
     </div>
@@ -82,7 +75,7 @@
       v-show="!collapsed"
       class="absolute inset-y-0 -left-1.5 w-3 cursor-col-resize group z-10"
       title="拖动调整目录宽度"
-      @mousedown="startResize"
+      @pointerdown="startResize"
     >
       <div
         class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-transparent group-hover:bg-[var(--c-line)] transition-colors"
@@ -92,9 +85,11 @@
 </template>
 
 <script setup>
+import { resizePanel } from '../utils/panel-resize'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { PhSidebarSimple, PhArrowUp, PhCaretDown } from '@phosphor-icons/vue'
 import { foldKey, foldDoc, isFolded, isFoldable, toggleFold, unfoldKeys } from '../utils/toc-fold'
+import { scrollToTarget } from '../utils/scroll-target'
 
 const props = defineProps({
   toc: { type: Array, default: () => [] },
@@ -194,25 +189,9 @@ let ticking = false
 /* ---------- 拖拽调宽 ---------- */
 
 function startResize(e) {
-  e.preventDefault()
   dragging.value = true
-  const startX = e.clientX
-  const startW = props.width
-  document.body.style.userSelect = 'none'
-  document.body.style.cursor = 'col-resize'
-
-  function onMove(ev) {
-    emit('update:width', Math.max(200, Math.min(420, startW - (ev.clientX - startX))))
-  }
-  function onUp() {
-    dragging.value = false
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
-    document.body.style.userSelect = ''
-    document.body.style.cursor = ''
-  }
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
+  const startX=e.clientX, startW=props.width
+  resizePanel(e, ev => emit('update:width', Math.max(180,Math.min(420,startW - (ev.clientX-startX)))), () => { dragging.value = false })
 }
 
 /* ---------- 当前位置跟随 ---------- */
@@ -226,7 +205,7 @@ function collect() {
     heads = []
     return
   }
-  heads = [...scroller.querySelectorAll('h1, h2, h3, h4, h5, h6')]
+  heads = [...scroller.querySelectorAll('h1, h2, h3, h4, h5, h6')].filter(el=>!el.closest('.reader-rich-block'))
 }
 
 function syncActive() {
@@ -278,8 +257,7 @@ function scrollTo(i) {
   }
   const el = heads[i]
   if (!el || !scroller) return
-  const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
-  scroller.scrollTo({ top: Math.max(0, top - 90), behavior: 'smooth' })
+  scrollToTarget(scroller, el)
   activeIndex.value = i
 }
 
@@ -412,3 +390,5 @@ watch(
   background: var(--color-ds);
 }
 </style>
+
+<style scoped>.toc-scroll{padding-bottom:28px;mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 24px),transparent);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 24px),transparent)}</style>

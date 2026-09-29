@@ -37,7 +37,7 @@
         <input ref="libIconInput" type="file" accept="image/*" class="hidden" @change="onPickLibIcon" />
 
         <!-- 拖拽条：调面板宽度，松手后写回注册表 -->
-        <div class="lib-panel-resize" title="拖动调整知识库栏宽度" @mousedown.stop="startLibResize" />
+        <div class="lib-panel-resize" title="拖动调整知识库栏宽度" @pointerdown.stop="startLibResize" />
 
         <div class="lib-panel-list">
           <div
@@ -51,7 +51,7 @@
             @dragend.stop="onLibDragEnd"
           >
             <!-- 每个知识库用自己的图标 -->
-            <img class="lib-row-icon" :src="lib.icon || siteIcon" alt="" />
+            <button class="lib-icon-edit" :disabled="isGuest || lib.locked" :title="lib.locked ? '知识库已锁定' : '更换知识库图标'" @click.stop="pickLibIcon(lib, $event)"><ContentIcon class="lib-row-icon" :value="lib.icon || siteIcon" /></button>
 
 
             <button class="lib-row-name" :title="lib.name" @click="goLib(lib)">
@@ -101,11 +101,11 @@
     <!--
       收起态：只留图标本身，不再另给一条竖向工具条。
       展开入口不靠专门的按钮 —— 点图标、点检索、点下面任一目录都能展开并进入，
-      所以那条竖着的「展开/收起」图标是多余的。
+      所以那条竖着的展开/收起图标是多余的。
       也不放"新建文档"：收起时本来就不是干活的状态。
     -->
     <div v-if="collapsed" class="reader-rail">
-      <button class="brand-logo sm" title="展开侧栏" @click.stop="onRailLogo"><img :src="logo" alt="" /></button>
+      <button class="brand-logo sm" title="展开侧栏" @click.stop="onRailLogo"><ContentIcon :value="logo" /></button>
       <RailToc />
     </div>
 
@@ -118,7 +118,7 @@
       -->
       <div class="px-4 pt-5 pb-3 flex items-start gap-2.5 shrink-0">
         <button class="brand-logo" title="打开知识库" @click.stop="openLibPanel">
-          <img :src="logo" alt="" />
+          <ContentIcon :value="logo" />
         </button>
         <div class="min-w-0 flex-1">
           <input
@@ -154,7 +154,7 @@
           <PhSidebarSimple :size="16" />
         </button>
       </div>
-    <button class="manage-entry ui-font" @click="goEntry"><PhSquaresFour :size="15" /><span>切换入口</span><PhCaretRight :size="13" class="entry-chevron" /></button>
+
     <!-- 新建文档（新建目录在下面工具条那一排的文件夹按钮，不重复放） -->
     <div v-if="currentLibEditable" class="px-3 pt-2 pb-3">
       <button
@@ -238,7 +238,7 @@
       </div>
     </transition>
 
-    <!-- 树里那个「…」的菜单：teleport 出去，免得被侧栏的滚动裁掉 -->
+    <!-- 树里那个…的菜单：teleport 出去，免得被侧栏的滚动裁掉 -->
     <Teleport to="body">
       <div v-if="tree.menu.open" class="tree-menu" :style="tree.menu.style">
         <button
@@ -260,7 +260,7 @@
       v-if="!collapsed"
       class="absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize group"
       title="拖动调整侧栏宽度"
-      @mousedown="startResize"
+      @pointerdown="startResize"
     >
       <div class="absolute inset-y-0 right-0 w-px bg-transparent group-hover:bg-[var(--c-line)] transition-colors" />
     </div>
@@ -305,7 +305,7 @@
           @dragend="tree.end()"
           @click="emit('select', doc.file)"
         >
-          <button class="doc-title" :title="doc.file">
+          <button class="doc-title" :title="doc.file"><ContentIcon v-if="doc.meta?.icon" :value="doc.meta.icon" :size="14" />
             <span class="truncate">{{ doc.name }}</span>
             <span v-if="doc.dir" class="doc-dir">{{ doc.dir }}</span>
           </button>
@@ -319,9 +319,18 @@
       </template>
 
       </nav>
+      <div class="workspace-footer">
+        <button class="manage-entry ui-font" @click="identityOpen = !identityOpen"><PhUserCircle :size="20" /><span>{{ isGuest ? '公开访客' : '管理工作区' }}</span></button>
+        <div v-if="identityOpen" class="identity-menu">
+          <button @click="goEntry">切换入口</button>
+          <button v-if="!isGuest" @click="agentSettings=true;identityOpen=false">Agent 连接</button>
+        </div>
+      </div>
     </template>
     </aside>
 
+    <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false" />
+    <IconPicker v-if="iconPicking" :save="saveLibIcon" :anchor="libIconAnchor" @close="iconPicking=false" />
     <!-- 新建 / 删除知识库的确认框：用站内统一那套，不用浏览器原生弹窗 -->
     <AppDialog
       :open="libDialog.open"
@@ -339,11 +348,15 @@
 </template>
 
 <script setup>
+import AgentSettings from './AgentSettings.vue'
+import ContentIcon from './ContentIcon.vue'
+import IconPicker from './IconPicker.vue'
+import { resizePanel } from '../utils/panel-resize'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, provide } from 'vue'
 // 菜单里的图标：树的操作、分组与排序
 import {
   PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
-  PhSquaresFour, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
+  PhSquaresFour, PhUserCircle, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
   PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
   PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree
@@ -377,11 +390,11 @@ const currentLibEditable = computed(() => store.canEdit(libPanel.libs.find(l => 
  * 两个站点在同一域名下（/deepseek/reader/ 与 /deepseek/demo/），localStorage 按域名共享：
  * 前端一写回就互相串味，打开过示例库、主站的名字也被顶掉。
  * 而且以前写回用的键是写死的，注入的独立键根本读不到，
- * 所以「按实例分开键名」也解决不了。改成服务端按实例给：品牌从哪来由服务端决定，
+ * 所以按实例分开键名也解决不了。改成服务端按实例给：品牌从哪来由服务端决定，
  * 前端只负责显示；本地改只改当前这次会话，不落盘。
  */
 /*
- * 品牌来自构建时注入的 VITE_BRAND（形如「第一行|第二行」），
+ * 品牌来自构建时注入的 VITE_BRAND（形如第一行|第二行），
  * 与 VITE_BASE 一个机制 —— 每个实例构建自己的那一份，不依赖运行时环境变量，
  * 也不经过 localStorage（同域名下两个站点共用一个存储，写回就会串味）。
  */
@@ -524,18 +537,8 @@ async function onLibDragEnd() {
 }
 
 function startLibResize(e) {
-  const x0 = e.clientX
-  const w0 = libWidth.value
-  const move = (ev) => {
-    libWidth.value = Math.max(180, Math.min(420, w0 + (ev.clientX - x0)))
-  }
-  const up = () => {
-    document.removeEventListener('mousemove', move)
-    document.removeEventListener('mouseup', up)
-    saveLibConfig({ panelWidth: libWidth.value })
-  }
-  document.addEventListener('mousemove', move)
-  document.addEventListener('mouseup', up)
+  const x=e.clientX, width=libWidth.value
+  resizePanel(e, ev => {libWidth.value=Math.max(180,Math.min(420,width+ev.clientX-x))}, () => saveLibConfig({panelWidth:libWidth.value}))
 }
 
 /*
@@ -582,9 +585,11 @@ async function createLib() {
   })
 }
 
+const creatingLib = ref(false)
 async function doCreateLib(value) {
   const to = String(value || '').trim()
-  if (!to) return
+  if (!to || creatingLib.value) return
+  creatingLib.value = true
   try {
     const res = await fetch(API_BASE + '/api/lib', {
       method: 'POST',
@@ -598,6 +603,8 @@ async function doCreateLib(value) {
     if (made) await goLib(made)
   } catch (e) {
     window.alert(String(e.message || e))
+  } finally {
+    creatingLib.value = false
   }
 }
 
@@ -668,7 +675,7 @@ async function goLib(lib) {
 }
 
 /*
- * 知识库的「…」菜单：复用侧边栏那一套浮层（tree.menu），
+ * 知识库的…菜单：复用侧边栏那一套浮层（tree.menu），
  * 所以位置、样式、点别处关掉的行为都一样，不用另造一个。
  */
 function openLibMenu(lib, ev) {
@@ -676,7 +683,7 @@ function openLibMenu(lib, ev) {
 }
 
 /*
- * 面板上的点击也要能把「…」菜单收起来。
+ * 面板上的点击也要能把…菜单收起来。
  *
  * 菜单的关闭靠"文档上的下一次点击"，而面板容器带 @click.stop ——
  * 点击在面板范围内根本到不了 document，于是点了别处菜单还挂着。
@@ -719,22 +726,9 @@ async function renameLib(from, to) {
   }
   libPanel.busy = from
   try {
-    const res = await fetch(API_BASE + '/api/lib/name', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to })
-    })
-    const data = await res.json()
-    if (!data.ok) throw new Error(data.error || '改名失败')
-    libPanel.libs = data.data.libs || []
-    /* 改的是当前库：换到新名字，再把标题与图标从同一份数据重新摊一次 */
-    if (active) {
-      currentLib.value = to
-      const url = new URL(location.href)
-      url.searchParams.set('lib', to)
-      history.replaceState(null, '', url.toString())
-      await store.switchLib()
-    }
+    const data=await store.renameLibrary(from,to)
+    libPanel.libs=data.libs||[]
+    if(active)currentLib.value=to
     applyCurrentLib()
   } finally {
     libPanel.busy = ''
@@ -790,13 +784,13 @@ async function onBrandEdited(i, value) {
 }
 
 /** 换某个知识库的图标 */
-const libIconTarget = ref(null)
-function pickLibIcon(lib) {
-  libIconTarget.value = lib
-  const el = Array.isArray(libIconInput.value) ? libIconInput.value[0] : libIconInput.value
-  if (!el) return
-  el.value = ''
-  el.click()
+const identityOpen=ref(false), agentSettings=ref(false), iconPicking=ref(false)
+const libIconTarget = ref(null), libIconAnchor=ref(null)
+function pickLibIcon(lib,event) { if(lib.locked)return;libIconAnchor.value=event?.currentTarget;libIconTarget.value=lib;iconPicking.value=true }
+async function saveLibIcon(icon) {
+  const res=await fetch(API_BASE+'/api/lib/meta',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:libIconTarget.value.name,icon})})
+  const result=await res.json();if(!result.ok)throw new Error(result.error)
+  libPanel.libs=result.data.libs||[];applyCurrentLib()
 }
 
 async function onPickLibIcon(e) {
@@ -979,7 +973,7 @@ const tree = reactive({
   dropAt: null,
   /** 原位改名：{ kind: 'doc'|'cat', node, value }，为空表示没有在改名 */
   edit: null,
-  /** 「…」菜单：浮在 body 上，不被侧栏的滚动裁掉 */
+  /** …菜单：浮在 body 上，不被侧栏的滚动裁掉 */
   menu: { open: false, kind: '', node: null, style: {} },
 
   /* ---------- 拖拽 ---------- */
@@ -1048,7 +1042,7 @@ const tree = reactive({
     this.end()
     if (!d) return
     const visibleMode = sortMode.value
-    // 拖过就切手动排序，否则列表会按「按名称」立刻重排，白拖
+    // 拖过就切手动排序，否则列表会按按名称立刻重排，白拖
     sortMode.value = 'manual'
     try {
       if (into !== null && into !== undefined) {
@@ -1112,7 +1106,7 @@ const tree = reactive({
     }
   },
 
-  /* ---------- 「…」菜单 ---------- */
+  /* ---------- …菜单 ---------- */
 
   openMenu(kind, node, ev) {
     const r = ev.currentTarget.getBoundingClientRect()
@@ -1377,6 +1371,11 @@ function expandTo(name) {
  */
 async function rescan() {
   try {
+    if(!isGuest.value){
+      const result=await (await fetch(API_BASE+'/api/reconcile')).json()
+      if(!result.ok)throw Error(result.error)
+      if(result.data.length){const move=result.data[0];askLibDialog({title:'确认外部改名',message:move.from+' → '+move.to+'。确认后会保留原来的权限、图标和历史。',confirmText:'保留设置并继续',onConfirm:async()=>{try{const out=await(await fetch(API_BASE+'/api/reconcile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(move)})).json();if(!out.ok)throw Error(out.error);closeLibDialog();await rescan()}catch(e){store.error=e.message;closeLibDialog()}}});return}
+    }
     await store.loadTree()
     if (store.currentPath && !store.isDirty) await store.reload()
   } catch (e) {
@@ -1387,22 +1386,9 @@ async function rescan() {
 /* ---------- 拖拽调宽 ---------- */
 
 function startResize(e) {
-  e.preventDefault()
-  const startX = e.clientX
-  const startW = props.width
-  document.body.style.userSelect = 'none'
-  document.body.style.cursor = 'col-resize'
-  function onMove(ev) {
-    emit('update:width', Math.max(180, Math.min(420, startW + (ev.clientX - startX))))
-  }
-  function onUp() {
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
-    document.body.style.userSelect = ''
-    document.body.style.cursor = ''
-  }
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
+
+  const startX=e.clientX, startW=props.width
+  resizePanel(e, ev => emit('update:width', Math.max(180,Math.min(420,startW + (ev.clientX-startX)))), () => {})
 }
 
 function setGroup(id) {
@@ -1591,7 +1577,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   display: flex; align-items: center; gap: 10px;
   min-height: 46px;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: 18px;
   transition: background 0.15s ease;
 }
 .lib-row.is-dragging { opacity: 0.45; }
@@ -1707,15 +1693,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 }
 
 
-/* 新建文档：在面板底上要看得见，靠一圈描边和一点投影浮起来 */
-.newdoc-btn {
-  background: var(--c-pop);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 0 0 1px var(--c-line);
-  transition: box-shadow 0.16s ease, transform 0.12s ease;
-}
-.newdoc-btn:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.09), 0 0 0 1px var(--c-line);
-}
+/* 新建文档使用填充底色区分状态，无描边。 */
+.newdoc-btn { transition: transform .12s ease; }
 .newdoc-btn:active {
   transform: scale(0.985);
 }
@@ -1806,3 +1785,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 .entry-chevron { margin-left:auto }
 .tree-menu-item:disabled { opacity:.45; cursor:default }
 </style>
+
+<style scoped>
+.workspace-footer{position:relative;flex-shrink:0;padding-top:8px;border-top:0}.workspace-footer .manage-entry{width:calc(100% - 24px);border:0;background:transparent;margin-bottom:12px}.workspace-footer .manage-entry span{flex:1}.identity-menu{position:absolute;bottom:60px;left:12px;right:12px;padding:6px;background:var(--c-pop);box-shadow:var(--c-pop-shadow);border:0;border-radius:10px;z-index:50}.identity-menu button{display:block;width:100%;padding:9px;text-align:left;font-size:12px;border-radius:6px}.identity-menu button:hover{background:var(--c-hover)}
+</style>
+<style scoped>.lib-icon-edit{display:grid;place-items:center;padding:5px;border-radius:7px;margin-left:-5px}.lib-icon-edit:not(:disabled):hover{background:var(--c-hover)}.lib-icon-edit:disabled{cursor:default}.workspace-footer .manage-entry{gap:10px;padding:10px 8px}.workspace-footer .manage-entry:hover{background:var(--c-hover)}</style>

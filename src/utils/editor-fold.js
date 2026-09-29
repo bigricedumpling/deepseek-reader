@@ -5,8 +5,8 @@
  * 这里把收起来的那一节在正文里也隐掉，但只用 ProseMirror 的装饰（Decoration）：
  * 文档本身一个字不改，markdown 往返、自动保存、分享出去的只读页全都不受影响。
  *
- * 折叠键跟目录面板共用一套（toc-fold.js 的「级别|标题|同名第几个」），
- * 所以「在目录里收起来的节」和「在正文里收起来的节」是同一件事，两处联动。
+ * 折叠键跟目录面板共用一套（toc-fold.js 的级别|标题|同名第几个），
+ * 所以在目录里收起来的节和在正文里收起来的节是同一件事，两处联动。
  */
 import { watch } from 'vue'
 import { $prose } from '@milkdown/kit/utils'
@@ -16,7 +16,7 @@ import { foldKey, foldedKeys, foldState, foldDoc, foldableKeys, foldableState } 
 
 export const editorFoldKey = new PluginKey('reader-editor-fold')
 
-/** 顶级块的「是不是标题 / 级别 / 折叠键」，顺序即文档顺序 */
+/** 顶级块的是不是标题 / 级别 / 折叠键，顺序即文档顺序 */
 function sections(doc) {
   const seen = {}
   const out = []
@@ -35,7 +35,7 @@ function sections(doc) {
   return out
 }
 
-/** 收着的标题后面、级别不高于它的那些块，全盖上「隐藏」这枚装饰 */
+/** 收着的标题后面、级别不高于它的那些块，全盖上隐藏这枚装饰 */
 export function buildDeco(doc) {
   const folded = foldedKeys()
   const foldable = foldableKeys()

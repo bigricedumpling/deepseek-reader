@@ -2,8 +2,7 @@
  * 本地内容读写接口。
  *
  * ★ 磁盘是文档树的唯一真源：目录 = 分类，.md 文件 = 文档，文件名 = 文档名。
- *   这里不存任何清单文件，所以不存在"清单和磁盘对不上"这回事 ——
- *   在 Finder 里改名、换目录、新建、删除，下一次 GET /tree 就跟着变，没有同步逻辑。
+ *   SQLite 保存稳定标识、权限、页面元数据及恢复记录。外部改名必须确认迁移，避免权限丢失。
  *
  * 正文里的一级标题只是正文内容，不参与命名。历史上一版把它当成了名字的真源：
  * 保存时"正文一级标题 → 侧栏名"单向同步，而改名接口又不动正文，
@@ -14,9 +13,13 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { createHash, randomUUID as cryptoId } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { createShare, roleOf, EDIT_PASSWORD } from './share.js'
+import { workspace, digest, fault } from './storage/workspace.js'
+import { resources } from './services/resources.js'
+import { documentRoutes } from './services/documents.js'
 
 // 用文件自身位置推导，不依赖启动时的工作目录
 const READER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -29,52 +32,15 @@ const READER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
  */
 const DOCS_ROOT = process.env.DOCS_ROOT
   ? path.resolve(process.env.DOCS_ROOT)
-  : path.resolve(READER_ROOT, '..')
+  : path.resolve(READER_ROOT, '../知识库')
 /** 分享状态（谁能看到什么）：只有两种身份，见 server/share.js */
+const repo = workspace(DOCS_ROOT)
+const assets = resources(repo)
 const share = createShare(DOCS_ROOT)
 
 const TRASH = '.回收站'
 /** 译文放这里（点号开头，不进文档树）；只有读文件时放行，写/删一律不放 */
 const TRANSLATE_DIR = '.翻译'
-/** 每次覆盖前留的旧版本放这里（隐藏目录，不进文档树） */
-const VERSION_DIR = '.版本'
-/** 每个文件最多留几份旧版本 */
-const VERSION_KEEP = 5
-
-/**
- * 把一份旧内容存进 .版本/。
- *
- * 文件名带时间戳，同名的旧版本超过 VERSION_KEEP 份就把最老的删掉 ——
- * 不然改得多了会攒出一堆没人看的东西。
- */
-function stashVersion(rel, content) {
-  const stamp = new Date().toISOString().replace(/[:T.Z]/g, '-')
-  const flat = encodeURIComponent(String(rel))
-  const dir = path.join(DOCS_ROOT, VERSION_DIR)
-  fs.mkdirSync(dir, { recursive: true })
-  let serial = 0
-  while (true) {
-    try {
-      fs.writeFileSync(path.join(dir, stamp + '-' + serial + '__' + flat), content, { encoding: 'utf-8', flag: 'wx' })
-      break
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error
-      serial++
-    }
-  }
-  const mine = fs
-    .readdirSync(dir)
-    .filter((n) => n.endsWith('__' + flat))
-    .sort()
-  while (mine.length > VERSION_KEEP) {
-    try {
-      fs.unlinkSync(path.join(dir, mine.shift()))
-    } catch {
-      break
-    }
-  }
-}
-
 /** 这些目录永远不进文档树 */
 const SKIP_DIRS = new Set(['node_modules'])
 /** 扫描护栏：目录太深或文件太多就截断，免得误指到巨型目录把页面拖死 */
@@ -119,9 +85,9 @@ function safeName(name) {
 }
 
 /** 隐藏目录（.回收站、.git）和 node_modules 不归阅读器管。 */
-function assertVisible(rel, { allowTranslate = false } = {}) {
+function assertVisible(rel, { allowTranslate = false, allowAsset = false, allowStorage = false } = {}) {
   const segs = String(rel || '').split('/').filter(Boolean)
-  const bad = segs.some((x) => x.startsWith('.') && !(allowTranslate && x === TRANSLATE_DIR))
+  const bad = segs.some((x) => x.startsWith('.') && !(allowTranslate && x === TRANSLATE_DIR) && !(allowAsset && x === '.配图') && !(allowStorage && x === '.reader'))
   if (bad) throw new Error('隐藏目录不归阅读器管: ' + rel)
   if (segs.includes('node_modules')) throw new Error('node_modules 不归阅读器管: ' + rel)
 }
@@ -182,7 +148,7 @@ function scanDir(abs, rel, depth, order) {
     if (e.isDirectory()) {
       if (SKIP_DIRS.has(e.name) || childAbs === READER_ROOT) continue
       scanned++
-      folders.push({ type: 'folder', name: e.name, path: childRel, children: scanDir(childAbs, childRel, depth + 1, order) })
+      folders.push({ ...repo.node(childRel, 'folder'), type: 'folder', name: e.name, path: childRel, children: scanDir(childAbs, childRel, depth + 1, order) })
       /*
        * 树里认三种文件：markdown、pdf、h5（html/htm）。
        * h5 与 pdf 一样是「成品文件」——阅读器不解析它，交给浏览器整页渲染。
@@ -200,6 +166,7 @@ function scanDir(abs, rel, depth, order) {
       scanned++
       const isPdf = /\.pdf$/i.test(e.name)
       docs.push({
+        ...repo.node(childRel, isPdf ? 'pdf' : /\.html?$/i.test(e.name) ? 'h5' : 'doc'),
         type: isPdf ? 'pdf' : (/\.html?$/i.test(e.name) ? 'h5' : 'doc'),
         name: e.name.replace(/\.(md|pdf|html?)$/i, ''),
         file: childRel,
@@ -237,17 +204,9 @@ function scanDir(abs, rel, depth, order) {
  */
 const ORDER_FILE = path.join(DOCS_ROOT, '.顺序.json')
 
-function readOrder() {
-  try {
-    const data = JSON.parse(fs.readFileSync(ORDER_FILE, 'utf8'))
-    return data && typeof data === 'object' && data.order && typeof data.order === 'object' ? data.order : {}
-  } catch {
-    return {}
-  }
-}
-
+function readOrder() { return repo.getJSON('order', { order: {} }, '.顺序.json').order || {} }
 function writeOrder(order) {
-  fs.writeFileSync(ORDER_FILE, JSON.stringify({ order }, null, 1), 'utf8')
+  repo.setJSON('order', { order })
 }
 
 /**
@@ -315,17 +274,9 @@ function removeFromOrder(parent, name) {
 const COLW_FILE = path.join(DOCS_ROOT, '.表宽.json')
 const FOLDABLE_FILE = path.join(DOCS_ROOT, '.折叠标题.json')
 
-function readFoldables() {
-  try {
-    const data = JSON.parse(fs.readFileSync(FOLDABLE_FILE, 'utf8'))
-    return data && typeof data === 'object' && !Array.isArray(data) ? data : {}
-  } catch {
-    return {}
-  }
-}
-
+function readFoldables() { return repo.getJSON('foldables', {}, '.折叠标题.json') }
 function writeFoldables(data) {
-  fs.writeFileSync(FOLDABLE_FILE, JSON.stringify(data, null, 2), 'utf8')
+  repo.setJSON('foldables', data)
 }
 
 function remapFoldables(from, to, descendants = false) {
@@ -351,17 +302,9 @@ function dropFoldables(path, descendants = false) {
   if (changed) writeFoldables(data)
 }
 
-function readColWidths() {
-  try {
-    const data = JSON.parse(fs.readFileSync(COLW_FILE, 'utf8'))
-    return data && typeof data === 'object' ? data : {}
-  } catch {
-    return {}
-  }
-}
-
+function readColWidths() { return repo.getJSON('columns', {}, '.表宽.json') }
 function writeColWidths(data) {
-  fs.writeFileSync(COLW_FILE, JSON.stringify(data, null, 1), 'utf8')
+  repo.setJSON('columns', data)
 }
 
 /** 改名或换目录之后，把列宽记录搬到新键上，不然用户拖好的列宽会白丢。 */
@@ -559,7 +502,7 @@ function moveToTrash(rel) {
     target = path.join(dir, stamp + '__' + i + '__' + path.basename(abs))
     i++
   }
-  fs.renameSync(abs, target)
+  assets.beforeMove(rel); repo.move(abs, target); repo.remap(rel, path.relative(DOCS_ROOT, target))
   return path.relative(DOCS_ROOT, target)
 }
 
@@ -576,13 +519,13 @@ function uniqueFile(dir, name, ext = '.md') {
 
 /* ---------- 请求体 ---------- */
 
-function readBody(req) {
+function readBody(req, maxSize = 2 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = []
     let size = 0
     req.on('data', (c) => {
       size += c.length
-      if (size > 2 * 1024 * 1024) { reject(new Error('请求内容超过 2 MB')); return }
+      if (size > maxSize) { reject(new Error('请求内容过大')); return }
       chunks.push(c)
     })
     req.on('end', () => {
@@ -896,37 +839,8 @@ const LIB_META_FILE = '.知识库.json'
 
 const DEFAULT_REGISTRY = { version: 1, config: { panelWidth: 236, panelOpen: true }, libs: [] }
 
-function readRegistry() {
-  try {
-    const d = JSON.parse(fs.readFileSync(path.join(DOCS_ROOT, LIB_META_FILE), 'utf8'))
-    if (d && Array.isArray(d.libs)) {
-      return {
-        version: d.version || 1,
-        config: Object.assign({}, DEFAULT_REGISTRY.config, d.config || {}),
-        libs: d.libs.filter((l) => l && typeof l.name === 'string')
-      }
-    }
-    /* 旧格式：{ libs: { 名字: {...} } }，转成数组 */
-    if (d && d.libs && typeof d.libs === 'object') {
-      return {
-        version: 1,
-        config: Object.assign({}, DEFAULT_REGISTRY.config),
-        libs: Object.keys(d.libs).map((k, i) => Object.assign({ id: 'L' + (i + 1), name: k }, d.libs[k]))
-      }
-    }
-  } catch {
-    /* 读不到就当空表，下面会用磁盘目录补 */
-  }
-  return JSON.parse(JSON.stringify(DEFAULT_REGISTRY))
-}
-
-function writeRegistry(reg) {
-  try {
-    fs.writeFileSync(path.join(DOCS_ROOT, LIB_META_FILE), JSON.stringify(reg, null, 2) + '\n', 'utf8')
-  } catch {
-    /* 写不进去也不影响知识库本身 */
-  }
-}
+function readRegistry() { return repo.getJSON('libraries', DEFAULT_REGISTRY, '.知识库.json') }
+function writeRegistry(reg) { repo.setJSON('libraries', reg) }
 
 /** 磁盘上真实存在的知识库目录（第一层，非隐藏） */
 function diskLibs() {
@@ -944,8 +858,16 @@ function diskLibs() {
 function syncRegistry() {
   const reg = readRegistry()
   const disk = diskLibs()
+  // 旧版创建流程可能把同一目录登记两次；以最早的记录为准保留图标等设置。
+  const seen = new Set()
+  const count = reg.libs.length
+  reg.libs = reg.libs.filter((lib) => {
+    if (seen.has(lib.name)) return false
+    seen.add(lib.name)
+    return true
+  })
   const known = new Set(reg.libs.map((l) => l.name))
-  let changed = false
+  let changed = reg.libs.length !== count
   /* 磁盘上多出来的：按名字补一条 */
   for (const name of disk) {
     if (!known.has(name)) {
@@ -1008,6 +930,7 @@ function countDocs(abs) {
 }
 
 const routes = {
+  ...documentRoutes(repo,{share,assertFile,assertMd,assertVisible}),
   /** 这次请求算谁：我 还是 别人。前端靠它决定要不要露出编辑相关的东西 */
   'GET /me': async (_body, _url, ctx) => ({ ok: true, data: { role: ctx.role } }),
 
@@ -1040,6 +963,16 @@ const routes = {
   },
 
   /** 改一个知识库的显示名（= 重命名它的文件夹） */
+  'GET /reconcile': async()=>({ok:true,data:repo.pendingMoves()}),
+  'POST /reconcile': async body=>{
+    const move=repo.pendingMoves().find(x=>x.from===body.from&&x.to===body.to)
+    if(!move)throw fault('CONFLICT','文件位置已变化，请重新扫描',409)
+    for(const a of repo.db.prepare('SELECT * FROM assets').all())if(a.path.startsWith(move.from+'/'))repo.db.prepare('INSERT OR REPLACE INTO asset_aliases VALUES (?,?)').run(a.path,a.id)
+    repo.remap(move.from,move.to);share.rename(move.from,move.to)
+    remapOrderUnder(move.from,move.to);remapColWidthsUnder(move.from+'/',move.to+'/');moveColWidths(move.from,move.to);remapFoldables(move.from,move.to,true)
+    if(!move.from.includes('/')){const reg=readRegistry();const hit=reg.libs?.find(x=>x.name===move.from);if(hit){hit.name=move.to;writeRegistry(reg)}}
+    return {ok:true,data:move}
+  },
   'PUT /lib/name': async (body, _url, ctx) => {
     if (ctx.role !== 'owner') throw new Error('只有你能改知识库名')
     const from = String(body.from || '').replace(/^\/+|\/+$/g, '')
@@ -1050,7 +983,8 @@ const routes = {
     const absNew = safeResolve(to)
     if (!fs.existsSync(absOld)) throw new Error('知识库不存在: ' + from)
     if (fs.existsSync(absNew)) throw new Error('已有同名知识库: ' + to)
-    fs.renameSync(absOld, absNew)
+    const reg = syncRegistry()
+    assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
     /* 分享与可编辑的键跟着搬，否则改名就等于把不公开的东西放出去了 */
     share.rename(from, to)
     remapOrderUnder(from, to)
@@ -1058,7 +992,6 @@ const routes = {
     remapFoldables(from, to, true)
     /* 图标/说明表里的键也要跟着改 */
     /* 注册表是唯一真源：改名就是改它，目录名与标题都从它派生 */
-    const reg = syncRegistry()
     const hit = reg.libs.find((l) => l.name === from)
     if (hit) { hit.name = to; writeRegistry(reg) }
     return { ok: true, data: { libs: listLibs() } }
@@ -1072,7 +1005,7 @@ const routes = {
     const reg = syncRegistry()
     const hit = reg.libs.find((l) => l.name === name)
     if (!hit) throw new Error('知识库不存在: ' + name)
-    if (body.icon !== undefined) hit.icon = String(body.icon)
+    if (body.icon !== undefined) {if(String(body.icon).length>200000)throw fault('INVALID_ICON','图标过大');hit.icon = String(body.icon)}
     if (body.desc !== undefined) hit.desc = String(body.desc)
     if (body.meta !== undefined) hit.meta = String(body.meta)
     if (body.sub !== undefined) hit.sub = String(body.sub)
@@ -1088,10 +1021,11 @@ const routes = {
     if (name.includes('/') || name.startsWith('.')) throw new Error('名字里不能有斜杠，也不能以点开头')
     const abs = safeResolve(name)
     if (fs.existsSync(abs)) throw new Error('已有同名知识库: ' + name)
-    fs.mkdirSync(abs, { recursive: true })
+    // 先取注册表再建目录；建完才同步会先自动补一条，随后又追加一条。
+    const reg = syncRegistry()
+    repo.mkdir(abs)
     share.setShared(name, false)
     share.setLocked(name, false)
-    const reg = syncRegistry()
     let n = reg.libs.length + 1
     while (reg.libs.some((l) => l.id === 'L' + n)) n++
     reg.libs.push({ id: 'L' + n, name, icon: String(body.icon || ''), desc: String(body.desc || ''), meta: '' })
@@ -1148,7 +1082,7 @@ const routes = {
     const inTrash = TRASH + '/' + stamp + '__' + name
     const absTrash = safeResolve(inTrash)
     fs.mkdirSync(path.dirname(absTrash), { recursive: true })
-    fs.renameSync(abs, absTrash)
+    assets.beforeMove(name); repo.move(abs, absTrash); repo.remap(name, inTrash)
     /* 分享状态跟着进回收站，免得留一堆指向不存在路径的键 */
     share.rename(name, inTrash)
     const reg = syncRegistry()
@@ -1184,7 +1118,8 @@ const routes = {
     const rel = url.searchParams.get('path') || ''
     const abs = assertMd(rel)
     if (!fs.existsSync(abs)) throw new Error('文档不存在: ' + rel)
-    return { ok: true, data: { path: rel, content: fs.readFileSync(abs, 'utf-8') } }
+    const content = fs.readFileSync(abs, 'utf-8'); const n = repo.node(rel); assets.legacy(rel)
+    return { ok: true, data: { path: rel, id: n.id, meta:n.meta, content, revision: digest(content) } }
   },
 
   /** 哪些标题明确设成折叠标题；正文仍保持标准 Markdown。 */
@@ -1213,13 +1148,25 @@ const routes = {
   /** 保存一篇文档 */
   'PUT /doc': async (body) => {
     const abs = assertMd(body.path)
-    if (!fs.existsSync(abs)) throw new Error('文档不存在: ' + body.path)
-    const next = String(body.content ?? '')
-    // 覆盖前必须先存好旧版本；备份失败时保留原文并报告失败。
-    const old = fs.readFileSync(abs, 'utf-8')
-    if (old !== next) stashVersion(body.path, old)
-    fs.writeFileSync(abs, next, 'utf-8')
-    return { ok: true, savedAt: Date.now() }
+    if (!fs.existsSync(abs)) throw fault('NOT_FOUND', '文档不存在', 404)
+    const old = fs.readFileSync(abs, 'utf8'), next = String(body.content ?? '')
+    const currentRevision = digest(old)
+    if (!body.revision) throw fault('REVISION_REQUIRED', '请重新读取文档后再保存', 428)
+    if (body.revision !== currentRevision) throw fault('CONFLICT', '文档已被其他编辑者修改，已保留你的内容，请比较后合并', 409, { content: old, revision: currentRevision })
+    const n=repo.node(body.path)
+    if (old !== next) {
+      const id=cryptoId(), versionPath='.reader/versions/'+id+'.md'
+      repo.write(path.join(DOCS_ROOT,versionPath),old)
+      repo.db.prepare('INSERT INTO versions VALUES (?,?,?,?,?)').run(id,n.id,currentRevision,versionPath,Date.now())
+      repo.write(abs,next);repo.node(body.path)
+      const expired=repo.db.prepare('SELECT id,path FROM versions WHERE node=? ORDER BY at DESC,rowid DESC LIMIT -1 OFFSET 100').all(n.id)
+      for(const v of expired){repo.remove(path.join(DOCS_ROOT,v.path));repo.db.prepare('DELETE FROM versions WHERE id=?').run(v.id)}
+    }
+    return { ok:true, savedAt:Date.now(), data:{id:n.id,revision:digest(next)} }
+  },
+  'POST /asset': async body => {
+    const doc=String(body.path||'');assertMd(doc)
+    return {ok:true,data:assets.upload(doc,String(body.mime||''),String(body.data||body.base64||''))}
   },
 
   /** 新建文档：dir 为空串表示根目录 */
@@ -1227,9 +1174,9 @@ const routes = {
     const dir = assertDir(body.dir)
     const name = safeName(body.name)
     if (!name) throw new Error('文档名不能为空')
-    fs.mkdirSync(safeResolve(dir), { recursive: true })
+    repo.mkdir(safeResolve(dir))
     const file = uniqueFile(dir, name)
-    fs.writeFileSync(safeResolve(file), String(body.content ?? '# ' + name + '\n'), 'utf-8')
+    repo.write(safeResolve(file), String(body.content ?? '# ' + name + '\n')); repo.node(file)
     return { ok: true, data: { name: path.basename(file, '.md'), file } }
   },
 
@@ -1251,10 +1198,10 @@ const routes = {
       if (sameExceptCase) {
         // 大小写改名要两步走，否则在大小写不敏感的文件系统上会变成 no-op
         const tmp = absOld + '.rename-tmp'
-        fs.renameSync(absOld, tmp)
-        fs.renameSync(tmp, absNew)
+        assets.beforeMove(body.path); repo.move(absOld, tmp)
+        repo.move(tmp, absNew); repo.remap(body.path, next)
       } else {
-        fs.renameSync(absOld, absNew)
+        assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
       }
     }
     share.rename(body.path, next)
@@ -1282,7 +1229,7 @@ const routes = {
     const rel = relJoin(parent, name)
     const abs = safeResolve(rel)
     if (fs.existsSync(abs)) throw new Error('同位置已有同名目录: ' + name)
-    fs.mkdirSync(abs, { recursive: true })
+    repo.mkdir(abs)
     return { ok: true, data: { name, path: rel } }
   },
 
@@ -1299,7 +1246,7 @@ const routes = {
     const absNew = safeResolve(next)
     if (!fs.existsSync(absOld)) throw new Error('目录不存在: ' + rel)
     if (fs.existsSync(absNew)) throw new Error('同位置已有同名目录: ' + name)
-    fs.renameSync(absOld, absNew)
+    assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
     share.rename(rel, next)
     remapColWidthsUnder(rel + '/', next + '/')
     remapFoldables(rel, next, true)
@@ -1369,8 +1316,8 @@ const routes = {
     const next = toParent ? toParent + '/' + name : name
     const absNew = safeResolve(next)
     if (fs.existsSync(absNew)) throw new Error('目标位置已有同名目录: ' + name)
-    fs.mkdirSync(safeResolve(toParent), { recursive: true })
-    fs.renameSync(absOld, absNew)
+    repo.mkdir(safeResolve(toParent))
+    assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
     remapColWidthsUnder(rel + '/', next + '/')
     remapFoldables(rel, next, true)
     remapOrderUnder(rel, next)
@@ -1392,13 +1339,13 @@ const routes = {
     if (!fs.existsSync(absOld)) throw new Error('文档不存在: ' + body.file)
     const fromDir = path.dirname(body.file)
     if ((fromDir === '.' ? '' : fromDir) === dir) return { ok: true, data: { file: body.file } }
-    fs.mkdirSync(safeResolve(dir), { recursive: true })
+    repo.mkdir(safeResolve(dir))
     // 扩展名要保住：pdf 用 basename(x, '.md') 会变成「xxx.pdf.md」
     const fileName = path.basename(body.file)
     const ext = path.extname(fileName) || '.md'
     const base = fileName.slice(0, fileName.length - ext.length) || fileName
     const next = uniqueFile(dir, base, ext)
-    fs.renameSync(absOld, safeResolve(next))
+    assets.beforeMove(body.file); repo.move(absOld, safeResolve(next)); repo.remap(body.file, next)
     moveColWidths(body.file, next)
     remapFoldables(body.file, next)
     /* 同上：分享状态要跟着文档走，不然一拖就变了可见性 */
@@ -1546,7 +1493,10 @@ export async function handleApi(req, res, ctx = {}) {
   const url = new URL(req.url, 'http://127.0.0.1')
   if (url.pathname.startsWith('/api/')) url.pathname = url.pathname.slice(4)
   const key = req.method + ' ' + url.pathname
-  const role = ctx.role || 'guest'
+  let role = ctx.role || 'guest'
+  let agent=null
+  const credential=String(req.headers['x-reader-agent']||'')
+  if(credential){agent=repo.db.prepare('SELECT * FROM credentials WHERE hash=? AND revoked=0 AND expires>?').get(digest(credential),Date.now());if(agent)role='owner'}
   const isGuest = role !== 'owner'
   try {
     if (req.method !== 'GET') {
@@ -1554,7 +1504,26 @@ export async function handleApi(req, res, ctx = {}) {
       if (origin && new URL(origin).host !== req.headers.host && new URL(origin).host !== req.headers['x-forwarded-host']) throw new Error('请求来源不匹配')
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) throw new Error('仅接受 JSON 请求')
     }
-    const body = req.method === 'GET' ? {} : await readBody(req)
+    const body = req.method === 'GET' ? {} : await readBody(req, key === 'POST /asset' ? 15 * 1024 * 1024 : undefined)
+    if(credential && !agent)throw fault('UNAUTHORIZED','Agent 凭据无效或已过期',401)
+    const id=body.id||url.searchParams.get('id')
+    if(id && !key.includes('agent-keys')) {
+      const n=repo.byId(id);if(!n)throw fault('NOT_FOUND','文档不存在',404)
+      if(req.method==='GET')url.searchParams.set('path',n.path);else body.path=n.path
+    }
+    if(agent){
+      const allowed=new Set(['GET /me','GET /tree','GET /doc','GET /metadata','GET /resolve','GET /history','GET /search','POST /doc','PUT /doc','PATCH /doc','PUT /metadata','POST /asset','PUT /move/doc','DELETE /doc','GET /file'])
+      if(!allowed.has(key))throw fault('FORBIDDEN','Agent 无权执行此操作',403)
+      if(req.method!=='GET'&&!JSON.parse(agent.permissions).includes('write'))throw fault('FORBIDDEN','此 Agent 只有读取权限',403)
+      const scopes=JSON.parse(agent.scopes).map(x=>repo.byId(x)?.path).filter(Boolean)
+      const assetScope=assets.find(url.searchParams.get('path')||'',url.searchParams.get('asset'));
+      const fields=[assetScope&&repo.byId(assetScope.owner)?.path,body.path,body.file,body.dir,url.searchParams.get('path'),url.searchParams.get('lib')].filter(Boolean)
+      if(!fields.length && key!=='GET /me')throw fault('SCOPE_REQUIRED','请指定已授权知识库或文档',400)
+      for(const field of fields){const rel=repo.resolve(field);if(!scopes.some(p=>rel===p||rel.startsWith(p+'/')))throw fault('FORBIDDEN','超出 Agent 授权范围',403)}
+      ctx.actor='agent:'+agent.id
+    }
+    if(['GET /agent-keys','POST /agent-keys','DELETE /agent-keys','GET /audit','GET /metadata-export','GET /reconcile','POST /reconcile','GET /history'].includes(key)&&role!=='owner')throw fault('FORBIDDEN','需要管理身份',403)
+
     if (key === 'DELETE /session') {
       res.setHeader('Set-Cookie', 'reader_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0')
       return send(res, 200, { ok: true })
@@ -1571,28 +1540,55 @@ export async function handleApi(req, res, ctx = {}) {
       assertVisible(rel)
       if (!fs.existsSync(safeResolve(rel))) throw new Error('内容不存在')
       if (Number(typeof body.locked === 'boolean') + Number(typeof body.shared === 'boolean') !== 1) throw new Error('每次只更改一个权限设置')
-      if (typeof body.locked === 'boolean') share.setLocked(rel, body.locked)
-      if (typeof body.shared === 'boolean') share.setShared(rel, body.shared)
+      await repo.mutate('PUT /access',role,async()=>{
+        if (typeof body.locked === 'boolean') share.setLocked(rel, body.locked)
+        if (typeof body.shared === 'boolean') share.setShared(rel, body.shared)
+      })
       return send(res, 200, { ok: true, data: share.status(rel) })
     }
     if (isGuest && ['GET /share', 'GET /build'].includes(key)) throw new Error('请先验证管理密码')
     if (key === 'GET /file') {
-      const rel = url.searchParams.get('path') || ''
-      if (isGuest && !share.isShared(rel)) throw new Error('内容不可访问')
-      return sendFile(req, res, rel, { allowTranslate: true })
+      let rel=url.searchParams.get('path')||''
+      let resource=assets.find(rel,url.searchParams.get('asset'))
+      if(!resource && rel.includes('/.配图/')) {
+        const doc=url.searchParams.get('doc')||''
+        if(doc && fs.existsSync(safeResolve(doc))) { assertMd(doc); assets.legacy(doc); resource=assets.find(rel) }
+      }
+      if(resource) {
+        const owner=repo.byId(resource.owner)
+        if(!owner || owner.path.split('/').some(x=>x.startsWith('.')) || !fs.existsSync(safeResolve(owner.path)) || (isGuest && !share.isShared(owner.path))) throw fault('FORBIDDEN','内容不可访问',403)
+        return sendFile(req,res,resource.path,{allowAsset:true,allowStorage:true})
+      }
+      if(rel.includes('/.配图/') || rel.startsWith('.reader/')) throw fault('FORBIDDEN','资源归属无法确认',403)
+      rel=repo.resolve(rel)
+      if(isGuest && !share.isShared(rel)) throw fault('FORBIDDEN','内容不可访问',403)
+      return sendFile(req,res,rel,{allowTranslate:true})
     }
+    for (const field of ['path','file','lib']) { const v=url.searchParams.get(field);if(v)url.searchParams.set(field,repo.resolve(v)) }
     const handler = routes[key]
     if (!handler) return send(res, 404, { ok: false, error: '接口不存在' })
-    if (req.method !== 'GET') checkWrite(key, body, role)
+    if (req.method !== 'GET' && !key.includes('agent-keys') && key!=='POST /reconcile') checkWrite(key, body, role)
     if (isGuest) {
       const rel = url.searchParams.get('path') || url.searchParams.get('lib') || url.searchParams.get('file') || ''
       if (rel && !share.isShared(rel)) throw new Error('内容不可访问')
     }
-    const out = await handler(body, url, { role })
+    const requestId=String(req.headers['idempotency-key']||body.requestId||'')
+    if(requestId.length>160)throw fault('INVALID_REQUEST','操作编号过长')
+    const retryKey=(ctx.actor||role)+':'+requestId, fingerprint=digest(key+JSON.stringify(body))
+    const run=async()=>{
+      if(requestId&&req.method!=='GET'){
+        const old=repo.db.prepare('SELECT * FROM retries WHERE key=?').get(retryKey)
+        if(old){if(old.fingerprint!==fingerprint)throw fault('IDEMPOTENCY_CONFLICT','同一操作编号不能用于不同内容',409);return JSON.parse(old.result)}
+      }
+      const value=await handler(body,url,{role})
+      if(requestId&&req.method!=='GET')repo.db.prepare('INSERT INTO retries VALUES (?,?,?)').run(retryKey,fingerprint,JSON.stringify(value))
+      return value
+    }
+    const out = req.method === 'GET' ? await run() : await repo.mutate(key,ctx.actor||role,run)
     if (key === 'GET /tree' && out?.data?.nodes) out.data.nodes = share.decorate(isGuest ? share.filterTree(out.data.nodes) : out.data.nodes)
     send(res, 200, out)
   } catch (e) {
-    send(res, 403, { ok: false, error: String(e.message || e) })
+    send(res, e.status || 403, { ok:false, code:e.code || 'REQUEST_REJECTED', error:String(e.message||e), ...(e.details ? {details:e.details}: {}) })
   }
 }
 

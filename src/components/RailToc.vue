@@ -13,12 +13,13 @@ import {ref, computed, watch, onMounted, onBeforeUnmount, nextTick} from 'vue'
 import {useDocsStore} from '../stores/docs'
 import {useReaderStore} from '../stores/reader'
 import {unfoldKeys, foldKey} from '../utils/toc-fold'
+import {scrollToTarget} from '../utils/scroll-target'
 const store=useDocsStore(), reader=useReaderStore()
 const hint=ref(null), active=ref(0)
 const pdf=computed(()=>store.currentNode?.type==='pdf')
 const items=computed(()=>pdf.value ? store.pdfToc : store.currentToc)
 let scroller=null, frame=0
-const headings=()=>Array.from(scroller?.querySelectorAll('.ProseMirror h1,.ProseMirror h2,.ProseMirror h3,.ProseMirror h4,.ProseMirror h5,.ProseMirror h6') || [])
+const headings=()=>Array.from(scroller?.querySelectorAll('.ProseMirror h1,.ProseMirror h2,.ProseMirror h3,.ProseMirror h4,.ProseMirror h5,.ProseMirror h6') || []).filter(el=>!el.closest('.reader-rich-block'))
 function showHint(item,e){const r=e.currentTarget.getBoundingClientRect();hint.value={title:item.title,x:r.right+5,y:Math.max(24,Math.min(innerHeight-24,r.top+r.height/2))}}
 function sync(){
   if(pdf.value){active.value=Math.max(0,items.value.findLastIndex(t=>t.page<=store.pdfPage));return}
@@ -48,7 +49,7 @@ async function go(i){
     unfoldKeys(ancestors.map(t=>t.key))
     await nextTick()
     const h=headings()[i]
-    if(h&&scroller)scroller.scrollTo({top:Math.max(0,h.getBoundingClientRect().top-scroller.getBoundingClientRect().top+scroller.scrollTop-90),behavior:'smooth'})
+    scrollToTarget(scroller,h)
   }
   active.value=i
 }

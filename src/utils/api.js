@@ -6,3 +6,8 @@
  * Dev 下 BASE_URL 是 /，常量为空串，拼接后等于原样。
  */
 export const API_BASE = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '')
+
+/** Markdown 里存环境无关的 /api/file 地址；显示时补部署子路径。 */
+export function assetUrl(url) {
+  return typeof url === 'string' && url.startsWith('/api/file?') ? API_BASE + url : url
+}

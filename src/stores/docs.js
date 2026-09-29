@@ -5,11 +5,11 @@ import { API_BASE } from '../utils/api'
 import { interviewPaths } from '../utils/interview-paths'
 
 /*
- * 「成品文件」的类型：pdf 与 h5。
+ * 成品文件的类型：pdf 与 h5。
  *
  * 这两种不读正文、不进编辑器，交给浏览器整页渲染（pdf 用自带阅读器，h5 用 iframe）。
- * 以前这些判定一处一处写的 'pdf'，加 h5 时漏一处就会出现「按 pdf 处理 html」
- * 或者「html 当 markdown 解析」这类错，所以收成一个集合。
+ * 以前这些判定一处一处写的 'pdf'，加 h5 时漏一处就会出现按 pdf 处理 html
+ * 或者html 当 markdown 解析这类错，所以收成一个集合。
  */
 const PREVIEW_TYPES = new Set(['pdf', 'h5'])
 
@@ -35,7 +35,7 @@ async function api(method, endpoint, payload) {
   } catch {
     throw new Error(`接口返回异常 HTTP ${res.status}`)
   }
-  if (!json.ok) throw new Error(json.error || '接口出错')
+  if (!json.ok) throw Object.assign(new Error(json.error || '接口出错'), {code:json.code,details:json.details,status:res.status})
   return json
 }
 
@@ -106,6 +106,10 @@ export const useDocsStore = defineStore('docs', () => {
   const treeNodes = ref([])   // [{ type: 'folder'|'doc', name, path|file, mtime }]，目录可嵌套
   const currentPath = ref('') // 当前文档的文件路径，同时作为身份
   const rawMap = ref({})      // path -> 原文
+  const revisionMap = ref({})
+  const conflict = ref(null)
+  const pageMeta = ref({})
+  const pageMetaRevision = ref('')
   const savedMap = ref({})    // path -> 上次保存的原文，用来判断有没有改动
   const loading = ref(false)
   const saving = ref(false)
@@ -129,7 +133,7 @@ export const useDocsStore = defineStore('docs', () => {
   const currentDoc = computed(
     () => allDocs.value.find((d) => d.file === currentPath.value) || null
   )
-  const currentMeta = computed(() => currentNode.value || { name: '未选择', file: '' })
+  const currentMeta = computed(() => currentNode.value ? {...currentNode.value, meta:pageMeta.value} : {name:'未选择',file:''})
   const currentRaw = computed(() => rawMap.value[currentPath.value] ?? '')
   const currentHtml = computed(() => renderMarkdown(currentRaw.value))
   const currentToc = computed(() => extractToc(currentRaw.value))
@@ -283,9 +287,9 @@ export const useDocsStore = defineStore('docs', () => {
       /*
        * 不要用 ^ 锚定开头。
        *
-       * 站点可能挂在子路径下（/deepseek/reader/onlyread/…），前缀会让「以 /onlyread/ 开头」
+       * 站点可能挂在子路径下（/deepseek/reader/onlyread/…），前缀会让以 /onlyread/ 开头
        * 落空，地址栏点名的那一篇就认不出来，页面回落到目录里第一篇 ——
-       * 表现是「第二条分享链接打开的是第一篇」。/edit 走的是去前缀后的路径，所以一直没暴露。
+       * 表现是第二条分享链接打开的是第一篇。/edit 走的是去前缀后的路径，所以一直没暴露。
        */
       const m = location.pathname.match(/\/(?:doc|edit|onlyread)\/(.+)$/)
       if (!m) return ''
@@ -295,7 +299,7 @@ export const useDocsStore = defineStore('docs', () => {
        * 路径里的斜杠会被编码成 %2F（例如 笔试题%2F笔试题交付：题目二），
        * 而 decodeURI 有意不还原 %2F —— 斜杠在路径里有特殊含义。
        * 结果是查表时拿着 %2F 去比，永远匹配不上，页面静默回落到目录里第一篇：
-       * 表现就是「第二条分享链接打开的是第一篇」。这个错误很隐蔽，因为页面不报错。
+       * 表现就是第二条分享链接打开的是第一篇。这个错误很隐蔽，因为页面不报错。
        *
        * 只解这一段，不能解整条 pathname：那样站点前缀里的编码也会被一起还原。
        */
@@ -311,7 +315,7 @@ export const useDocsStore = defineStore('docs', () => {
    *
    * 对外发出去的链接长这样：/onlyread/笔试题/笔试题交付：题目一
    * 那时 笔试题 与 调研报告 是文档根下的两个顶层目录。
-   * 后来资料按知识库归拢：笔试题 成了「Agent（设计方向）」库，调研报告 挪进了它里面。
+   * 后来资料按知识库归拢：笔试题 成了Agent（设计方向）库，调研报告 挪进了它里面。
    *
    * 规则：老路径的第一段（笔试题）在当前库里已经不存在，把它换成现在所属的库根，
    * /笔试题/调研报告/评测调研 → /Agent（设计方向）/调研报告/评测调研
@@ -429,7 +433,8 @@ export const useDocsStore = defineStore('docs', () => {
     const hit = want && allFiles.value.some((f) => f.file === want)
     currentPath.value = hit ? want : allFiles.value[0]?.file || ''
     openTab(currentPath.value)
-    if (currentPath.value) syncUrl()
+    // 空知识库也要清掉地址里上一库的文档路径。
+    syncUrl()
     if (currentPath.value && !PREVIEW_TYPES.has(currentNode.value?.type)) {
       try {
         await loadDoc(currentPath.value)
@@ -462,6 +467,7 @@ export const useDocsStore = defineStore('docs', () => {
     const lib = routedLib()
     const { data } = await api('GET', lib ? '/tree?lib=' + encodeURIComponent(lib) : '/tree')
     if (request !== treeRequest || lib !== routedLib()) return false
+    if(data.lib&&data.lib!==lib){const u=new URL(location.href);u.searchParams.set('lib',data.lib);history.replaceState(null,'',u)}
     treeNodes.value = Array.isArray(data.nodes) ? data.nodes : []
     pruneCache()
     await ensureCurrent()
@@ -476,6 +482,7 @@ export const useDocsStore = defineStore('docs', () => {
     if (!json.ok) throw new Error(json.error || '读取失败')
     rawMap.value[file] = json.data.content
     savedMap.value[file] = json.data.content
+    revisionMap.value[file] = json.data.revision
     return json.data.content
   }
 
@@ -516,7 +523,7 @@ export const useDocsStore = defineStore('docs', () => {
     error.value = ''
     try {
       if (!(await loadTree())) return
-      await Promise.all(allDocs.value.map((d) => loadDoc(d.file)))
+      if(currentPath.value)await loadPageMeta()
       if (request !== allRequest) return
       // 路由点名的那一篇最优先（/edit/调研/数据调研、分享过来的 /onlyread/…）
       const routed = routedDocPath()
@@ -551,6 +558,7 @@ export const useDocsStore = defineStore('docs', () => {
 
   async function select(file) {
     currentPath.value = file
+    await loadPageMeta()
     syncUrl()
     openTab(file)
     rememberDoc(file)
@@ -565,7 +573,7 @@ export const useDocsStore = defineStore('docs', () => {
     }
     pdfToc.value = []
     try {
-      await loadDoc(file)
+      await loadDoc(file,{force:rawMap.value[file]===savedMap.value[file]})
     } catch (e) {
       error.value = '打开《' + (allDocs.value.find((d) => d.file === file)?.name || file) + '》失败：' + String(e.message || e)
     }
@@ -615,7 +623,7 @@ export const useDocsStore = defineStore('docs', () => {
     }, 3000)
   }
 
-  /** 切到 pdf 时问一下有没有现成译文（有就显示「看译文」） */
+  /** 切到 pdf 时问一下有没有现成译文（有就显示看译文） */
   async function checkTranslate(file) {
     try {
       const res = await fetch(API_BASE + '/api/pdf-translate?path=' + encodeURIComponent(file))
@@ -695,11 +703,14 @@ export const useDocsStore = defineStore('docs', () => {
       error.value = ''
       const content = rawMap.value[path]
       try {
-        await api('PUT', '/doc', { path, content })
+        const result=await api('PUT', '/doc', {path,content,revision:revisionMap.value[path]})
+        revisionMap.value[path]=result.data.revision
+        conflict.value=null
         savedMap.value[path] = content
         savedAt.value = Date.now()
         return true
       } catch (e) {
+        if(e.code==='CONFLICT')conflict.value={path,local:content,base:savedMap.value[path],remote:e.details.content,revision:e.details.revision}
         error.value = '保存失败：' + String(e.message || e)
         return false
       } finally {
@@ -726,6 +737,8 @@ export const useDocsStore = defineStore('docs', () => {
     if (rawMap.value[from] !== undefined) {
       rawMap.value[to] = rawMap.value[from]
       savedMap.value[to] = savedMap.value[from]
+      revisionMap.value[to] = revisionMap.value[from]
+      delete revisionMap.value[from]
       delete rawMap.value[from]
       delete savedMap.value[from]
     }
@@ -799,6 +812,7 @@ export const useDocsStore = defineStore('docs', () => {
     }
     remap(rawMap)
     remap(savedMap)
+    remap(revisionMap)
     remapTabs(path, data.path)
     if (currentPath.value === path || currentPath.value.startsWith(path + '/')) {
       currentPath.value = data.path + currentPath.value.slice(path.length)
@@ -827,6 +841,7 @@ export const useDocsStore = defineStore('docs', () => {
     }
     remap(rawMap)
     remap(savedMap)
+    remap(revisionMap)
     remapTabs(path, data.path)
     if (currentPath.value === path || currentPath.value.startsWith(path + '/')) {
       currentPath.value = data.path + currentPath.value.slice(path.length)
@@ -841,7 +856,51 @@ export const useDocsStore = defineStore('docs', () => {
     await loadTree()
   }
 
+
+  const contentEpoch=ref(0)
+  async function loadPageMeta() {
+    const path=currentPath.value
+    pageMeta.value={};pageMetaRevision.value=''
+    if(!path)return
+    try {const {data}=await api('GET','/metadata?path='+encodeURIComponent(path));if(currentPath.value===path){pageMeta.value=data.meta;pageMetaRevision.value=data.revision}}
+    catch(e){error.value=e.message}
+  }
+  async function savePageMeta(patch) {
+    const path=currentPath.value
+    let result;try{result=await api('PUT','/metadata',{path,revision:pageMetaRevision.value,meta:patch})}catch(e){if(e.code==='CONFLICT')await loadPageMeta();throw e}
+    const {data}=result
+    if(currentPath.value===path){pageMeta.value=data.meta;pageMetaRevision.value=data.revision}
+    const update=list=>{for(const node of list){if(node.file===path)node.meta=data.meta;if(node.children)update(node.children)}};update(treeNodes.value)
+    return data
+  }
+  async function resolveConflict(mode,merged) {
+    const c=conflict.value;if(!c)return
+    if(mode==='copy') {
+      const dir=c.path.split('/').slice(0,-1).join('/')
+      await api('POST','/doc',{dir,name:c.path.split('/').pop().replace(/\.md$/i,'')+'（冲突副本）',content:c.local,requestId:crypto.randomUUID()})
+    }
+    revisionMap.value[c.path]=c.revision;savedMap.value[c.path]=c.remote
+    rawMap.value[c.path]=mode==='merge'?merged:c.remote
+    conflict.value=null;error.value=''
+    contentEpoch.value++
+    if(mode==='merge'){if(!(await savePath(c.path)))throw Error(error.value)}
+    else await loadTree()
+  }
+  async function renameLibrary(from,to) {
+    if(isDirty.value && !(await save()))throw new Error(error.value)
+    const result=await api('PUT','/lib/name',{from,to,requestId:crypto.randomUUID()})
+    const previous=currentPath.value
+    const activeLibrary = new URL(location.href).searchParams.get('lib') === from
+    const convert=v=>v===from||v.startsWith(from+'/')?to+v.slice(from.length):v
+    for(const map of [rawMap,savedMap,revisionMap])map.value=Object.fromEntries(Object.entries(map.value).map(([k,v])=>[convert(k),v]))
+    tabs.value=tabs.value.map(convert);currentPath.value=convert(previous)
+    const url=new URL(location.href);if(activeLibrary)url.searchParams.set('lib',to);history.replaceState(null,'',url)
+    saveTabs();rememberDoc(currentPath.value);syncUrl();libEpoch.value++
+    await loadTree();await loadPageMeta();return result.data
+  }
+
   return {
+    contentEpoch,pageMeta,pageMetaRevision,loadPageMeta,savePageMeta,conflict,resolveConflict,renameLibrary,
     legacyLib,
     libEpoch,
     switchLib,

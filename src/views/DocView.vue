@@ -3,30 +3,16 @@
     <!-- 顶部工具条：左侧是打开的文档，右侧是各功能入口 -->
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
-      <transition name="pop">
-        <DocTabs
-          v-if="tabItems.length > 1"
-          class="mr-auto"
-          :items="tabItems"
-          :active="docId"
-          @select="emit('select', $event)"
-          @close="onCloseTab"
-        />
-      </transition>
-      <span
-        v-if="tabItems.length === 1"
-        class="single-doc-title mr-auto truncate text-[12px] text-[var(--c-sub)]"
-        :title="tabItems[0].file"
-      >{{ tabItems[0].name }}</span>
+      <DocTabs v-if="tabItems.length" class="mr-auto" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" />
 
       <div class="doc-search-wrap">
         <button class="btn-icon" title="查找当前文档" aria-label="查找当前文档" :aria-expanded="searchOpen" @click="toggleDocSearch"><PhMagnifyingGlass :size="15" /></button>
         <div v-if="searchOpen" class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
           <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
-          <p class="search-scope">仅当前文档正文 · 跨文档查找请展开左侧栏</p>
+          <p class="search-scope">仅当前文档正文，跨文档查找请展开左侧栏</p>
           <div v-if="keyword.trim()" class="doc-search-results">
             <p v-if="!results.length" class="search-scope">没有匹配</p>
-            <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r)"><span v-html="highlight(h.text, keyword)" /></button></template>
+            <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r, h)"><span v-html="highlight(h.text, keyword)" /><small>第 {{ h.line }} 行{{ h.occurrence > 1 ? `，本行第 ${h.occurrence} 处` : '' }}</small></button></template>
           </div>
         </div>
       </div>
@@ -246,7 +232,7 @@
       </div>
 
       <div v-if="docId" class="relative">
-        <button class="btn-icon" title="文档设置与导出" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhDotsThree :size="19" /></button>
+        <button class="btn-icon" title="导出与文档设置" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhExport :size="19" /></button>
         <div v-if="open === 'access'" class="pop-menu is-panel w-[250px]">
           <div class="doc-state-pair">
             <button class="doc-state" role="switch" :aria-checked="meta.shared !== false" aria-label="对外展示" @click="changeAccess('shared')">
@@ -257,14 +243,15 @@
             </button>
           </div>
           <p class="search-scope">公开决定访客能否看到；锁定决定访客能否编辑。管理员始终可以维护内容。</p>
-          <p v-if="meta.lockedAt && meta.lockedAt !== docId" class="search-scope">继承「{{ meta.lockedAt }}」的锁定。点击锁定开关可管理上级。</p>
+          <p v-if="meta.lockedAt && meta.lockedAt !== docId" class="search-scope">继承{{ meta.lockedAt }}的锁定。点击锁定开关可管理上级。</p>
           <div class="doc-options-divider" />
           <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="14" /> 导出 Markdown</button>
+          <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="14" /> 导出网页（含图片）</button>
           <button class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="14" /> 打印 / 导出 PDF</button>
         </div>
       </div>
 
-      <!-- pdf 翻译：没翻过就起任务，翻好了就是「看译文 / 看原文」的开关 -->
+      <!-- pdf 翻译：没翻过就起任务，翻好了就是看译文 / 看原文的开关 -->
       <button
         v-if="isPdf && !store.isGuest"
         class="btn-icon"
@@ -288,12 +275,13 @@
 
     </div>
 
-    <!-- 斜杠菜单里「插入文档」用的选择器 -->
+    <!-- 斜杠菜单里插入文档用的选择器 -->
     <DocPicker v-if="pickDoc" @close="pickDoc = false" @pick="onPickDoc" />
 
+    <ConflictDialog />
     <!-- 出错提示 -->
     <div
-      v-if="error"
+      v-if="error && !store.conflict"
       class="mx-6 mb-1 px-3.5 py-2.5 rounded-lg bg-[var(--c-field)] ring-1 ring-[var(--c-line)] flex items-start gap-2.5 shrink-0"
     >
       <PhWarningCircle :size="15" class="text-[#d9534f] mt-[1px] shrink-0" />
@@ -308,12 +296,12 @@
       id="main-scroll-container"
       ref="scroller"
       class="flex-1 min-h-0 overflow-y-auto print-area"
-      :style="reader.readingStyle"
+      :style="pageStyle"
     >
       <!--
         PDF：交给浏览器自带的阅读器，支持翻页和跳页（服务端带 Range）。
         H5：整页渲染，保留它自己的布局，不套阅读器的行宽限制。
-        两者都是「成品文件」，不经过 markdown 解析。
+        两者都是成品文件，不经过 markdown 解析。
       -->
       <iframe
         v-if="isPreview"
@@ -323,24 +311,32 @@
         :src="pdfSrc"
         :title="meta.name || (isPdf ? 'PDF' : 'H5')"
       />
+      <PageHeader v-if="loaded && !isPreview" />
       <MarkdownEditor
-        v-else-if="loaded"
-        :key="String(store.currentReadonly) + docId + ':' + epoch"
+        v-if="loaded && !isPreview"
+        :key="String(store.currentReadonly) + docId + ':' + epoch + ':' + store.contentEpoch + ':' + restoredEpoch"
         :readonly="store.currentReadonly"
         @pick-doc="pickDoc = true"
         @open-doc="store.select($event)"
         :value="raw"
         :doc-id="docId"
         :doc-file="meta.file || ''"
-        :style="reader.readingStyle"
+        :style="pageStyle"
         @update:value="emit('input', $event)"
         @canonize="emit('canonize', $event)"
+        @restore="restoreContent"
       />
-      <p v-else class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">正在读取…</p>
+      <div v-else-if="!isPreview && !docId && !store.loading" class="ui-font text-center pt-24 text-[var(--c-sub)]">
+        <p class="text-[14px]">这个知识库还没有文档</p>
+        <button v-if="!store.isGuest" class="mt-4 text-[12px] text-ds hover:underline" @click="emit('create-doc')">新建第一篇文档</button>
+      </div>
+      <p v-else-if="!isPreview && error" class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">读取失败，请点击上方重新读取</p>
+      <p v-else-if="!isPreview" class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">正在读取…</p>
     </div>
 
     <!-- 底栏 -->
     <div
+      v-if="docId"
       class="reader-bottombar h-8 px-8 flex items-center gap-3 text-[11.5px] text-[var(--c-faint)] shrink-0 border-t border-[var(--c-line-soft)]"
     >
       <!-- h5 没有页数可数，只报体积 -->
@@ -360,7 +356,7 @@
           class="ui-font underline text-[var(--color-ds)]"
           @click="onTranslate"
         >
-          {{ store.pdfView === 'translated' ? '正在看译文 · 点回原文' : '译文已就绪 · 点看译文' }}
+          {{ store.pdfView === 'translated' ? '正在看译文，点回原文' : '译文已就绪，点看译文' }}
         </button>
       </template>
       <template v-else>
@@ -368,31 +364,20 @@
         <span class="ui-font tabular-nums">{{ stats.lines }} 行</span>
       </template>
       <span class="ui-font ml-auto flex items-center gap-1.5">
-        <span v-if="store.currentReadonly" class="ui-font text-[var(--c-faint)]">已锁定 · 只读</span>
+        <span v-if="store.currentReadonly" class="ui-font text-[var(--c-faint)]">已锁定，只读</span>
         <PhSpinnerGap v-if="saving" :size="12" class="spin" />
         <span :class="saveStateClass">{{ saveStateText }}</span>
       </span>
+      <button v-if="!isPdf" class="status-to-top" :disabled="!showTop" title="回到顶部 T" @click="scrollTop"><PhArrowUp :size="15"/></button>
     </div>
 
 
-    <!--
-      回到顶部：目录开着时它就在目录底部的进度条旁边，那里本来就是导航区，
-      不压正文；目录收起时没有那块地方，才退回到右下角贴边。
-    -->
-    <transition name="pop">
-      <button
-        v-if="showTop && !reader.tocOpen"
-        class="to-top absolute bottom-11 right-6 w-7 h-7 rounded-full bg-[var(--c-pop)] shadow-md ring-1 ring-[var(--c-line)] flex items-center justify-center text-[var(--c-faint)] hover:text-[var(--c-ink)] transition-colors"
-        title="回到顶部 T"
-        @click="scrollTop"
-      >
-        <PhArrowUp :size="13" />
-      </button>
-    </transition>
+
   </div>
 </template>
 
 <script setup>
+import {layoutText} from '../utils/column-format'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 // 弹层里那些小图标：宽度 / 加粗斜体 / 段落 / 表格 / 主题 / 缩放 / 导出 / pdf 翻译
 import {
@@ -409,6 +394,8 @@ import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
+import ConflictDialog from '../components/ConflictDialog.vue'
+import PageHeader from '../components/PageHeader.vue'
 import DocPicker from '../components/DocPicker.vue'
 import { insertDocLink } from '../utils/editor-shortcuts'
 import { useDocScroll } from '../composables/useDocScroll'
@@ -417,10 +404,13 @@ import { API_BASE } from '../utils/api'
 
 const reader = useReaderStore()
 // pdf 翻译任务的状态住在 docs store 里，不必再经 App 转一手
+const restoredEpoch=ref(0)
+function restoreContent(text){emit('input',text);restoredEpoch.value++}
 const store = useDocsStore()
-/** 斜杠菜单里「插入文档」打开的选择器 */
+const pageStyle=computed(()=>({...reader.readingStyle,...({narrow:{'--measure':'min(720px, 100%)'},wide:{'--measure':'min(1120px, 100%)'},full:{'--measure':'100%'}}[store.pageMeta.layout]||{})}))
+/** 斜杠菜单里插入文档打开的选择器 */
 const pickDoc = ref(false)
-const { exportMarkdown, exportPdf } = useExport(() => props.meta, () => props.raw)
+const { exportMarkdown, exportPdf, exportHtml } = useExport(() => props.meta, () => props.raw)
 
 /*
  * 只接文档本身的东西。
@@ -447,10 +437,10 @@ const props = defineProps({
   epoch: { type: Number, default: 0 },
   error: { type: String, default: '' }
 })
-const emit = defineEmits(['update:keyword', 'jump', 'input', 'reload', 'select', 'canonize', 'close-tab'])
+const emit = defineEmits(['update:keyword', 'jump', 'input', 'reload', 'select', 'canonize', 'close-tab', 'create-doc'])
 
 /** 当前这篇是不是 pdf：是就不挂编辑器，改挂浏览器自带的 pdf 阅读器 */
-/* 「成品文件」：pdf 与 h5。两者都交给浏览器整页渲染，工具栏与页脚信息按类型分开。 */
+/* 成品文件：pdf 与 h5。两者都交给浏览器整页渲染，工具栏与页脚信息按类型分开。 */
 const isPdf = computed(() => props.meta?.type === 'pdf')
 const isH5 = computed(() => props.meta?.type === 'h5')
 const isPreview = computed(() => isPdf.value || isH5.value)
@@ -459,6 +449,7 @@ const tabItems = computed(() =>
   store.tabs.map((file) => ({
     file,
     name: store.allFiles.find((f) => f.file === file)?.name || file.split('/').pop().replace(/\.(md|pdf)$/i, ''),
+    icon: store.allFiles.find(f=>f.file===file)?.meta?.icon || '',
     dirty: file === props.docId && props.dirty
   }))
 )
@@ -486,6 +477,22 @@ const pdfSrc = computed(() => {
     : (props.meta?.file || '')
   return API_BASE + '/api/file?path=' + encodeURIComponent(rel)
 })
+
+// H5 保持独立沙箱，不授予 same-origin。由阅读器代办明确的本库文档跳转，
+// 避免沙箱内导航丢失 SameSite 管理会话；不把文件内容或凭据回传给 H5。
+function onPreviewAction(event) {
+  if (!isH5.value || event.source !== frameRef.value?.contentWindow) return
+  const data = event.data
+  if (!data || data.type !== 'reader-preview-open' || typeof data.path !== 'string') return
+  const rel = data.path
+  const lib = String(props.meta?.file || '').split('/')[0]
+  if (!lib || !rel.startsWith(lib + '/') || rel.includes('\\') || rel.includes('\0') || rel.split('/').some(part => !part || part.startsWith('.'))) return
+  if (data.kind === 'document' && store.allFiles.some(file => file.file === rel)) {
+    store.select(rel)
+  }
+}
+onMounted(() => window.addEventListener('message', onPreviewAction))
+onBeforeUnmount(() => window.removeEventListener('message', onPreviewAction))
 
 /** 翻译按钮的提示语与动作 */
 const translateTip = computed(() => {
@@ -518,7 +525,7 @@ watch(
   (n) => {
     const f = frameRef.value
     if (!f || !n) return
-    // 译文是「原文一页、译文一页」交替的（36 页 = 18 页原文 + 18 页译文），
+    // 译文是原文一页、译文一页交替的（36 页 = 18 页原文 + 18 页译文），
     // 所以看译文时目录里的第 n 页要跳到第 2n-1 页，落在原文那面上。
     const page = store.pdfView === 'translated' ? n * 2 - 1 : n
     try {
@@ -633,7 +640,7 @@ function isCJK(ch) {
 }
 
 const stats = computed(() => {
-  const text = String(props.raw || '')
+  const text = layoutText(props.raw)
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`[^`\n]*`/g, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1 ')
@@ -646,7 +653,7 @@ const stats = computed(() => {
   return {
     total: cjk + words,
     lines: String(props.raw || '').split('\n').length,
-    tip: '汉字 ' + cjk + ' · 西文词 ' + words
+    tip: '汉字 ' + cjk + '，西文词 ' + words
   }
 })
 
@@ -692,6 +699,7 @@ function pickSize(v) {
 function pickExport(kind) {
   open.value = ''
   if (kind === 'md') exportMarkdown()
+  else if(kind==='html')exportHtml().catch(e=>{store.error=e.message})
   else exportPdf()
 }
 function closeSearch() {
@@ -703,15 +711,15 @@ function clearSearch() {
   emit('update:keyword', '')
   searchInput.value?.focus()
 }
-function onResultClick(r) {
+function onResultClick(r, hit) {
   searchOpen.value = false
-  emit('jump', { id: r.id, keyword: props.keyword })
+  emit('jump', { id: r.id, keyword: props.keyword, hit })
 }
 
 /* ---------- 滚动 ---------- */
 /*
  * 回顶按钮的显隐、T 键、切文档记住读到哪，都在 useDocScroll 里。
- * 这里只把「还原位置要等 DOM 落定」这个界面侧的事接过来。
+ * 这里只把还原位置要等 DOM 落定这个界面侧的事接过来。
  */
 const { showTop, scrollTop } = useDocScroll({
   scroller,
@@ -933,6 +941,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .doc-search-field { display:flex;align-items:center;gap:8px }.doc-search-field input { min-width:0;flex:1;outline:none;background:transparent;font-size:13px;padding:7px 0 }
 .search-scope { font-size:11px;line-height:1.6;color:var(--c-faint);padding:8px 5px }
 .doc-search-results { max-height:50vh;overflow:auto }.search-hit { display:block;width:100%;text-align:left;font-size:12px;line-height:1.7;padding:8px;border-radius:6px }.search-hit:hover{background:var(--c-hover)}
+.search-hit small { display:block; font-size:10px; color:var(--c-faint) }
 .pop-item:disabled { opacity:.5;cursor:default }
 @media(max-width:640px){ .doc-search-panel{position:fixed;top:58px;left:12px;right:12px;width:auto;max-width:none}.reader-topbar{padding-left:8px!important;padding-right:8px!important;gap:2px!important}.single-doc-title{max-width:25vw} }
 </style>
@@ -940,3 +949,5 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 <style scoped>
 .doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:6px}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:9px;background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
 </style>
+
+<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:9px}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}</style>

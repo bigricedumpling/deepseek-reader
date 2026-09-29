@@ -1,0 +1,3 @@
+export function parseColumns(raw){try{const v=JSON.parse(raw);if(v.version!==1||!Array.isArray(v.columns)||v.columns.length<2||v.columns.length>3||raw.length>500000)return null;if(v.columns.some(x=>typeof x!=='string'||/(?:`{3,}|~{3,})\s*reader-columns/.test(x)))return null;return v.columns}catch{return null}}
+/** Expand only valid layout fences for text search/counting; never rewrite source. */
+export function layoutText(markdown){return String(markdown||'').replace(/^(`{3,})reader-columns[^\n]*\n([\s\S]*?)^\1\s*$/gm,(raw,_f,body)=>{const columns=parseColumns(body);return columns?columns.join('\n\n'):raw})}

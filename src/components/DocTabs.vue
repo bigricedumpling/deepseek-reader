@@ -2,18 +2,18 @@
   <!--
     打开的文档，像浏览器标签一样排在这里。
 
-    只显示文件名（和侧栏、磁盘上的名字一致），太长就省略号；
+    只显示文件名（和侧栏、磁盘上的名字一致），太长就渐隐；
     有未保存改动时点一个小点；点标签切换，点 × 关掉。
-    只有一篇时父组件隐藏整条标签栏，这里仍防御性地隐藏最后一篇的关闭按钮。
+    只有一篇时呈现为普通标题，保留容器以完成增减标签的过渡。
   -->
   <div
     ref="strip"
     class="doc-tabs"
-    :class="{ 'has-left': fadeLeft, 'has-right': fadeRight }"
+    :class="{ 'has-left': fadeLeft, 'has-right': fadeRight, 'single-document': items.length === 1 }"
     @wheel="onWheel"
     @scroll="updateFade"
   >
-    <TransitionGroup name="tab">
+    <TransitionGroup name="tab" @before-leave="freezeLeaving" @after-enter="measure" @after-leave="measure">
       <div
         v-for="t in items"
         :key="t.file"
@@ -26,6 +26,7 @@
           @click="$emit('select', t.file)"
           @auxclick="onAux($event, t.file)"
         >
+          <ContentIcon :value="t.icon" :size="16" />
           <span class="doc-tab-name">{{ t.name }}</span>
           <span v-if="t.dirty" class="doc-tab-dot" title="改动还在往回写的路上" />
         </button>
@@ -44,6 +45,7 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import ContentIcon from './ContentIcon.vue'
 import { PhX } from '@phosphor-icons/vue'
 
 const props = defineProps({
@@ -60,6 +62,11 @@ const strip = ref(null)
 const fadeLeft = ref(false)
 const fadeRight = ref(false)
 
+function freezeLeaving(el){el.style.width=el.offsetWidth+'px';el.style.left=el.offsetLeft+'px';el.style.top=el.offsetTop+'px'}
+function measure() {
+  updateFade()
+  for(const el of strip.value?.querySelectorAll('.doc-tab-name')||[])el.classList.toggle('is-clipped',el.scrollWidth > el.clientWidth + 1)
+}
 function updateFade() {
   const el = strip.value
   if (!el) return
@@ -71,11 +78,9 @@ function updateFade() {
 function scrollActiveIntoView(smooth = true) {
   const el = strip.value
   if (!el) return
-  const tabs = [...el.querySelectorAll('.doc-tab')]
-  const i = props.items.findIndex((t) => t.file === props.active)
-  const tab = tabs[i]
+  const tab = el.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
   if (!tab) return
-  const left = tab.offsetLeft
+  const left = tab.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft
   const right = left + tab.offsetWidth
   const pad = 10
   if (left - pad < el.scrollLeft) {
@@ -87,8 +92,8 @@ function scrollActiveIntoView(smooth = true) {
 
 watch(() => props.active, () => nextTick(() => scrollActiveIntoView()))
 watch(
-  () => props.items.length,
-  () => nextTick(updateFade)
+  () => props.items,
+  () => nextTick(measure)
 )
 
 let observer = null
@@ -96,10 +101,10 @@ let observer = null
 onMounted(() => {
   nextTick(() => {
     scrollActiveIntoView(false)
-    updateFade()
+    measure()
   })
   // 窗口或侧栏变宽变窄时，遮罩要不要显示可能就变了
-  observer = new ResizeObserver(updateFade)
+  observer = new ResizeObserver(measure)
   if (strip.value) observer.observe(strip.value)
 })
 
@@ -179,7 +184,8 @@ function onAux(e, file) {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  max-width: 170px;
+  max-width: 220px;
+  position: relative;
   border-radius: 8px;
   transition: background 0.15s;
 }
@@ -187,15 +193,15 @@ function onAux(e, file) {
   background: var(--c-hover);
 }
 .doc-tab.is-active {
-  background: var(--c-pop);
-  box-shadow: inset 0 0 0 1px var(--c-line);
+  background: var(--c-field);
+  box-shadow: none;
 }
 .doc-tab-main {
   display: flex;
   align-items: center;
   gap: 5px;
   min-width: 0;
-  padding: 5px 3px 5px 10px;
+  padding: 8px 6px 8px 10px;
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--c-sub);
@@ -206,7 +212,7 @@ function onAux(e, file) {
 }
 .doc-tab-name {
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 .doc-tab-dot {
@@ -236,4 +242,12 @@ function onAux(e, file) {
   background: var(--c-chip-hover);
   color: var(--c-ink);
 }
+</style>
+
+<style scoped>
+.doc-tab:not(:last-child):not(.is-active)::after{content:'';position:absolute;right:-1px;top:10px;bottom:10px;width:1px;background:var(--c-line)}.doc-tab:has(+ .is-active)::after{display:none}.doc-tab-name.is-clipped{mask-image:linear-gradient(to right,#000 calc(100% - 18px),transparent)}.doc-tab-main .content-icon{width:16px;height:16px}.doc-tab-x{flex-shrink:0}.doc-tabs:not(.has-left):not(.has-right){mask-image:none;-webkit-mask-image:none}
+</style>
+<style scoped>
+.doc-tabs{min-height:36px}.doc-tab.tab-move{transition:transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:opacity 180ms ease,transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-from,.doc-tab.tab-leave-to{opacity:0;transform:translateY(5px) scale(.94)}.single-document .doc-tab{--smooth-fill:transparent!important;max-width:100%}.single-document .doc-tab-main{padding-left:0}.single-document .doc-tab-main .content-icon{display:none}.single-document .doc-tab-name{color:var(--c-sub)}
+@media(prefers-reduced-motion:reduce){.doc-tab.tab-move,.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:none!important}}
 </style>

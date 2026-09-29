@@ -1,0 +1,25 @@
+{
+  "name": "reader-workspace",
+  "version": "1.0.0",
+  "description": "Read and edit authorized Reader libraries with version-safe updates.",
+  "author": {
+    "name": "zangqucheng"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Reader Workspace",
+    "shortDescription": "Read and organize your Reader knowledge libraries.",
+    "longDescription": "Scoped access to Markdown documents, search, stable IDs, revision checks, metadata and history through the Reader content service.",
+    "developerName": "zangqucheng",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Search my authorized knowledge library.",
+      "Organize these notes without losing their images."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

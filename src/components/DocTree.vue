@@ -110,7 +110,7 @@
           @click="emit('select', node.file)"
           @dblclick="store.canEdit(node) && tree.editStart('doc', node)"
         >
-          <PhFilePdf v-if="node.type === 'pdf'" :size="13" class="doc-kind" />
+          <ContentIcon v-if="node.meta?.icon" :value="node.meta.icon" :size="14" class="doc-kind" /><PhFilePdf v-else-if="node.type === 'pdf'" :size="13" class="doc-kind" />
           <PhFileHtml v-else-if="node.type === 'h5'" :size="13" class="doc-kind" />
           <span class="truncate">{{ node.name }}</span>
         </button>
@@ -137,6 +137,7 @@
 </template>
 
 <script setup>
+import ContentIcon from './ContentIcon.vue'
 import { ref, computed, inject, nextTick, watch } from 'vue'
 import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree, PhLock, PhEyeSlash } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
@@ -269,7 +270,7 @@ function relTime(ms) {
 
 
 <style scoped>
-/* 「不对外分享」那个小眼睛：跟名字留一点距离、跟行内的文字对齐 */
+/* 不对外分享那个小眼睛：跟名字留一点距离、跟行内的文字对齐 */
 .share-eye {
   flex-shrink: 0;
   margin-left: 5px;

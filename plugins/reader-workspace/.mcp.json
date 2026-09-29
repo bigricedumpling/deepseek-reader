@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "reader": {
+      "command": "node",
+      "args": ["scripts/reader.mjs", "--stdio"],
+      "cwd": ".",
+      "env_vars": ["READER_URL", "READER_TOKEN"]
+    }
+  }
+}
