@@ -14,7 +14,7 @@ npm run start:local
 
 然后打开 `http://127.0.0.1:8090/`，创建知识库和文档。本机访问直接进入管理界面，无须注册账号；服务默认仅监听本机。内容默认存放在仓库旁边的 `知识库` 目录。可在启动前设置绝对路径 `DOCS_ROOT` 来选择数据目录，勿将它放入公开网站目录或 Git 仓库。
 
-在 DSH 中使用，还需安装接入插件并连接 Reader；见 [DSH 插件安装与已知问题](plugins/reader-workspace/README.md)。目前市场安装接入插件后仍须单独启动 Reader，社区市场收录也尚未完成。
+在 DSH 中使用，还需安装接入插件并连接 Reader。预览版安装包在 [GitHub Releases](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.1)，步骤和已知问题见 [DSH 插件说明](plugins/reader-workspace/README.md)。源码也同步在 [Gitea](https://zangqucheng.site/git/zangqucheng/deepseek-reader)。社区市场尚未收录，因此目前不能靠市场搜索安装；即使之后从市场安装接入插件，Reader 服务仍需单独启动。
 
 ![简洁侧栏与章节导航](docs/04-悬停目录.png)
 

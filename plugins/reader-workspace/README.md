@@ -8,12 +8,12 @@
 
 1. 下载本仓库，在仓库根目录运行 `npm ci`、`npm run build`，然后运行 `npm run start:local`。默认数据目录是仓库旁边的 `知识库` 文件夹；如需自己选位置，请在启动前设置 `DOCS_ROOT` 为绝对路径。Windows PowerShell 示例：`$env:DOCS_ROOT='D:\\Reader知识库'; npm run start:local`。数据目录不要放在公开的网站目录或 Git 仓库里。
 2. 在浏览器打开 `http://127.0.0.1:8090/`，确认 Reader 能显示。新知识库可以在 Reader 中创建。macOS 可选用 `npm run service:install` 设置登录后自动启动；普通启动不需要这一步。
-3. 在 DSH NEXT 左侧“插件”页安装本仓库的 `plugins/reader-workspace` 目录，然后重新打开 DSH。DSH Web 可从仓库根目录运行 `dsh plugin --profile web add ./plugins/reader-workspace`，然后重启 Web 配置。插件包本身没有额外运行时依赖，无需先在插件目录执行安装命令。
+3. 在 DSH NEXT 左侧“插件”页安装本仓库的 `plugins/reader-workspace` 目录，然后重新打开 DSH。也可以从 [Preview 发布页](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.1)下载 `dsh-reader-workspace.tgz`，解压后选择其中的 `package` 目录。DSH Web 可运行 `dsh plugin --profile web add /下载位置/dsh-reader-workspace.tgz`，然后重启 Web 配置。这个安装包没有额外运行时依赖，无需在插件目录执行安装命令。
 4. 在 DSH“开始”页点击“阅读器”。同一台电脑使用默认本机地址即可；若使用不同地址，点阅读器标签右下角的连接设置图标填写地址。远程地址须为 HTTPS。连接失败时也会显示地址设置。
 
 **Agent 写入是可选的。** 如需让 DSH Agent 查找或保存知识库文档，在 Reader 的“管理知识库 → 插件连接”选择范围、生成令牌，再在启动 DSH 的环境中设置 `READER_URL` 和 `READER_TOKEN` 并重启 DSH。令牌仅显示一次，不要写入仓库。未设置令牌时，阅读器入口和 Markdown 预览仍可使用；Agent 工具不会注册。
 
-当前版本还没有做到“在市场点安装后无需设置即可编辑自己的知识库”。市场收录也不是发布 Git 仓库后自动完成的步骤；请以本页安装流程为准。
+当前版本还没有做到“在市场点安装后无需设置即可编辑自己的知识库”。社区市场尚未收录，不能通过市场搜索安装；请以本页安装流程为准。
 
 安装命令中的路径从 Reader 仓库根目录计算；在其他目录运行时请改用实际路径。插件不负责启动 Reader 服务。本机回环地址可以使用 HTTP。
 
