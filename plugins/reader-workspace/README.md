@@ -1,14 +1,58 @@
-# Reader Workspace
+# Reader · DSH 插件 Preview
 
-A local MCP stdio adapter and CLI for the Reader HTTP service. Requires Node.js 24 and a running Reader. No direct filesystem access is exposed to the agent.
+这个插件让 DSH 在右侧栏打开 Reader，并用 Reader 预览工作区 Markdown。知识库仍保存在 Reader 的本机数据目录；卸载 DSH 插件不会删除文档。当前验证环境为 DSH NEXT 0.2.0-rc.1、macOS 和 Node.js 24。
 
-In Reader, open the bottom-left workspace menu and Agent connection. Create a scoped credential, copy it once, and pass it using the host's environment configuration:
+## 从零安装
 
-- `READER_URL`: Reader origin or deployed base URL, for example `http://127.0.0.1:8090`
-- `READER_TOKEN`: scoped credential, never an administrator password
+**Reader 和 DSH 插件是两个部分。** DSH 插件市场安装的只是接入包；第一次使用还需在自己的电脑上启动 Reader。需要 Node.js 24 或更新版本。
 
-Start MCP with `node scripts/reader.mjs --stdio` from this package directory. `.mcp.json` declares this command for a compatible plugin host. Installing/enabling the package is a separate action; this repository does not automatically install it.
+1. 下载本仓库，在仓库根目录运行 `npm ci`、`npm run build`，然后运行 `npm run start:local`。默认数据目录是仓库旁边的 `知识库` 文件夹；如需自己选位置，请在启动前设置 `DOCS_ROOT` 为绝对路径。Windows PowerShell 示例：`$env:DOCS_ROOT='D:\\Reader知识库'; npm run start:local`。数据目录不要放在公开的网站目录或 Git 仓库里。
+2. 在浏览器打开 `http://127.0.0.1:8090/`，确认 Reader 能显示。新知识库可以在 Reader 中创建。macOS 可选用 `npm run service:install` 设置登录后自动启动；普通启动不需要这一步。
+3. 在 DSH NEXT 左侧“插件”页安装本仓库的 `plugins/reader-workspace` 目录，然后重新打开 DSH。DSH Web 可从仓库根目录运行 `dsh plugin --profile web add ./plugins/reader-workspace`，然后重启 Web 配置。插件包本身没有额外运行时依赖，无需先在插件目录执行安装命令。
+4. 在 DSH“开始”页点击“阅读器”。同一台电脑使用默认本机地址即可；若使用不同地址，点阅读器标签右下角的连接设置图标填写地址。远程地址须为 HTTPS。连接失败时也会显示地址设置。
 
-CLI usage: `node scripts/reader.mjs <tool-name> '<JSON arguments>'`. Use MCP tool discovery for the exact schemas. The package includes a Reader skill documenting safe read/edit workflows.
+**Agent 写入是可选的。** 如需让 DSH Agent 查找或保存知识库文档，在 Reader 的“管理知识库 → 插件连接”选择范围、生成令牌，再在启动 DSH 的环境中设置 `READER_URL` 和 `READER_TOKEN` 并重启 DSH。令牌仅显示一次，不要写入仓库。未设置令牌时，阅读器入口和 Markdown 预览仍可使用；Agent 工具不会注册。
 
-Updates require the revision returned by the last read. A 409 means re-read and merge; never retry by overwriting. Reuse requestId for retries of the same mutation. The credential cannot manage access settings or reach other libraries, and can be revoked in Reader.
+当前版本还没有做到“在市场点安装后无需设置即可编辑自己的知识库”。市场收录也不是发布 Git 仓库后自动完成的步骤；请以本页安装流程为准。
+
+安装命令中的路径从 Reader 仓库根目录计算；在其他目录运行时请改用实际路径。插件不负责启动 Reader 服务。本机回环地址可以使用 HTTP。
+
+## 使用方式
+
+在任意 DSH 工作区直接说“把这段整理到课堂笔记知识库”，Agent 会先查授权知识库，再把文档直接写到你指定的位置。新建操作返回稳定文档 ID、版本号和打开链接。编辑现有文档时必须先读取并携带版本号；出现冲突时重新读取和合并。图片需要通过 `reader_upload_image` 存成文档资源，不能把临时截图路径留在正文里。
+
+可选的 `source` 记录只用于说明内容当时从哪个工作区、文件或会话来。它是私人历史记录，不参与同步，也不会出现在公开页面。知识库本身仍由 Reader 管理；工作区只是内容来源和本次会话的上下文。
+
+在 DSH 右侧栏的“开始”页点击“阅读器”，会在原生侧栏标签中加载 Reader 首页。Reader 顶部的外部打开图标可用独立浏览器打开同一页面。Reader 页面本身仍是同一套网页，插件不会复制界面或知识库，也不依赖 DSH 的可选通用浏览器插件。Agent 返回的文档链接也可以从会话中打开。针对侧栏尺寸的编辑、上传和导出仍需在真实 DSH 桌面宿主里验证。
+
+本机管理界面的文档「···」菜单有文件定位入口；目录与知识库菜单可打开所在位置。macOS 使用访达，Windows 使用文件资源管理器；iOS 和远程访客不显示本机文件管理入口。工作区浏览记录也可定位原文件：新记录保存 DSH 返回的本机路径，旧记录在 DSH 内点击时即时查询。跨设备工作区路径无法在另一台设备的文件管理器中定位。
+
+iOS 首次打开插件时需填入可从该设备访问的 HTTPS 阅读器地址。临时公开链接可用于访客阅读；远程管理编辑仍需单独的安全连接方案，不能把本机管理地址直接公开。
+
+安装此插件后，DSH 文件列表中的 Markdown 默认在 Reader 右侧预览。相对链接继续打开工作区文件，相对图片从当前工作区读取；预览不会移动原文件。本机管理者打开预览时，正文与已读取的图片会按来源写入 Reader 的“工作区浏览记录”，重复打开会更新快照；远程 Reader 不会自动记录工作区文件。浏览记录可以回看、归档、恢复，也可以从快照收录为默认私有的正式文档。点击 DSH 预览中的“收录到知识库”会重新读取最新源文件与本地图片。此预览是只读的，收录后编辑知识库中的副本。
+
+入口默认指向 `http://127.0.0.1:8090/`。界面连接地址在 DSH 标签内设置；Agent 工具连接地址由 `READER_URL` 控制，两者目前需要分别设置。
+
+## 另一种接入方式
+
+本目录同时保留 MCP stdio 适配器，供 Codex 等兼容宿主使用：`node scripts/reader.mjs --stdio`。`.mcp.json` 声明了这条连接。两种入口使用同一套 Reader API 和授权令牌。
+
+
+## 本轮本地试用规则
+
+- 本机直接访问默认进入个人工作区，无需登录。DSH 入口使用 `/doc/`；`/onlyread/` 始终使用访客权限，即使同一浏览器已拥有管理会话。
+- 服务只监听回环地址。公网部署保留认证能力，建议显式设置 `READER_REQUIRE_LOGIN=1`。不能把个人工作区服务直接作为临时分享目标。
+- Markdown 文件先预览；收录弹窗用网格检索、筛选知识库。草稿固定在首位，收录副本进入所选知识库根目录，原文件不变；收录完成后在同一标签打开副本。
+- 阅读器入口快捷键为 `Cmd/Ctrl+Shift+R`；Markdown 专属标签与阅读器标签使用统一品牌图标。已有旧 Markdown 标签需要关闭后重新打开才能交给新的标签类型。
+- 知识库栏底部可切换访客视角；“管理知识库”中提供临时访客链接。临时分享采用 cloudflared Quick Tunnel，只暴露独立的只读快照；主动更新替换快照，停止后地址失效。没有新增访客账号或协同编辑。
+- 自定义图标历史保存在知识库状态中，管理者可重复选择；访客不能读取该历史。
+
+## 已知问题与范围
+
+- 已在 macOS 的 DSH NEXT 0.2.0-rc.1 验证入口、Markdown 标签、相对图片与收录弹窗；Windows、iOS 和两个独立 DSH 工作区的完整操作尚未验收。
+- `Cmd/Ctrl+Shift+R` 快捷键修正后尚未在重载的 DSH 中复测。
+- Agent 工具需要单独生成令牌并配置 DSH 启动环境；仅在客户端填写 Reader 地址不会配置 Agent 工具。
+- 工作区预览是只读快照；收录会创建独立副本，不会双向同步或多人协作。复杂 Markdown 结构可能需要切换到源码编辑。
+- 临时访客分享需要可用的 `cloudflared` 和网络连接；真实外部设备访问尚未作为本插件 Preview 的发布门槛。
+
+MIT License，详见本目录的 `LICENSE`。

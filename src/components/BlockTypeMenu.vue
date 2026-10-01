@@ -52,28 +52,32 @@ const emit = defineEmits(['pick'])
 .bt-menu {
   position: fixed;
   z-index: 55;
-  width: 168px;
-  max-height: calc(100vh - 16px);
+  width: 198px;
+  max-height: min(420px, calc(100dvh - 24px));
   overflow-y: auto;
-  padding: 5px;
+  padding: 7px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-line) transparent;
   background: var(--c-pop, #fff);
   border: 1px solid var(--c-line-soft, #ececec);
   border-radius: var(--radius-surface);
   box-shadow: var(--c-pop-shadow);
 }
 .bt-group {
-  margin: 2px 0 1px;
-  padding: 4px 8px 2px;
+  margin: 4px 0 3px;
+  padding: 6px 9px 3px;
   font-size: 10.5px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   color: var(--c-faint, #9a9a9a);
 }
+.bt-group:not(:first-child) { margin-top: 7px; border-top: 1px solid var(--c-line); padding-top: 10px; }
 .bt-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 6px 8px;
+  min-height: 32px;
+  padding: 6px 9px;
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
@@ -87,12 +91,13 @@ const emit = defineEmits(['pick'])
 }
 .bt-item.is-on {
   color: var(--color-ds, #4d6bfe);
+  background: var(--c-active);
 }
 .bt-icon {
   display: inline-flex;
-  width: 18px;
+  width: 23px;
   flex-shrink: 0;
-  justify-content: flex-start;
+  justify-content: center;
   font-size: 11px;
   color: var(--c-faint, #9a9a9a);
   font-variant-numeric: tabular-nums;

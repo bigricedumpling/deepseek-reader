@@ -48,15 +48,17 @@
     <div v-show="!lossy" ref="host" class="crepe-host"></div>
 
     <!-- 块左侧那个六点手柄，点一下弹出来的转为菜单 -->
-    <BlockTypeMenu
-      v-if="menu"
-      :x="menu.x"
-      :y="menu.y"
-      :groups="menu.groups"
-      @pick="onMenuPick"
-    />
+    <Transition name="pop">
+      <BlockTypeMenu
+        v-if="menu"
+        :x="menu.x"
+        :y="menu.y"
+        :groups="menu.groups"
+        @pick="onMenuPick"
+      />
+    </Transition>
     <IconPicker v-if="calloutPicker" :anchor="calloutPicker.anchor" :save="saveCalloutIcon" @close="calloutPicker=null" />
-    <TextStyleMenu v-if="styleMenu" :x="styleMenu.x" :y="styleMenu.y" @pick="onStylePick" />
+    <Transition name="pop"><TextStyleMenu v-if="styleMenu" :x="styleMenu.x" :y="styleMenu.y" @pick="onStylePick" /></Transition>
   </div>
 </template>
 

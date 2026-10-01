@@ -4,17 +4,19 @@
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
       <DocTabs v-if="tabItems.length" class="mr-auto" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" />
+      <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'">{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
-      <div class="doc-search-wrap">
+      <div ref="searchWrap" class="doc-search-wrap" :style="{ '--search-available': searchPanelWidth + 'px' }">
         <button class="btn-icon" title="查找当前文档" aria-label="查找当前文档" :aria-expanded="searchOpen" @click="toggleDocSearch"><PhMagnifyingGlass :size="15" /></button>
+        <transition name="pop">
         <div v-if="searchOpen" class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
           <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
-          <p class="search-scope">仅当前文档正文，跨文档查找请展开左侧栏</p>
           <div v-if="keyword.trim()" class="doc-search-results">
             <p v-if="!results.length" class="search-scope">没有匹配</p>
             <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r, h)"><span v-html="highlight(h.text, keyword)" /><small>第 {{ h.line }} 行{{ h.occurrence > 1 ? `，本行第 ${h.occurrence} 处` : '' }}</small></button></template>
           </div>
         </div>
+        </transition>
       </div>
 
       <!-- 排版：宽度、字号、字体、强调面、段落、表格、字间距 -->
@@ -28,9 +30,13 @@
           <PhTextT :size="15" />
         </button>
         <transition name="pop">
-          <div v-if="open === 'type'" class="pop-menu is-panel w-[252px]">
+          <div v-if="open === 'type'" class="pop-menu is-panel type-panel">
+            <div class="type-tabs" role="tablist" aria-label="排版设置">
+              <button v-for="section in [{ id: 'text', label: '文字' }, { id: 'paragraph', label: '段落' }, { id: 'table', label: '表格' }]" :key="section.id" role="tab" :aria-selected="typeSection === section.id" :class="{ 'is-on': typeSection === section.id }" @click="typeSection = section.id">{{ section.label }}</button>
+            </div>
+            <div v-if="typeSection === 'paragraph'">
             <p class="type-label"><span class="label-main"><component :is="PhArrowsHorizontal" :size="12" class="label-icon" />正文宽度</span></p>
-            <div class="type-row">
+            <div class="type-row columns-3">
               <button
                 v-for="w in WIDTHS"
                 :key="w.value"
@@ -42,9 +48,11 @@
                 {{ w.label }}
               </button>
             </div>
+            </div>
+            <div v-if="typeSection === 'text'">
 
             <p class="type-label"><span class="label-main"><component :is="PhTextT" :size="12" class="label-icon" />正文字号</span></p>
-            <div class="type-row">
+            <div class="type-row columns-4">
               <button
                 v-for="s2 in SIZES"
                 :key="s2.value"
@@ -58,27 +66,26 @@
             </div>
 
             <p class="type-label"><span class="label-main"><component :is="PhTextAa" :size="12" class="label-icon" />正文字体</span></p>
-            <div class="type-row">
+            <div class="type-row columns-2 font-choices">
               <button
                 v-for="f in FONTS"
                 :key="f.id"
                 class="type-chip"
                 :class="{ 'is-on': reader.font === f.id }"
-                :style="{ fontFamily: f.stack }"
+                :title="f.hint || f.label"
                 @click="reader.font = f.id"
               >
-                <component v-if="f.icon" :is="f.icon" :size="13" class="chip-icon" />
+                <span class="font-sample" :style="{ fontFamily: f.stack }">文</span>
                 {{ f.label }}
               </button>
             </div>
             <p class="type-label"><span class="label-main"><component :is="PhTextB" :size="12" class="label-icon" />中文加粗</span></p>
-            <div class="type-row">
+            <div class="type-row columns-2">
               <button
                 v-for="w in STRONG_FACES"
                 :key="w.id"
                 class="type-chip"
                 :class="{ 'is-on': reader.strongFace === w.id }"
-                :style="{ fontWeight: w.weight }"
                 @click="reader.strongFace = w.id"
               >
                 <component v-if="w.icon" :is="w.icon" :size="13" class="chip-icon" />
@@ -86,14 +93,13 @@
               </button>
             </div>
 
-            <p class="type-label"><span class="label-main"><component :is="PhTextItalic" :size="12" class="label-icon" />中文斜体</span></p>
-            <div class="type-row">
+            <p class="type-label"><span class="label-main"><component :is="PhTextItalic" :size="12" class="label-icon" />中文斜体显示</span></p>
+            <div class="type-row columns-2">
               <button
                 v-for="i2 in ITALIC_FACES"
                 :key="i2.id"
                 class="type-chip"
                 :class="{ 'is-on': reader.italicFace === i2.id }"
-                :style="i2.style"
                 @click="reader.italicFace = i2.id"
               >
                 <component v-if="i2.icon" :is="i2.icon" :size="13" class="chip-icon" />
@@ -101,8 +107,10 @@
               </button>
             </div>
 
-            <p class="type-label"><span class="label-main"><component :is="PhParagraph" :size="12" class="label-icon" />段落</span></p>
-            <div class="type-row">
+            </div>
+            <div v-if="typeSection === 'paragraph'">
+            <p class="type-label"><span class="label-main"><component :is="PhParagraph" :size="12" class="label-icon" />段落样式</span></p>
+            <div class="type-row columns-2">
               <button
                 v-for="p2 in PARA_STYLES"
                 :key="p2.id"
@@ -114,9 +122,11 @@
                 {{ p2.label }}
               </button>
             </div>
+            </div>
+            <div v-if="typeSection === 'table'">
 
             <p class="type-label"><span class="label-main"><component :is="PhTable" :size="12" class="label-icon" />表格宽度</span></p>
-            <div class="type-row">
+            <div class="type-row columns-2">
               <button
                 v-for="tw in TABLE_WIDTHS"
                 :key="tw.id"
@@ -130,7 +140,7 @@
             </div>
 
             <p class="type-label"><span class="label-main"><component :is="PhTextAlignLeft" :size="12" class="label-icon" />表格对齐</span></p>
-            <div class="type-row">
+            <div class="type-row columns-3">
               <button
                 v-for="ta in TABLE_ALIGNS"
                 :key="ta.id"
@@ -142,12 +152,14 @@
                 {{ ta.label }}
               </button>
             </div>
+            </div>
+            <div v-if="typeSection === 'paragraph'">
 
             <p class="type-label">
               <span class="label-main"><PhArrowsVertical :size="12" class="label-icon" />行距</span>
               <span class="tabular-nums text-[var(--c-faint)]">{{ reader.leading.toFixed(2) }}</span>
             </p>
-            <div class="type-row">
+            <div class="type-row columns-3">
               <button
                 v-for="p in PACE_OPTIONS"
                 :key="p.id"
@@ -161,6 +173,7 @@
             <input
               class="type-range"
               type="range"
+              aria-label="行距"
               min="1.4"
               max="2.4"
               step="0.05"
@@ -170,17 +183,19 @@
 
             <p class="type-label">
               <span class="label-main"><PhArrowsHorizontal :size="12" class="label-icon" />字间距</span>
-              <span class="tabular-nums text-[var(--c-faint)]">{{ reader.tracking.toFixed(2) }}</span>
+              <span class="tabular-nums text-[var(--c-faint)]">{{ reader.tracking.toFixed(2) }} em</span>
             </p>
             <input
               class="type-range"
               type="range"
+              aria-label="字间距"
               min="-0.02"
               max="0.12"
               step="0.01"
               :value="reader.tracking"
               @input="reader.tracking = Number($event.target.value)"
             />
+            </div>
           </div>
         </transition>
       </div>
@@ -196,9 +211,9 @@
           <PhCircleHalf :size="15" />
         </button>
         <transition name="pop">
-          <div v-if="open === 'look'" class="pop-menu is-panel w-[164px]">
+          <div v-if="open === 'look'" class="pop-menu is-panel look-panel">
             <p class="type-label"><span class="label-main"><component :is="PhCircleHalf" :size="12" class="label-icon" />主题</span></p>
-            <div class="type-row">
+            <div class="type-row columns-2">
               <button
                 v-for="t in THEMES"
                 :key="t.id"
@@ -212,10 +227,10 @@
             </div>
 
             <p class="type-label">
-              <span class="label-main"><PhMagnifyingGlass :size="12" class="label-icon" />缩放</span>
+              <span class="label-main"><PhMagnifyingGlass :size="12" class="label-icon" />页面缩放</span>
               <span class="tabular-nums text-[var(--c-faint)]">{{ reader.zoom }}%</span>
             </p>
-            <div class="type-row">
+            <div class="type-row columns-3">
               <button
                 v-for="z in ZOOMS"
                 :key="z.value"
@@ -224,7 +239,7 @@
                 @click="reader.zoom = z.value"
               >
                 <component v-if="z.icon" :is="z.icon" :size="13" class="chip-icon" />
-                {{ z.value }}
+                {{ z.label }}
               </button>
             </div>
           </div>
@@ -232,23 +247,25 @@
       </div>
 
       <div v-if="docId" class="relative">
-        <button class="btn-icon" title="导出与文档设置" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhExport :size="19" /></button>
+        <button class="btn-icon" :title="store.isGuest ? '导出' : '导出与文档设置'" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhExport :size="16" /></button>
+        <transition name="pop">
         <div v-if="open === 'access'" class="pop-menu is-panel w-[250px]">
-          <div class="doc-state-pair">
+          <div v-if="!store.isGuest" class="doc-state-pair">
             <button class="doc-state" role="switch" :aria-checked="meta.shared !== false" aria-label="对外展示" @click="changeAccess('shared')">
               <component :is="meta.shared === false ? PhEyeSlash : PhEye" :size="15" /><span>对外展示</span><span class="state-switch" :class="{on:meta.shared !== false}" />
             </button>
-            <button class="doc-state" role="switch" :aria-checked="!!meta.locked" aria-label="访客只读" @click="changeAccess('locked')">
+            <button class="doc-state" role="switch" :aria-checked="!!meta.locked" :disabled="!!meta.lockedAt && meta.lockedAt !== docId" :title="meta.lockedAt && meta.lockedAt !== docId ? '请在上级目录修改访客权限' : '设置访客编辑权限'" aria-label="访客只读" @click="changeAccess('locked')">
               <PhLock :size="15" /><span>访客只读</span><span class="state-switch" :class="{on:meta.locked}" />
             </button>
           </div>
-          <p class="search-scope">公开决定访客能否看到；锁定决定访客能否编辑。管理员始终可以维护内容。</p>
-          <p v-if="meta.lockedAt && meta.lockedAt !== docId" class="search-scope">继承{{ meta.lockedAt }}的锁定。点击锁定开关可管理上级。</p>
-          <div class="doc-options-divider" />
+          <p v-if="!store.isGuest && meta.lockedAt && meta.lockedAt !== docId" class="search-scope">由上级设为只读</p>
+          <div v-if="!store.isGuest" class="doc-options-divider" />
+          <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="14" /> {{ fileManagerLabel() }}</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="14" /> 导出 Markdown</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="14" /> 导出网页（含图片）</button>
           <button class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="14" /> 打印 / 导出 PDF</button>
         </div>
+        </transition>
       </div>
 
       <!-- pdf 翻译：没翻过就起任务，翻好了就是看译文 / 看原文的开关 -->
@@ -272,6 +289,7 @@
       >
         <PhListDashes :size="15" />
       </button>
+      <a v-if="embedded" class="btn-icon open-in-browser" :href="browserUrl" target="_blank" rel="noopener noreferrer" title="在浏览器打开当前文档" aria-label="在浏览器打开当前文档"><PhArrowSquareOut :size="17" /></a>
 
     </div>
 
@@ -364,7 +382,7 @@
         <span class="ui-font tabular-nums">{{ stats.lines }} 行</span>
       </template>
       <span class="ui-font ml-auto flex items-center gap-1.5">
-        <span v-if="store.currentReadonly" class="ui-font text-[var(--c-faint)]">已锁定，只读</span>
+        <span v-if="store.currentReadonly" class="ui-font text-[var(--c-faint)]">只读</span>
         <PhSpinnerGap v-if="saving" :size="12" class="spin" />
         <span :class="saveStateClass">{{ saveStateText }}</span>
       </span>
@@ -382,12 +400,12 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 // 弹层里那些小图标：宽度 / 加粗斜体 / 段落 / 表格 / 主题 / 缩放 / 导出 / pdf 翻译
 import {
   PhMagnifyingGlass, PhTextAa, PhTextT, PhArrowsOutLineHorizontal,
-  PhExport, PhListDashes, PhX, PhArrowUp, PhSpinnerGap, PhWarningCircle,
+  PhExport, PhListDashes, PhArrowSquareOut, PhX, PhArrowUp, PhSpinnerGap, PhWarningCircle,
   PhCircleHalf, PhPrinter,
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
   PhArrowsOutSimple, PhArrowsInSimple, PhSun, PhCoffee, PhMoon,
-  PhFileText, PhTranslate, PhLock, PhEye, PhEyeSlash, PhDotsThree
+  PhFileText, PhTranslate, PhLock, PhEye, PhEyeSlash, PhDotsThree, PhFolderSimple
 } from '@phosphor-icons/vue'
 import { highlight } from '../utils/markdown'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
@@ -401,12 +419,19 @@ import { insertDocLink } from '../utils/editor-shortcuts'
 import { useDocScroll } from '../composables/useDocScroll'
 import { useExport } from '../composables/useExport'
 import { API_BASE } from '../utils/api'
+import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../utils/reveal'
 
 const reader = useReaderStore()
 // pdf 翻译任务的状态住在 docs store 里，不必再经 App 转一手
 const restoredEpoch=ref(0)
 function restoreContent(text){emit('input',text);restoredEpoch.value++}
 const store = useDocsStore()
+const canRevealInFinder = computed(() => !store.isGuest && fileManagerAvailable() && !!props.docId)
+async function showInFinder() {
+  open.value = ''
+  try { await revealInFileManager(props.docId) }
+  catch (error) { store.error = String(error.message || error) }
+}
 const pageStyle=computed(()=>({...reader.readingStyle,...({narrow:{'--measure':'min(720px, 100%)'},wide:{'--measure':'min(1120px, 100%)'},full:{'--measure':'100%'}}[store.pageMeta.layout]||{})}))
 /** 斜杠菜单里插入文档打开的选择器 */
 const pickDoc = ref(false)
@@ -436,6 +461,14 @@ const props = defineProps({
   /** 重新挂载编辑器的信号（重排正文之后用） */
   epoch: { type: Number, default: 0 },
   error: { type: String, default: '' }
+})
+const embedded = window.self !== window.top
+const browserUrl = computed(() => {
+  const path = String(props.docId || '').replace(/\.(md|pdf)$/i, '')
+  const url = new URL(API_BASE + '/' + (window.__readerPublicView ? 'onlyread' : 'doc') + (path ? '/' + path.split('/').map(encodeURIComponent).join('/') : '/'), location.origin)
+  const lib = path.split('/')[0] || new URLSearchParams(location.search).get('lib')
+  if (lib) url.searchParams.set('lib', lib)
+  return url.toString()
 })
 const emit = defineEmits(['update:keyword', 'jump', 'input', 'reload', 'select', 'canonize', 'close-tab', 'create-doc'])
 
@@ -561,7 +594,7 @@ const FONTS = [
     label: '无衬线',
     stack: '"Noto Sans SC", "Heiti SC", -apple-system, sans-serif'
   },
-  { id: 'harmony', label: 'HarmonyOS Sans', stack: '"HarmonyOS Sans SC", "Noto Sans SC", sans-serif' },
+  { id: 'harmony', label: '鸿蒙黑体', hint: 'HarmonyOS Sans SC', stack: '"HarmonyOS Sans SC", "Noto Sans SC", sans-serif' },
   { id: 'kai', label: '楷体', stack: '"ChillKai", "Kaiti SC", STKaiti, serif' },
   { id: 'ping', label: '苹方', stack: '"PingFang SC", "Hiragino Sans GB", sans-serif' }
 ]
@@ -569,13 +602,13 @@ const FONTS = [
 /* 中文加粗面：中文排版传统里强调靠换更重的字面，不是加大字号 */
 const STRONG_FACES = [
   { id: 'black', label: '特黑', weight: 900 },
-  { id: 'bold', label: '加粗', weight: 600 }
+  { id: 'bold', label: '标准加粗', weight: 600 }
 ]
 
 /* 中文斜体面：中文的斜体不做倾斜变形，换楷体是传统做法 */
 const ITALIC_FACES = [
-  { id: 'kai', label: '楷体', style: { fontFamily: '"ChillKai", serif' } },
-  { id: 'none', label: '不替换', style: {} }
+  { id: 'kai', label: '楷体替代' },
+  { id: 'none', label: '保留字形' }
 ]
 
 const ZOOMS = [
@@ -596,8 +629,8 @@ const THEMES = [
 
 /* 表格宽度：默认用满可用宽度，宽表才不会被压得每列都很窄 */
 const TABLE_WIDTHS = [
-  { id: 'full', label: '铺满', icon: PhArrowsOutSimple },
-  { id: 'measure', label: '同正文', icon: PhArrowsInSimple }
+  { id: 'full', label: '铺满页面', icon: PhArrowsOutSimple },
+  { id: 'measure', label: '跟随正文', icon: PhArrowsInSimple }
 ]
 
 const TABLE_ALIGNS = [
@@ -607,12 +640,21 @@ const TABLE_ALIGNS = [
 ]
 
 const PARA_STYLES = [
-  { id: 'space', label: '段距式', icon: PhParagraph },
-  { id: 'indent', label: '缩进式', icon: PhTextIndent }
+  { id: 'space', label: '段间距', icon: PhParagraph },
+  { id: 'indent', label: '首行缩进', icon: PhTextIndent }
 ]
 
 const scroller = ref(null)
 const searchInput = ref(null)
+const searchWrap = ref(null)
+const searchPanelWidth = ref(360)
+let searchResizeObserver
+function updateSearchPanelWidth() {
+  const wrap = searchWrap.value?.getBoundingClientRect()
+  const main = searchWrap.value?.closest('main')?.getBoundingClientRect()
+  if (!wrap || !main) return
+  searchPanelWidth.value = Math.max(120, Math.min(360, Math.floor(wrap.right - main.left - 12)))
+}
 /* 窄屏下搜索先收成图标，点了才展开——顶栏在手机上放不下一个常驻输入框 */
 const mobileSearchOpen = ref(false)
 function openMobileSearch() {
@@ -623,6 +665,7 @@ function closeMobileSearch() {
   mobileSearchOpen.value = false
 }
 const open = ref('')
+const typeSection = ref('text')
 const searchOpen = ref(false)
 
 
@@ -676,14 +719,14 @@ const saveStateClass = computed(() =>
 /* ---------- 工具条 ---------- */
 
 function changeAccess(key) {
+  if (key === 'locked' && props.meta.lockedAt && props.meta.lockedAt !== props.docId) return
   open.value = ''
   const value = key === 'shared' ? props.meta.shared === false : !props.meta.locked
-  const target = key === 'locked' && props.meta.lockedAt ? props.meta.lockedAt : props.docId
-  store.requestAccess(target, { [key]: value }, key === 'shared' ? (value ? '对外展示此文档' : '不对外展示此文档') : (value ? '设为访客只读' : target !== props.docId ? '解锁上级及其继承内容' : '允许访客编辑'))
+  store.requestAccess(props.docId, { [key]: value }, key === 'shared' ? (value ? '对外展示此文档' : '不对外展示此文档') : (value ? '设为访客只读' : '允许访客编辑'))
 }
 function toggleDocSearch() {
   searchOpen.value = !searchOpen.value
-  if (searchOpen.value) nextTick(() => searchInput.value?.focus())
+  if (searchOpen.value) nextTick(() => { updateSearchPanelWidth(); searchInput.value?.focus() })
 }
 function toggle(name) {
   open.value = open.value === name ? '' : name
@@ -742,10 +785,11 @@ function onDocClick(e) {
   if (open.value && !e.target.closest('.pop-menu, .btn-icon')) open.value = ''
   if (searchOpen.value && !e.target.closest('.doc-search-wrap')) closeSearch()
 }
-function onFindKey(e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); searchOpen.value = true; nextTick(() => searchInput.value?.focus()) } }
+function onFindKey(e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); searchOpen.value = true; nextTick(() => { updateSearchPanelWidth(); searchInput.value?.focus() }) } }
+function onOverlayOpen() { open.value = ''; closeSearch() }
 watch(() => props.docId, () => { closeSearch(); emit('update:keyword', '') })
-onMounted(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onFindKey) })
-onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onFindKey) })
+onMounted(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onFindKey); window.addEventListener('reader-overlay-open', onOverlayOpen); window.addEventListener('resize', updateSearchPanelWidth); searchResizeObserver = new ResizeObserver(updateSearchPanelWidth); if (searchWrap.value) searchResizeObserver.observe(searchWrap.value.closest('main')); updateSearchPanelWidth() })
+onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onFindKey); window.removeEventListener('reader-overlay-open', onOverlayOpen); window.removeEventListener('resize', updateSearchPanelWidth); searchResizeObserver?.disconnect() })
 </script>
 
 <style scoped>
@@ -763,12 +807,19 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   z-index: 40;
   padding: 6px;
   background: var(--c-pop);
+  border: 1px solid var(--c-line);
   border-radius: var(--radius-surface);
+  corner-shape: superellipse(2);
   box-shadow: var(--c-pop-shadow);
 }
 .pop-menu.is-panel {
-  padding: 15px 16px 16px;
+  padding: 16px;
 }
+.type-panel { width: min(304px, calc(100vw - 24px)); max-height: calc(100dvh - 68px); overflow-y: auto; scrollbar-width: thin; }
+.look-panel { width: 232px; max-height: calc(100dvh - 68px); overflow-y: auto; scrollbar-width: thin; }
+.type-tabs { display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px;margin-bottom:10px;background:var(--c-field);border-radius:var(--radius-control); }
+.type-tabs button { min-height:30px;border-radius:calc(var(--radius-control) - 3px);color:var(--c-sub);font-size:12px; }
+.type-tabs button.is-on { background:var(--c-pop);color:var(--c-ink);box-shadow:0 1px 3px color-mix(in srgb,var(--c-ink) 8%,transparent); }
 .pop-item {
   display: flex;
   align-items: center;
@@ -806,16 +857,25 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .type-label {
   display: flex;
   justify-content: space-between;
-  font-size: 10.5px;
-  color: var(--c-faint);
-  letter-spacing: 0.04em;
-  margin: 10px 0 5px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--c-sub);
+  margin: 13px 0 7px;
 }
 .type-label:first-child { margin-top: 0; }
 .type-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  display: grid;
+  gap: 6px;
+}
+.type-row.columns-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.type-row.columns-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.type-row.columns-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.type-section-break {
+  height: 1px;
+  margin: 15px 0 2px;
+  background: var(--c-line-soft);
 }
 /* 分享菜单：链接一行 + 说明 + 分隔线 */
 .share-link-row {
@@ -852,10 +912,15 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .type-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 9px;
+  justify-content: center;
+  min-width: 0;
+  min-height: 31px;
+  gap: 5px;
+  padding: 5px 7px;
   border-radius: var(--radius-control);
   font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
   color: var(--c-text);
   background: var(--c-chip);
   transition: background 0.14s ease, color 0.14s ease, transform 0.1s ease;
@@ -866,6 +931,8 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   color: var(--color-ds);
   background: var(--c-active);
 }
+.font-choices .type-chip { justify-content: flex-start; padding-inline: 10px; }
+.font-sample { flex: none; font-size: 15px; line-height: 1; }
 /* 弹层里的小图标：默认淡色，选中或悬停时跟着文字变 */
 .chip-icon {
   flex-shrink: 0;
@@ -902,7 +969,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .type-range {
   width: 100%;
   height: 4px;
-  margin-top: 2px;
+  margin: 9px 0 2px;
   appearance: none;
   border-radius: 2px;
   background: var(--c-chip);
@@ -918,6 +985,14 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   transition: transform 0.12s ease;
 }
 .type-range::-webkit-slider-thumb:hover { transform: scale(1.15); }
+@media (max-width: 640px) {
+  .type-panel, .look-panel {
+    position: fixed;
+    inset: 58px 12px auto;
+    width: auto;
+    max-height: calc(100dvh - 70px);
+  }
+}
 
 .line-clamp-2 {
   display: -webkit-box;
@@ -937,17 +1012,19 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 
 <style scoped>
 .doc-search-wrap { position:relative }
-.doc-search-panel { position:absolute;right:0;top:38px;width:360px;max-width:calc(100vw - 32px);padding:12px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:var(--radius-surface);box-shadow:var(--c-pop-shadow);z-index:80 }
+.doc-search-panel { position:absolute;right:0;top:38px;width:min(360px,var(--search-available));padding:12px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:var(--radius-surface);box-shadow:var(--c-pop-shadow);z-index:80 }
 .doc-search-field { display:flex;align-items:center;gap:8px }.doc-search-field input { min-width:0;flex:1;outline:none;background:transparent;font-size:13px;padding:7px 0 }
 .search-scope { font-size:11px;line-height:1.6;color:var(--c-faint);padding:8px 5px }
 .doc-search-results { max-height:50vh;overflow:auto }.search-hit { display:block;width:100%;text-align:left;font-size:12px;line-height:1.7;padding:8px;border-radius:var(--radius-control) }.search-hit:hover{background:var(--c-hover)}
 .search-hit small { display:block; font-size:10px; color:var(--c-faint) }
 .pop-item:disabled { opacity:.5;cursor:default }
-@media(max-width:640px){ .doc-search-panel{position:fixed;top:58px;left:12px;right:12px;width:auto;max-width:none}.reader-topbar{padding-left:8px!important;padding-right:8px!important;gap:2px!important}.single-doc-title{max-width:25vw} }
+@media(max-width:640px){ .reader-topbar{padding-left:8px!important;padding-right:8px!important;gap:2px!important}.single-doc-title{max-width:25vw} }
 </style>
 
 <style scoped>
 .doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
 </style>
 
-<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}</style>
+<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}.guest-access-note{flex-shrink:0;display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);color:var(--c-sub);font:11px var(--font-sans)}@media(max-width:640px){.guest-access-note{padding-inline:6px}}</style>
+
+<style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}</style>

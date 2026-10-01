@@ -3,26 +3,26 @@
     桌面端横向排知识库栏与文档树；手机端知识库列表改为弹窗。
   -->
   <div class="flex h-screen flex-shrink-0">
-    <!-- 手机端以弹窗出现；遮罩只在窄屏显示。 -->
+    <!-- 手机端切换列表才用遮罩；桌面保留并排的知识库列表。 -->
     <transition name="lib-backdrop">
       <button
-        v-if="libPanel.open"
+        v-if="libPanel.open && isMobileLibView()"
         class="lib-modal-backdrop"
         aria-label="关闭知识库弹窗"
         @click="closeLibPanel"
       />
     </transition>
-    <!-- 桌面端参与布局，手机端居中显示。 -->
+    <!-- 快速切换列表，顺序由用户选择。 -->
     <transition name="lib-panel">
       <aside
         v-if="libPanel.open"
         class="lib-panel"
         :style="{ '--lib-w': libWidth + 'px' }"
-        aria-label="知识库切换"
+        aria-label="知识库列表"
         @click.stop="onLibPanelClick"
       >
         <div class="lib-panel-head">
-          <span class="lib-panel-title"><span class="lib-title-desktop">知识库</span><span class="lib-title-mobile">切换知识库</span></span>
+          <span class="lib-panel-title">知识库</span>
           <span class="lib-panel-head-acts">
             <button v-if="!isGuest" class="icon-btn" title="新建知识库" @click.stop="createLib">
               <PhPlus :size="14" />
@@ -36,25 +36,25 @@
 
         <input ref="libIconInput" type="file" accept="image/*" class="hidden" @change="onPickLibIcon" />
 
-        <!-- 拖拽条：调面板宽度，松手后写回注册表 -->
+        <div class="lib-panel-sort">
+          <SelectMenu v-model="libSort" :options="libSortOptions" label="知识库排序" />
+          <button class="lib-browse-entry" :title="isGuest ? '浏览知识库' : '管理知识库'" @click="openManager"><PhSquaresFour :size="16" weight="fill" /><span>浏览全部</span></button>
+        </div>
+
         <div class="lib-panel-resize" title="拖动调整知识库栏宽度" @pointerdown.stop="startLibResize" />
 
         <div class="lib-panel-list">
           <div
-            v-for="(lib, i) in libPanel.libs"
+            v-for="lib in displayedLibs"
             :key="lib.path"
             class="lib-row"
-            :class="{ 'is-current': isCurrentLib(lib), 'is-dragging': libDrag.from === i }"
-            :draggable="!isGuest"
-            @dragstart.stop="onLibDragStart(i, $event)"
-            @dragover.prevent.stop="onLibDragOver(i)"
-            @dragend.stop="onLibDragEnd"
+            :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }"
           >
             <!-- 每个知识库用自己的图标 -->
-            <button class="lib-icon-edit" :disabled="isGuest || lib.locked" :title="lib.locked ? '知识库已锁定' : '更换知识库图标'" @click.stop="pickLibIcon(lib, $event)"><ContentIcon class="lib-row-icon" :value="lib.icon || siteIcon" /></button>
+            <button class="lib-icon-edit" :disabled="isGuest" title="更换知识库图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon class="lib-row-icon" :value="lib.icon || siteIcon" /></button>
 
 
-            <button class="lib-row-name" :title="lib.name" @click="goLib(lib)">
+            <button class="lib-row-name" :title="isGuest ? lib.name + '（' + (store.canEdit(lib) ? '可编辑' : '只读') + '）' : lib.name" @click="goLib(lib)">
               <input
                 v-if="!isGuest && renaming === lib.name"
                 ref="renameInput"
@@ -72,11 +72,11 @@
                 <span class="lib-row-meta">{{ lib.docs }} 篇</span>
               </template>
             </button>
+            <button v-if="!isGuest" class="icon-btn xs lib-pin" :title="pinnedLibs.includes(lib.name) ? '取消置顶' : '置顶知识库'" :aria-label="pinnedLibs.includes(lib.name) ? '取消置顶' : '置顶知识库'" @click.stop="togglePin(lib.name)"><PhPushPin :size="15" :weight="pinnedLibs.includes(lib.name) ? 'fill' : 'regular'" /></button>
 
-            <PhEyeSlash v-if="lib.shared === false" :size="13" class="share-eye" title="不对外展示" />
-            <PhLock v-if="lib.locked" :size="13" class="share-eye" title="已锁定" />
             <!-- 与侧边栏一致：悬停出现三个点，操作收进菜单 -->
             <button
+              v-if="!isGuest && lib.name !== '草稿'"
               class="icon-btn xs acts-btn"
               title="更多操作"
               @click.stop="openLibMenu(lib, $event)"
@@ -85,8 +85,75 @@
             </button>
           </div>
         </div>
+        <div class="lib-panel-footer">
+          <button v-if="!isGuest" class="lib-manager-entry" @click="openPublicPreview"><PhEye :size="17" weight="fill" />查看访客视角</button>
+        </div>
       </aside>
     </transition>
+
+    <PublicSharing v-if="publicSharingOpen && !isGuest" @close="publicSharingOpen=false" />
+    <Teleport to="body">
+      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false" /></transition>
+      <transition name="lib-manager">
+        <section v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览知识库' : '管理知识库'">
+          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? previewArchived ? '已归档' : '工作区浏览记录' : '知识库' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection === 'previews' && !selectedPreview" @click="togglePreviewArchive">{{ previewArchived ? '浏览记录' : '已归档' }}</button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
+          <div v-if="managerSection === 'libs' || managerSection === 'previews' && !selectedPreview" class="lib-manager-tools">
+            <div class="lib-manager-search-row">
+              <input v-if="managerSection === 'libs'" v-model.trim="libQuery" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus />
+              <input v-else v-model.trim="previewQuery" type="search" placeholder="搜索浏览记录" aria-label="搜索工作区浏览记录" />
+              <SelectMenu v-if="managerSection === 'libs'" v-model="libSort" :options="libSortOptions" label="知识库排序" />
+            </div>
+            <div v-if="managerSection === 'libs' && !isGuest" class="lib-manager-filter-row">
+              <div class="lib-manager-filters" role="group" aria-label="筛选知识库">
+                <button v-for="filter in [{value:'all',label:'全部'},{value:'public',label:'公开'},{value:'private',label:'未公开'},{value:'locked',label:'访客只读'}]" :key="filter.value" :class="{ 'is-on': managerFilter === filter.value }" :aria-pressed="managerFilter === filter.value" @click="managerFilter=filter.value">{{ filter.label }}</button>
+              </div>
+            </div>
+          </div>
+          <div v-if="managerSection === 'libs'" class="lib-manager-grid">
+            <div v-for="lib in managerLibs" :key="lib.path" class="lib-manager-card" :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }">
+              <button class="lib-manager-card-main" @click="goLib(lib); managerOpen=false"><ContentIcon :value="lib.icon || siteIcon" class="lib-manager-icon" /><strong>{{ lib.name }}</strong><span class="lib-card-meta"><span>{{ lib.docs }} 篇</span><span class="lib-card-status"><component :is="isGuest ? store.canEdit(lib) ? PhPencilSimple : PhLock : lib.shared ? lib.locked ? PhLock : PhPencilSimple : PhEyeSlash" :size="13" weight="regular" />{{ isGuest ? store.canEdit(lib) ? '可编辑' : '只读' : lib.shared ? lib.locked ? '公开只读' : '公开可编辑' : '未公开' }}</span></span></button>
+              <button v-if="!isGuest && lib.name !== '草稿'" class="lib-manager-card-more icon-btn xs" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" weight="bold" /></button>
+            </div>
+            <p v-if="!managerLibs.length" class="lib-empty">没有匹配的知识库</p>
+          </div>
+          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="fill" />分享访客链接</button><button title="为 DSH 插件生成连接令牌" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="fill" />插件连接</button></footer>
+          <div v-if="managerSection === 'previews'" class="lib-manager-previews">
+            <div v-if="!selectedPreview" class="preview-list">
+              <div v-for="item in filteredPreviews" :key="item.id" class="preview-list-row">
+                <button class="preview-list-main" @click="selectPreview(item.id)"><PhFileText :size="19" weight="fill" /><span><strong>{{ item.title }}</strong><small>{{ item.sourceState === 'missing' ? '来源已失效' : item.sourceState === 'changed' ? '源文件已更新' : new Date(item.updated).toLocaleString('zh-CN') }}</small></span></button>
+                <div class="preview-list-actions">
+                  <button v-if="fileManagerAvailable()" :disabled="!canRevealItem(item)" :title="canRevealItem(item) ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager(item)"><PhFolderSimple :size="15" />{{ fileManagerLabel() }}</button>
+                  <button v-else-if="canResolvePreviewInDsh(item)" @click="openPreviewInDsh(item)"><PhFolderSimple :size="15" />在 DSH 打开</button>
+                  <button :disabled="item.incomplete" :title="item.incomplete ? '部分图片未加载，请在 DSH 中重新打开' : '收录到知识库'" @click="collectPreviewFromList(item)">收录到知识库</button>
+                </div>
+              </div>
+              <p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p>
+              <p v-if="!filteredPreviews.length" class="lib-empty">{{ previewQuery ? '没有匹配的记录' : previewArchived ? '没有归档记录' : '还没有浏览记录' }}</p>
+            </div>
+            <div v-if="selectedPreview" class="lib-preview-detail"><div class="lib-preview-detail-head"><span>{{ selectedPreview.incomplete ? '部分图片未加载' : selectedPreview.sourceState === 'missing' ? '来源已失效' : selectedPreview.sourceState === 'changed' ? '源文件已更新' : '来自工作区' }}</span></div><p class="lib-preview-source" :title="selectedPreview.reference">{{ previewSourceLabel(selectedPreview.reference) }}</p><div class="lib-preview-body" v-html="selectedPreviewHtml" @click="onPreviewLink" /><p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p><div class="lib-preview-actions"><button v-if="fileManagerAvailable()" :disabled="!canRevealPreview" :title="canRevealPreview ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager()"><PhFolderSimple :size="14" />{{ fileManagerLabel() }}</button><button v-else-if="canOpenPreviewInDsh" @click="openPreviewInDsh()"><PhFolderSimple :size="14" />在 DSH 打开原文件</button><button @click="archivePreview(selectedPreview.id, !previewArchived)">{{ previewArchived ? '移回记录' : '归档' }}</button><button :disabled="selectedPreview.incomplete" @click="openTransfer('collect','preview',selectedPreview.id)">收录到知识库</button></div></div>
+          </div>
+        </section>
+      </transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="overlay" appear><div v-if="transfer.open" class="transfer-backdrop" @click.self="transfer.open=false">
+        <section class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'collect' ? '收录到知识库' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库'">
+          <h2>{{ transfer.mode === 'collect' ? '收录到知识库' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库' }}</h2>
+          <p class="transfer-source">{{ transfer.mode === 'collect' ? selectedPreview?.title : transfer.path }}</p>
+          <label v-if="transfer.mode === 'collect'">文档名称<input v-model="transfer.name" maxlength="160" /></label>
+          <div class="transfer-library-head"><span>目标知识库</span><input v-model.trim="transferSearch" type="search" placeholder="搜索知识库" aria-label="搜索目标知识库" /></div>
+          <div class="transfer-library-grid" role="group" aria-label="选择目标知识库">
+            <button v-for="lib in transferLibs" :key="lib.name" type="button" :class="{ 'is-on': transfer.lib === lib.name, 'is-draft': lib.name === '草稿' }" :aria-pressed="transfer.lib === lib.name" @click="onTransferLibSelect(lib.name)"><ContentIcon :value="lib.icon || siteIcon" :size="20" /><span>{{ lib.name }}</span><small>{{ lib.docs }} 篇</small></button>
+            <p v-if="!transferLibs.length" class="lib-empty">没有匹配的知识库</p>
+          </div>
+          <div v-if="transfer.lib && transfer.folders.length > 1" class="transfer-field"><span>目标位置</span><SelectMenu v-model="transfer.dir" :options="transfer.folders.map(folder => ({ value: folder.path, label: folder.label }))" label="目标位置" /></div>
+          <p v-if="transfer.error" class="transfer-error" role="alert">{{ transfer.error }}</p>
+          <div class="transfer-actions"><button @click="transfer.open=false">{{ transfer.mode === 'collect' ? '返回预览' : '取消' }}</button><button :disabled="transfer.busy || !transfer.dir" @click="confirmTransfer">{{ transfer.busy ? '处理中…' : transfer.mode === 'collect' ? '收录副本' : '确定' }}</button></div>
+        </section>
+      </div></Transition>
+    </Teleport>
+    <Teleport to="body"><Transition name="pop"><div v-if="transferToast.message" class="transfer-toast" role="status"><span>{{ transferToast.message }}</span><button @click="viewTransferResult">查看</button><button aria-label="关闭提示" @click="transferToast.message=''">×</button></div></Transition></Teleport>
 
     <!--
       收起与展开是同一个 aside，宽度做过渡。
@@ -129,7 +196,7 @@
             :class="i === 0 ? 'is-title' : 'is-sub'"
             spellcheck="false"
             :readonly="isGuest || !currentLibEditable"
-            :title="'第 ' + (i + 1) + ' 行，可以直接改'"
+            :title="isGuest ? '' : '编辑阅读器名称'"
             @keydown.enter.prevent="$event.target.blur()"
             @change="onBrandEdited(i, $event.target.value)"
           />
@@ -169,7 +236,7 @@
 
     <!-- 工具条 -->
     <div class="px-3 pb-2 flex items-center gap-0.5 shrink-0">
-      <span class="toolbar-label">{{ groupMode === 'category' ? '工作区' : '全部文档' }}</span>
+      <span class="toolbar-label">文档</span>
       <span class="ml-auto flex items-center gap-0.5">
         <button
           class="icon-btn"
@@ -216,7 +283,7 @@
             </div>
           </transition>
         </div>
-        <button class="icon-btn" title="重新扫描磁盘（在 app 外面改了文件之后点一下）" @click="rescan">
+        <button v-if="!isGuest" class="icon-btn" title="重新读取文件" @click="rescan">
           <PhArrowClockwise :size="15" />
         </button>
         <button v-if="currentLibEditable" class="icon-btn" title="新建分类" @click="emit('create-category', currentLib || '')">
@@ -240,19 +307,22 @@
 
     <!-- 树里那个…的菜单：teleport 出去，免得被侧栏的滚动裁掉 -->
     <Teleport to="body">
+      <Transition name="pop">
       <div v-if="tree.menu.open" class="tree-menu" :style="tree.menu.style">
         <button
           v-for="it in menuItems"
           :key="it.id"
           class="tree-menu-item"
           :disabled="it.disabled"
+          :title="it.hint || it.label"
           :class="{ danger: it.danger }"
           @click="onMenuPick(it)"
         >
           <component :is="it.icon" :size="14" class="menu-icon" />
-          {{ it.label }}
+          <span class="tree-menu-label">{{ it.label }}</span>
         </button>
       </div>
+      </Transition>
     </Teleport>
 
     <!-- 拖拽条：调整侧栏宽度 -->
@@ -305,13 +375,11 @@
           @dragend="tree.end()"
           @click="emit('select', doc.file)"
         >
-          <button class="doc-title" :title="doc.file"><ContentIcon v-if="doc.meta?.icon" :value="doc.meta.icon" :size="14" />
+          <button class="doc-title" :title="isGuest ? doc.name + '（' + (store.canEdit(doc) ? '可编辑' : '只读') + '）' : doc.file"><ContentIcon v-if="doc.meta?.icon" :value="doc.meta.icon" :size="14" />
             <span class="truncate">{{ doc.name }}</span>
             <span v-if="doc.dir" class="doc-dir">{{ doc.dir }}</span>
           </button>
-          <PhEyeSlash v-if="doc.shared === false" :size="11" class="share-eye" title="不对外展示" />
-          <PhLock v-if="doc.locked" :size="11" class="share-eye" title="已锁定" />
-          <button class="icon-btn xs acts-btn" title="更多操作" @click.stop="tree.openMenu('file', doc, $event)"><PhDotsThree :size="16" /></button>
+          <button v-if="!isGuest" class="icon-btn xs acts-btn" title="更多操作" @click.stop="tree.openMenu('file', doc, $event)"><PhDotsThree :size="16" /></button>
         </div>
         <p v-if="!visibleCount" class="text-[12px] text-[var(--c-faint)] px-3 py-3 text-center">
           {{ query ? '没有匹配的文档' : '还没有文档' }}
@@ -319,12 +387,8 @@
       </template>
 
       </nav>
-      <div class="workspace-footer">
-        <button class="manage-entry ui-font" @click="identityOpen = !identityOpen"><PhUserCircle :size="20" /><span>{{ isGuest ? '公开访客' : '管理工作区' }}</span></button>
-        <div v-if="identityOpen" class="identity-menu">
-          <button @click="goEntry">切换入口</button>
-          <button v-if="!isGuest" @click="agentSettings=true;identityOpen=false">Agent 连接</button>
-        </div>
+      <div v-if="!isGuest" class="workspace-history-footer">
+        <button class="workspace-history-link" title="在 DSH 用阅读器打开过的 Markdown" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
       </div>
     </template>
     </aside>
@@ -348,6 +412,8 @@
 </template>
 
 <script setup>
+import SelectMenu from './SelectMenu.vue'
+import PublicSharing from './PublicSharing.vue'
 import {setFavicon} from '../utils/favicon'
 
 import AgentSettings from './AgentSettings.vue'
@@ -361,13 +427,15 @@ import {
   PhSquaresFour, PhUserCircle, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
   PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
-  PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree
+  PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight, PhArrowLeft, PhFileText
 } from '@phosphor-icons/vue'
+import MarkdownIt from 'markdown-it'
 import RailToc from './RailToc.vue'
 import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
 import AppDialog from './AppDialog.vue'
 import { API_BASE } from '../utils/api'
+import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../utils/reveal'
 const props = defineProps({
   nodes: { type: Array, required: true },
   currentPath: { type: String, default: '' },
@@ -384,6 +452,7 @@ const emit = defineEmits([
 const store = useDocsStore()
 /** 访客（分享链接进来的人）：新建、改名、删除这些入口一律不显示 */
 const isGuest = computed(() => store.isGuest)
+const canRevealInFinder = computed(() => !isGuest.value && fileManagerAvailable())
 const currentLibEditable = computed(() => store.canEdit(libPanel.libs.find(l => l.name === currentLib.value)))
 
 /*
@@ -419,6 +488,234 @@ const libIconInput = ref(null)
 /* ---------- 知识库面板：列出所有库，可切换 / 改名 / 换图标 / 管可见性 ---------- */
 
 const libPanel = reactive({ open: false, libs: [], busy: '' })
+const managerOpen = ref(false)
+const managerSection = ref('libs')
+const tempPreviews = ref([])
+const previewQuery = ref('')
+const filteredPreviews = computed(() => tempPreviews.value.filter(item => !previewQuery.value || String(item.title || '').toLocaleLowerCase().includes(previewQuery.value.toLocaleLowerCase())))
+const selectedPreview = ref(null)
+const previewActionError = ref('')
+const previewArchived = ref(false)
+function canResolvePreviewInDsh(item) { return window.parent !== window && /^dsh-resource:\/\/file\/session\//.test(item?.reference || '') }
+function canRevealItem(item) { return fileManagerAvailable() && !!item && (/^(?:\/|[A-Za-z]:[\\/])/.test(item.sourcePath || item.reference || '') || canResolvePreviewInDsh(item)) }
+const canRevealPreview = computed(() => canRevealItem(selectedPreview.value))
+const canOpenPreviewInDsh = computed(() => canResolvePreviewInDsh(selectedPreview.value))
+const safeMarkdown = new MarkdownIt({ html: false, linkify: true })
+const safeLinkRule = safeMarkdown.renderer.rules.link_open || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options))
+safeMarkdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
+  const href = tokens[index].attrGet('href') || ''
+  if (href && !/^(?:https?:\/\/|#)/i.test(href)) {
+    tokens[index].attrSet('href', '#')
+    tokens[index].attrSet('title', '请在 DSH 打开源文件中的链接')
+  }
+  return safeLinkRule(tokens, index, options, env, self)
+}
+const selectedPreviewHtml = computed(() => safeMarkdown.render(selectedPreview.value?.content || ''))
+function previewSourceLabel(reference) {
+  try {
+    const uri = new URL(reference)
+    if (uri.protocol === 'dsh-resource:') return decodeURIComponent(uri.pathname.split('/').slice(3).join('/')) || '工作区文件'
+  } catch { /* 旧记录可能只有路径 */ }
+  return String(reference || '').split('/').pop() || '工作区文件'
+}
+function onPreviewLink(event) { if (event.target.closest?.('a[href="#"]')) event.preventDefault() }
+async function loadPreviews() {
+  try {
+    const response = await fetch(API_BASE + '/api/workspace-previews?archived=' + (previewArchived.value ? '1' : '0'), { cache: 'no-store' })
+    const json = await response.json()
+    if (!json.ok) throw Error(json.error || '读取工作区浏览记录失败')
+    tempPreviews.value = json.data || []
+  } catch (error) { store.error = String(error.message || error) }
+}
+async function openPreviews() {
+  window.dispatchEvent(new Event('reader-overlay-open'))
+  libPanel.open = false
+  managerSection.value = 'previews'
+  previewArchived.value = false
+  previewQuery.value = ''
+  selectedPreview.value = null
+  managerOpen.value = true
+  await loadPreviews()
+}
+async function togglePreviewArchive() { previewArchived.value = !previewArchived.value; selectedPreview.value = null; await loadPreviews() }
+async function selectPreview(id) {
+  try {
+    previewActionError.value = ''
+    const response = await fetch(API_BASE + '/api/workspace-preview?id=' + encodeURIComponent(id), { cache: 'no-store' })
+    const json = await response.json()
+    if (!json.ok) throw Error(json.error || '预览读取失败')
+    selectedPreview.value = json.data
+    return json.data
+  } catch (error) { store.error = String(error.message || error); return null }
+}
+async function collectPreviewFromList(item) {
+  const record = await selectPreview(item.id)
+  if (record) await openTransfer('collect', 'preview', record.id)
+}
+async function showPreviewInFileManager(item = selectedPreview.value) {
+  if (!item) return
+  try {
+    previewActionError.value = ''
+    let sourcePath = ''
+    if (!/^(?:\/|[A-Za-z]:[\\/])/.test(item.sourcePath || item.reference || '') && canResolvePreviewInDsh(item)) {
+      const requestId = crypto.randomUUID()
+      sourcePath = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => { window.removeEventListener('message', onMessage); reject(Error('无法取得原文件位置，请在 DSH 中重新打开文件后再试')) }, 5000)
+        function onMessage(event) {
+          if (event.source !== window.parent || event.data?.type !== 'dsh-reader:resolved-source' || event.data.requestId !== requestId) return
+          clearTimeout(timeout); window.removeEventListener('message', onMessage)
+          resolve(String(event.data.sourcePath || ''))
+        }
+        window.addEventListener('message', onMessage)
+        window.parent.postMessage({ type: 'dsh-reader:resolve-source', requestId, reference: item.reference }, '*')
+      })
+      if (!sourcePath) throw Error('无法取得原文件位置')
+    }
+    await revealInFileManager('', item.id, sourcePath)
+    if (sourcePath) item.sourcePath = sourcePath
+  }
+  catch (error) { previewActionError.value = String(error.message || error) }
+}
+function openPreviewInDsh(item = selectedPreview.value) {
+  window.parent.postMessage({ type: 'dsh-reader:open-source', reference: item.reference }, '*')
+}
+async function archivePreview(id, archived) {
+  try {
+    const response = await fetch(API_BASE + '/api/workspace-preview/archive', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, archived }) })
+    const json = await response.json()
+    if (!json.ok) throw Error(json.error || '归档失败')
+    selectedPreview.value = null
+    await loadPreviews()
+  } catch (error) { store.error = String(error.message || error) }
+}
+const libQuery = ref('')
+const managerFilter = ref('all')
+const transferSearch = ref('')
+const transfer = reactive({ open: false, mode: 'copy', kind: 'doc', path: '', name: '', lib: '', dir: '', folders: [], busy: false, error: '' })
+const transferToast = reactive({ message: '', lib: '', file: '' })
+async function viewTransferResult() {
+  const lib = transferToast.lib, file = transferToast.file
+  transferToast.message = ''
+  await goLib({ name: lib, path: lib })
+  if (file) await store.select(file)
+}
+let transferRequest = 0
+function onTransferLibSelect(value) { transfer.lib = value; loadTransferFolders() }
+async function loadTransferFolders() {
+  const request = ++transferRequest
+  const lib = transfer.lib
+  transfer.folders = [{ path: lib, label: lib + '（根目录）' }]
+  transfer.dir = lib
+  if (!lib) return
+  try {
+    const response = await fetch(API_BASE + '/api/tree?lib=' + encodeURIComponent(lib), { cache: 'no-store' })
+    const json = await response.json()
+    if (!json.ok) throw Error(json.error || '目录读取失败')
+    if (request !== transferRequest) return
+    const walk = nodes => { for (const node of nodes || []) if (node.type === 'folder') { transfer.folders.push({ path: node.path, label: node.path.replaceAll('/', ' / ') }); walk(node.children) } }
+    walk(json.data.nodes)
+  } catch (error) { if (request === transferRequest) transfer.error = String(error.message || error) }
+}
+async function openTransfer(mode, kind, source) {
+  window.dispatchEvent(new Event('reader-overlay-open'))
+  transfer.mode = mode
+  transfer.kind = kind
+  transfer.path = source
+  transfer.name = mode === 'collect' ? selectedPreview.value?.title.replace(/\.(md|markdown)$/i, '') || '' : ''
+  transfer.error = ''
+  transferSearch.value = ''
+  if (!libPanel.libs.length) await loadLibs()
+  if (!libPanel.libs.length) { store.error = '知识库读取失败，请稍后重试'; return }
+  transfer.lib = ''
+  transfer.dir = ''
+  transfer.folders = []
+  if (mode !== 'collect') managerOpen.value = false
+  libPanel.open = false
+  transfer.open = true
+}
+async function confirmTransfer() {
+  if (transfer.busy || !transfer.dir) return
+  const { mode, kind, path: source, dir } = transfer
+  if (mode === 'move' && (dir === source || dir.startsWith(source + '/'))) { transfer.error = '不能移动到自身目录内'; return }
+  transfer.busy = true
+  transfer.error = ''
+  try {
+    let result
+    if (mode === 'collect') {
+      const response = await fetch(API_BASE + '/api/collect-workspace-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: source, dir, name: transfer.name }) })
+      const json = await response.json()
+      if (!json.ok) throw Error(json.error || '收录失败')
+      result = json.data
+      selectedPreview.value = null
+      await loadPreviews()
+    } else if (kind === 'folder') {
+      result = mode === 'copy' ? await store.copyCategory(source, dir) : await store.moveCategory(source, dir)
+    } else result = mode === 'copy' ? await store.copyDoc(source, dir) : await store.moveDoc(source, dir)
+    transfer.open = false
+    await loadLibs()
+    const targetLib = dir.split('/')[0]
+    if (mode === 'collect') {
+      managerOpen.value = false
+      await goLib({ name: targetLib, path: targetLib })
+      if (result?.file) await store.select(result.file)
+    } else if (mode === 'move' && targetLib !== currentLib.value) {
+      await goLib({ name: targetLib, path: targetLib })
+      if (result?.file) await store.select(result.file)
+    } else {
+      transferToast.message = mode === 'collect' ? '已收录到 ' + dir : mode === 'copy' ? '已复制到 ' + dir : '已移动到 ' + dir
+      transferToast.lib = targetLib
+      transferToast.file = result?.file || ''
+    }
+  } catch (error) { transfer.error = String(error.message || error) }
+  finally { transfer.busy = false }
+}
+const publicSharingOpen = ref(false)
+const libSortOptions = [{value:'recent',label:'最近打开'},{value:'name',label:'名称'},{value:'modified',label:'最近修改'}]
+const libSort = ref('recent')
+const libWidth = ref(236)
+// 访客浏览记录不能改变管理者下次打开阅读器时的落点。
+const LIB_PREFS_KEY = 'reader.library-switcher:' + API_BASE + (isGuest.value ? ':guest' : '')
+function readLibPrefs() {
+  try { return JSON.parse(localStorage.getItem(LIB_PREFS_KEY) || '{}') } catch { return {} }
+}
+const recentNames = ref(Array.isArray(readLibPrefs().recent) ? readLibPrefs().recent : [])
+const pinnedLibs = ref(Array.isArray(readLibPrefs().pinned) ? readLibPrefs().pinned : [])
+if (['recent', 'name', 'modified'].includes(readLibPrefs().sort)) libSort.value = readLibPrefs().sort
+function saveLibPrefs() {
+  localStorage.setItem(LIB_PREFS_KEY, JSON.stringify({ recent: recentNames.value.slice(0, 30), pinned: pinnedLibs.value, sort: libSort.value }))
+}
+watch(libSort, saveLibPrefs)
+function rememberLib(name) {
+  recentNames.value = [name, ...recentNames.value.filter(n => n !== name)].slice(0, 30)
+  saveLibPrefs()
+}
+function togglePin(name) {
+  pinnedLibs.value = pinnedLibs.value.includes(name) ? pinnedLibs.value.filter(n => n !== name) : [...pinnedLibs.value, name]
+  saveLibPrefs()
+}
+const displayedLibs = computed(() => {
+  const list = [...libPanel.libs]
+  list.sort((a, b) => {
+    if (a.name === '草稿' || b.name === '草稿') return a.name === '草稿' ? -1 : 1
+    const pin = Number(pinnedLibs.value.includes(b.name)) - Number(pinnedLibs.value.includes(a.name))
+    if (pin) return pin
+    if (libSort.value === 'modified') return (b.mtime || 0) - (a.mtime || 0) || a.name.localeCompare(b.name, 'zh-CN')
+    if (libSort.value === 'recent') return (recentNames.value.indexOf(a.name) < 0 ? 999 : recentNames.value.indexOf(a.name)) - (recentNames.value.indexOf(b.name) < 0 ? 999 : recentNames.value.indexOf(b.name)) || a.name.localeCompare(b.name, 'zh-CN')
+    return a.name.localeCompare(b.name, 'zh-CN')
+  })
+  return list
+})
+const transferLibs = computed(() => {
+  const q = transferSearch.value.trim().toLocaleLowerCase()
+  return displayedLibs.value.filter(lib => !q || lib.name.toLocaleLowerCase().includes(q))
+})
+const managerLibs = computed(() => {
+  const q = libQuery.value.trim().toLocaleLowerCase()
+  return displayedLibs.value.filter(l =>
+    (!q || l.name.toLocaleLowerCase().includes(q) || String(l.desc || '').toLocaleLowerCase().includes(q)) &&
+    (managerFilter.value === 'all' || managerFilter.value === 'public' && l.shared !== false || managerFilter.value === 'private' && l.shared === false || managerFilter.value === 'locked' && l.locked)
+  )
+})
 
 /** 当前所在的知识库：文档根的名字（每个实例一个根，所以直接问服务端） */
 /** 当前库的完整信息（图标、说明），从注册表同步过来 */
@@ -440,8 +737,9 @@ async function loadLibs() {
     const res = await fetch(API_BASE + '/api/libs', { cache: 'no-store' })
     const data = await res.json()
     libPanel.libs = (data?.data?.libs || []).filter((l) => l && l.name)
-    applyConfig(data?.data?.config)
+    if (typeof data?.data?.config?.panelWidth === 'number') libWidth.value = data.data.config.panelWidth
     applyCurrentLib()
+    if (currentLib.value) rememberLib(currentLib.value)
   } catch {
     libPanel.libs = []
   }
@@ -466,73 +764,6 @@ function applyCurrentLib() {
    */
   document.title = lib.name
 
-}
-
-/*
- * 面板宽度：从注册表来，拖拽时先改本地（跟手），松手再写回。
- * 不另开 localStorage 副本 —— 偏好和知识库同源，少一份副本就少一处不一致。
- */
-const libWidth = ref(236)
-
-function applyConfig(cfg) {
-  if (!cfg) return
-  if (typeof cfg.panelWidth === 'number') libWidth.value = cfg.panelWidth
-}
-
-async function saveLibConfig(patch) {
-  try {
-    await fetch(API_BASE + '/api/lib/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch)
-    })
-  } catch {
-    /* 存不上就只当次生效 */
-  }
-}
-
-/*
- * 拖拽排序：顺序是使用者的意图，存进注册表（不存 localStorage）。
- * 拖的时候就地预览（数组换位），松手一次性写回，只发一个请求。
- */
-const libDrag = reactive({ from: -1, over: -1 })
-
-function onLibDragStart(i, ev) {
-  if (isGuest.value) return
-  libDrag.from = i
-  ev.dataTransfer.effectAllowed = 'move'
-  /* Firefox 要求必须 setData 才会开始拖 */
-  try { ev.dataTransfer.setData('text/plain', String(i)) } catch { /* 忽略 */ }
-}
-
-function onLibDragOver(i) {
-  if (libDrag.from < 0 || libDrag.from === i) return
-  const list = libPanel.libs
-  const [moved] = list.splice(libDrag.from, 1)
-  list.splice(i, 0, moved)
-  libDrag.from = i
-}
-
-async function onLibDragEnd() {
-  if (libDrag.from < 0) return
-  libDrag.from = -1
-  libDrag.over = -1
-  try {
-    const res = await fetch(API_BASE + '/api/lib/order', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: libPanel.libs.map((l) => l.name) })
-    })
-    const data = await res.json()
-    if (data.ok) libPanel.libs = data.data.libs || libPanel.libs
-  } catch {
-    /* 存不上就只当次生效 */
-  }
-}
-
-function startLibResize(e) {
-  const x=e.clientX, width=libWidth.value
-  resizePanel(e, ev => {libWidth.value=Math.max(180,Math.min(420,width+ev.clientX-x))}, () => saveLibConfig({panelWidth:libWidth.value}))
 }
 
 /*
@@ -572,7 +803,7 @@ function askLibDialog(opts) {
 async function createLib() {
   askLibDialog({
     title: '新建知识库',
-    message: '会同时建一个同名文件夹。建好之后可以在这里给它换图标、管对外可见性。',
+    message: '',
     placeholder: '知识库名字',
     confirmText: '新建',
     onConfirm: (value) => { closeLibDialog(); doCreateLib(value) }
@@ -626,6 +857,21 @@ function openLibPanel() {
   libPanel.open = true
   loadLibs()
 }
+function openManager() {
+  window.dispatchEvent(new Event('reader-overlay-open'))
+  libPanel.open = false
+  managerSection.value = 'libs'
+  managerOpen.value = true
+  libQuery.value = ''
+  managerFilter.value = 'all'
+  loadLibs()
+}
+function startLibResize(e) {
+  const startX = e.clientX, startWidth = libWidth.value
+  resizePanel(e, ev => { libWidth.value = Math.max(180, Math.min(420, startWidth + ev.clientX - startX)) }, async () => {
+    try { await fetch(API_BASE + '/api/lib/config', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ panelWidth: libWidth.value }) }) } catch { /* 本次宽度仍有效 */ }
+  })
+}
 
 function isCurrentLib(lib) {
   if (!currentLib.value) {
@@ -646,6 +892,7 @@ async function goLib(lib) {
   if (!lib) return
   const name = lib.path || lib.name
   if (isCurrentLib(lib)) {
+    rememberLib(name)
     if (isMobileLibView()) closeLibPanel()
     return
   }
@@ -659,6 +906,7 @@ async function goLib(lib) {
   /* 换库之后当前这篇多半不属于新库，交给 ensureCurrent 重新挑一篇 */
   history.replaceState(null, '', url.toString())
   currentLib.value = name
+  rememberLib(name)
   applyCurrentLib()
   /*
    * 用 switchLib 而不是 loadAll：它会先把"当前这篇"清掉再拉新库的树。
@@ -778,9 +1026,9 @@ async function onBrandEdited(i, value) {
 }
 
 /** 换某个知识库的图标 */
-const identityOpen=ref(false), agentSettings=ref(false), iconPicking=ref(false)
+const agentSettings=ref(false), iconPicking=ref(false)
 const libIconTarget = ref(null), libIconAnchor=ref(null)
-function pickLibIcon(lib,event) { if(lib.locked)return;libIconAnchor.value=event?.currentTarget;libIconTarget.value=lib;iconPicking.value=true }
+function pickLibIcon(lib,event) { libIconAnchor.value=event?.currentTarget;libIconTarget.value=lib;iconPicking.value=true }
 async function saveLibIcon(icon) {
   const res=await fetch(API_BASE+'/api/lib/meta',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:libIconTarget.value.name,icon})})
   const result=await res.json();if(!result.ok)throw new Error(result.error)
@@ -866,6 +1114,12 @@ async function doDeleteLib(lib) {
  * 于是拖侧边栏宽度、点一下正文，面板也跟着没了 —— 看着就像两者联动。
  */
 onMounted(() => {
+  if (new URLSearchParams(location.search).has('choose') && !isGuest.value) {
+    openManager()
+    const url = new URL(location.href)
+    url.searchParams.delete('choose')
+    history.replaceState(null, '', url)
+  }
   /*
    * 没指定 ?lib= 时选默认库。
    *
@@ -1156,28 +1410,37 @@ async function guardShare(fn) {
 }
 
 const menuItems = computed(() => {
-  if (!tree.menu.open) return []
+  if (!tree.menu.open || isGuest.value) return []
   const node = tree.menu.node
   const kind = tree.menu.kind
   const path = node?.path || node?.file
+  if (kind === 'lib' && path === '草稿') return []
   const inherited = node?.lockedAt && node.lockedAt !== path
   const items = [
-    { id: 'access-lock', label: inherited ? '解锁上级：' + node.lockedAt : node?.locked ? '解锁' : '锁定', icon: node?.locked ? PhLockOpen : PhLock, disabled: false },
+    { id: 'access-lock', label: inherited ? '由上级设为只读' : node?.locked ? '允许访客编辑' : '设为访客只读', hint: inherited ? '请在上级目录修改访客权限' : '', icon: node?.locked || inherited ? PhLockOpen : PhLock, disabled: !!inherited },
     { id: 'access-share', label: node?.shared === false ? '对外展示' : '不对外展示', icon: node?.shared === false ? PhEye : PhEyeSlash }
   ]
+  if (canRevealInFinder.value) items.push({ id: 'reveal', label: fileManagerLabel(kind !== 'file'), icon: PhFolderSimple })
   if (!store.canEdit(node)) return items
   if (kind === 'lib') {
     if (!isGuest.value) items.push({ id:'lib-icon',label:'更换图标',icon:PhImage },{ id:'lib-rename',label:'重命名',icon:PhPencilSimple },{ id:'lib-delete',label:'删除知识库',icon:PhTrash,danger:true })
   } else {
     if (kind === 'folder') items.push({id:'new-doc',label:'新建文档',icon:PhFilePlus},{id:'new-folder',label:'新建目录',icon:PhFolderSimplePlus})
+    items.push({id:'copy-to',label:'复制到知识库',icon:PhCopy},{id:'move-to',label:'移动到知识库',icon:PhArrowRight})
     items.push({id:'rename',label:'重命名',icon:PhPencilSimple},{id:'delete',label:kind==='folder'?'删除目录':'删除',icon:PhTrash,danger:true})
   }
   return items
 })
 
-async function goEntry() {
+async function openPublicPreview() {
   if ((store.isDirty || store.saving) && !(await store.save())) return
-  location.assign(API_BASE + '/')
+  const path = store.currentPath
+  const current = libPanel.libs.find(lib => lib.name === currentLib.value)
+  const withinPublicLibrary = current?.shared !== false
+  const destination = withinPublicLibrary && path && store.currentNode?.shared
+    ? '/onlyread/' + path.replace(/\.(?:md|pdf|html?)$/i, '').split('/').map(encodeURIComponent).join('/') + '?lib=' + encodeURIComponent(currentLib.value)
+    : '/onlyread/'
+  window.open(API_BASE + destination, '_blank', 'noopener,noreferrer')
 }
 
 function onMenuPick(item) {
@@ -1185,8 +1448,12 @@ function onMenuPick(item) {
   const node = tree.menu.node
   tree.closeMenu()
   if (!node || item.disabled) return
+  if (item.id === 'reveal') {
+    showInFinder(node.path || node.file)
+    return
+  }
   if (item.id.startsWith('access-')) {
-    store.requestAccess(item.id === 'access-lock' && node.lockedAt ? node.lockedAt : (node.path || node.file), item.id === 'access-lock' ? { locked: !node.locked } : { shared: node.shared === false }, item.label)
+    store.requestAccess(node.path || node.file, item.id === 'access-lock' ? { locked: !node.locked } : { shared: node.shared === false }, item.label)
     return
   }
   /* 知识库那几个动作：名字就是文件夹名，所以改名 = 重命名文件夹 */
@@ -1199,9 +1466,18 @@ function onMenuPick(item) {
   }
   if (item.id === 'new-doc') emit('create-doc', node.path)
   else if (item.id === 'new-folder') emit('create-category', node.path)
+  else if (item.id === 'copy-to' || item.id === 'move-to') openTransfer(item.id === 'copy-to' ? 'copy' : 'move', kind, node.path || node.file)
   // 菜单里用 folder/file 区分，改名状态里用 cat/doc（跟输入框的判断一致）
   else if (item.id === 'rename') tree.editStart(kind === 'folder' ? 'cat' : 'doc', node)
   else if (item.id === 'delete') emit(kind === 'folder' ? 'delete-category' : 'delete-doc', node)
+}
+
+async function showInFinder(path) {
+  try {
+    await revealInFileManager(path)
+  } catch (error) {
+    store.error = String(error.message || error)
+  }
 }
 
 /** 用用户眼前的顺序算拖拽落点；不然名称/时间视图下会落到另一行。 */
@@ -1472,7 +1748,10 @@ function onDocClick(e) {
   if (!e.target.closest('.side-menu, .icon-btn')) menuOpen.value = false
 }
 function onLibEscape(e) {
-  if (e.key !== 'Escape' || !libPanel.open || !isMobileLibView()) return
+  if (e.key !== 'Escape') return
+  if (transfer.open) { transfer.open = false; return }
+  if (managerOpen.value) { managerOpen.value = false; return }
+  if (!libPanel.open || !isMobileLibView()) return
   if (tree.menu.open) {
     tree.closeMenu()
     return
@@ -1483,41 +1762,51 @@ onMounted(() => document.addEventListener('click', onDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 onMounted(() => document.addEventListener('keydown', onLibEscape))
 onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
+onMounted(() => window.addEventListener('reader-access-updated', loadLibs))
+onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLibs))
 </script>
 
 <style scoped>
-/* 遮罩只属于手机弹窗，桌面知识库栏仍按原布局工作。 */
-.lib-modal-backdrop, .lib-title-mobile, .lib-close-mobile { display: none; }
+/* 侧边列表和管理弹窗各有明确职责。 */
+.lib-modal-backdrop { display: none; }
 .lib-backdrop-enter-active, .lib-backdrop-leave-active { transition: opacity 0.2s ease; }
 .lib-backdrop-enter-from, .lib-backdrop-leave-to { opacity: 0; }
-/* 知识库面板：参与布局的一列，规格与内部侧边栏逐项对齐 */
 .lib-panel {
-  position: relative;
-  width: var(--lib-w, 236px);
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--c-panel);
-  border-right: 1px solid var(--c-line);
-  overflow: hidden;
+  position: relative; width: var(--lib-w, 236px); flex-shrink: 0;
+  display: flex; flex-direction: column; background: var(--c-panel);
+  border-right: 1px solid var(--c-line); overflow: hidden;
 }
 .lib-panel-enter-active, .lib-panel-leave-active {
   transition: width 0.22s ease, opacity 0.22s ease;
 }
 .lib-panel-enter-from, .lib-panel-leave-to {
-  width: 0;
-  opacity: 0;
+  width: 0; opacity: 0;
 }
-/* 头部：与侧边栏品牌区同高同内边距，两栏并排时基线齐 */
 .lib-panel-head {
-  display: flex; align-items: center; justify-content: space-between;
-  height: 52px;
-  padding: 0 8px 0 16px;
-  border-bottom: 1px solid var(--c-line);
+  display: flex; align-items: center; justify-content: space-between; height: 58px; padding: 0 16px 0 20px;
 }
 .lib-panel-title { font-size: 12.5px; color: var(--c-sub); }
-.lib-panel-head-acts { display: flex; align-items: center; gap: 2px; }
-.lib-panel-list { flex: 1; overflow-y: auto; padding: 10px 8px; }
+.lib-panel-head-acts { display: flex; align-items: center; gap: 6px; }
+.lib-panel-sort { display:flex;align-items:center;gap:6px;padding:0 12px 10px; }.lib-panel-sort select { width: 100%; padding: 6px 9px; border: 0; border-radius: var(--radius-control); background: var(--c-field); color: var(--c-sub); font: inherit; font-size: 11px; }
+.lib-browse-entry { display:flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:32px;padding:5px 9px;border-radius:var(--radius-control);color:var(--c-sub);font-size:11px;white-space:nowrap;transition:background var(--motion-enter) ease,color var(--motion-enter) ease; }.lib-browse-entry:hover { background:var(--c-field);color:var(--c-ink); }
+.lib-panel-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+.lib-panel-footer { display:flex;flex-direction:column;margin:5px 8px 12px;gap:2px; }
+.lib-manager-entry { display: flex; align-items: center; gap: 9px; width:100%; padding: 10px 12px; border-radius: var(--radius-control); color: var(--c-sub); text-align: left; font-size: 12px; }.lib-manager-entry:hover { background: var(--c-hover); color: var(--c-ink); }
+.lib-empty { color: var(--c-faint); font-size: 12px; text-align: center; padding: 24px 0; }
+.lib-pin { opacity: 0; }.lib-row:hover .lib-pin, .lib-row:focus-within .lib-pin { opacity: 1; }
+.lib-manager-backdrop { position: fixed; inset: 0; z-index: 59; width: 100%; height: 100%; background: var(--c-overlay); }
+.lib-manager { position: fixed; left: 50%; top: 50%; z-index: 60; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 32px)); max-height: min(680px, 84dvh); display: flex; flex-direction: column; background: var(--c-pop); border: 1px solid var(--c-line); border-radius: 40px; corner-shape: superellipse(2); box-shadow: var(--c-pop-shadow); overflow: hidden; }
+.lib-manager-head { display: flex; align-items: center; justify-content: space-between; gap:16px; padding: 30px 30px 20px; }.lib-manager-head h2 { margin: 0; color: var(--c-ink); font-size: 19px; font-weight: 600; }.lib-manager-head p { margin: 5px 0 0; color: var(--c-sub); font-size: 12px; }
+.lib-manager-tools { display: flex; gap: 8px; padding: 0 24px 17px; }.lib-manager-tools input, .lib-manager-tools select { min-width: 0; padding: 9px 11px; border: 1px solid var(--c-line); border-radius: var(--radius-control); background: var(--c-field); color: var(--c-ink); font: inherit; font-size: 12px; }.lib-manager-tools input { flex: 1; }.lib-manager-tools select { width: 108px; }
+.lib-manager-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 10px; padding: 0 24px 24px; overflow-y: auto; }.lib-manager-grid .lib-empty { grid-column: 1 / -1; }
+.lib-manager-card { position:relative; display: flex; min-height: 110px; padding: 15px; border-radius: 22px; corner-shape: superellipse(2); background: var(--c-field); text-align: left; }.lib-manager-card:hover, .lib-manager-card.is-current { background: var(--c-hover); }.lib-manager-card-main { display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left; }.lib-manager-card strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-ink); font-size: 12px; font-weight: 500; }.lib-manager-card span { color: var(--c-faint); font-size: 11px; }.lib-manager-icon { width: 21px; height: 21px; }.lib-manager-card-more { position:absolute;right:8px;top:8px;opacity:0; }.lib-manager-card:hover .lib-manager-card-more,.lib-manager-card:focus-within .lib-manager-card-more { opacity:1; }
+.lib-preview-entry { display:flex;align-items:center;gap:13px;width:100%;min-height:44px;margin-bottom:5px;padding:8px 12px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left; }.lib-preview-entry:hover { background:var(--c-hover);color:var(--c-ink); }.lib-manager-head-actions { display:flex;align-items:center;gap:9px; }.lib-manager-head-actions>button:not(.icon-btn) { padding:7px 10px;border-radius:var(--radius-control);background:var(--c-field);color:var(--c-sub);font-size:12px; }.lib-manager-previews { min-height:0;overflow-y:auto; }.lib-manager-previews .lib-manager-grid { overflow:visible; }.lib-preview-detail { margin:0 24px 24px;padding:16px;background:var(--c-field);border-radius:22px;corner-shape:superellipse(2); }.lib-preview-detail-head { display:flex;justify-content:space-between;gap:12px;font-size:12px; }.lib-preview-detail-head span,.lib-preview-source { color:var(--c-faint);font-size:11px; }.lib-preview-source { overflow-wrap:anywhere;margin:8px 0; }.lib-preview-body { max-height:300px;overflow:auto;padding:12px 0;font-size:12px;line-height:1.7;overflow-wrap:anywhere; }.lib-preview-body img { max-width:100%; }.lib-preview-body pre { overflow:auto; }.lib-preview-actions { display:flex;justify-content:flex-end;gap:8px; }.lib-preview-actions button { padding:8px 12px;border-radius:var(--radius-control);background:var(--c-pop);font-size:12px; }.lib-preview-actions button:disabled { opacity:.45;cursor:default; }
+.lib-preview-body :is(h1,h2,h3) { margin:1.3em 0 .55em;line-height:1.4;font-weight:600; }.lib-preview-body h1 { font-size:1.45em; }.lib-preview-body h2 { font-size:1.25em; }.lib-preview-body h3 { font-size:1.1em; }.lib-preview-body p,.lib-preview-body ul,.lib-preview-body ol { margin:0 0 1em; }.lib-preview-body :is(ul,ol) { padding-left:1.7em; }.lib-preview-body code { font-family:ui-monospace,monospace;font-size:.9em; }.lib-preview-body pre { padding:10px;background:var(--c-pop);border-radius:12px; }.lib-preview-body table { display:block;max-width:100%;overflow:auto;border-collapse:collapse; }.lib-preview-body :is(td,th) { border:1px solid var(--c-line);padding:4px 7px; }.lib-preview-body a { color:var(--color-ds); }.lib-preview-body a[href="#"] { cursor:help;text-decoration-style:dotted; }
+.transfer-backdrop { position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:18px;background:var(--c-overlay); }.transfer-dialog { width:min(410px,100%);max-height:85dvh;overflow:auto;padding:24px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:34px;corner-shape:superellipse(2);box-shadow:var(--c-pop-shadow);color:var(--c-ink); }.transfer-dialog h2 { margin:0;font-size:17px;font-weight:600; }.transfer-dialog p { margin:8px 0 16px;font-size:12px;color:var(--c-sub);overflow-wrap:anywhere; }.transfer-dialog label { display:block;margin:13px 0;font-size:12px;color:var(--c-sub); }.transfer-dialog select { display:block;width:100%;margin-top:7px;padding:9px 11px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);color:var(--c-ink);font:inherit; }.transfer-dialog .transfer-hint { margin-top:18px;line-height:1.6; }.transfer-dialog .transfer-error { color:#bd4545; }.transfer-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:20px; }.transfer-actions button { padding:8px 15px;border-radius:var(--radius-control);background:var(--c-field);font-size:12px; }.transfer-actions button:last-child { background:var(--c-hover); }.transfer-actions button:disabled { opacity:.45;cursor:default; }
+.transfer-dialog input { display:block;width:100%;margin-top:7px;padding:9px 11px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);color:var(--c-ink);font:inherit; }
+.transfer-toast { position:fixed;right:22px;bottom:24px;z-index:95;display:flex;align-items:center;gap:12px;max-width:min(430px,calc(100vw - 28px));padding:10px 14px;border:1px solid var(--c-line);border-radius:20px;corner-shape:superellipse(2);background:var(--c-pop);box-shadow:var(--c-pop-shadow);color:var(--c-ink);font-size:12px; }.transfer-toast span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.transfer-toast button { color:var(--color-ds);white-space:nowrap; }
+@media (max-width: 520px) { .lib-manager-head { padding:26px 25px 17px; }.lib-preview-detail { margin-inline:14px; } }
+.lib-manager-enter-active, .lib-manager-leave-active { transition: transform .2s ease, opacity .2s ease; }.lib-manager-enter-from, .lib-manager-leave-to { transform: translate(-50%, -46%) scale(.97); opacity: 0; }
 /* 拖拽条：贴在面板右缘，与文档栏那条一个做法 */
 .lib-panel-resize {
   position: absolute;
@@ -1526,45 +1815,26 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
   cursor: col-resize;
   z-index: 5;
 }
-/* 手机端是居中的知识库弹窗，列表在弹窗内部滚动。 */
+/* 手机端侧边列表弹出；管理弹窗保持网格但缩小列数。 */
 @media (max-width: 820px) {
-  .lib-modal-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 59;
-    width: 100%;
-    height: 100%;
-    background: var(--c-overlay);
-  }
-  .lib-title-desktop, .lib-close-desktop { display: none; }
-  .lib-title-mobile, .lib-close-mobile { display: inline; }
+  .lib-modal-backdrop { display: block; position: fixed; inset: 0; z-index: 59; width: 100%; height: 100%; background: var(--c-overlay); }
+  .lib-close-desktop { display: none; }
   .lib-panel {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    bottom: auto;
-    z-index: 60;
-    width: min(420px, calc(100vw - 32px));
-    max-height: min(560px, 76dvh);
-    transform: translate(-50%, -50%);
-    border: 1px solid var(--c-line);
-    border-radius: var(--radius-row);
-    background: var(--c-pop);
-    box-shadow: var(--c-pop-shadow);
+    position: fixed; left: 50%; top: 50%; z-index: 60; transform: translate(-50%, -50%);
+    width: min(420px, calc(100vw - 32px)); max-height: min(560px, 76dvh);
+    border: 1px solid var(--c-line); border-radius: var(--radius-surface); background: var(--c-pop); box-shadow: var(--c-pop-shadow);
   }
-  .lib-panel-enter-from, .lib-panel-leave-to {
-    transform: translate(-50%, -46%) scale(0.97);
-    opacity: 0;
-  }
-  .lib-panel-enter-active, .lib-panel-leave-active {
-    transition: transform 0.2s ease, opacity 0.2s ease;
-  }
+  .lib-panel-head { height:68px;padding:8px 23px 0 25px; }
+  .lib-panel-sort { padding:0 19px 13px; }
+  .lib-panel-list { padding:4px 16px 10px; }
+  .lib-panel-enter-from, .lib-panel-leave-to { transform: translate(-50%, -46%) scale(.97); opacity: 0; }
+  .lib-panel-enter-active, .lib-panel-leave-active { transition: transform .2s ease, opacity .2s ease; }
   .lib-panel-resize { display: none; }
-  .lib-panel-head { height: 56px; padding-inline: 18px 12px; }
-  .lib-panel-title { font-size: 15px; color: var(--c-ink); }
-  .lib-panel-list { padding: 8px; }
+  .lib-panel-list { padding-bottom: 8px; }
+  .lib-manager-tools { flex-wrap: wrap; }.lib-manager-tools input { flex-basis: 100%; }.lib-manager-tools select { flex: 1; }
+  .lib-manager-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (min-width: 821px) { .lib-close-mobile { display: none; } }
 
 /* 相邻两行之间留一点缝：不然悬停高亮挨在一起，看着像连成一块 */
 .lib-row + .lib-row { margin-top: 2px; }
@@ -1577,7 +1847,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 }
 .lib-row.is-dragging { opacity: 0.45; }
 .lib-row:hover { background: var(--c-hover); }
+.lib-panel-sort .select-menu-trigger{width:100%}
 .lib-row.is-current { background: var(--c-hover); }
+.lib-row.is-draft { background: color-mix(in srgb, var(--color-ds) 5%, var(--c-panel)); }
+.lib-row.is-draft:hover, .lib-row.is-draft.is-current { background: color-mix(in srgb, var(--color-ds) 9%, var(--c-panel)); }
+.lib-row.is-draft .lib-row-icon, .lib-manager-card.is-draft .lib-manager-icon { color: var(--color-ds); }
+.lib-manager-card.is-draft { background: color-mix(in srgb, var(--color-ds) 5%, var(--c-pop)); }
 /* 图标：与侧边栏的文档图标同尺寸（13px），行内不再单独占位 */
 .lib-row-icon { width: 17px; height: 17px; flex-shrink: 0; object-fit: contain; }
 .lib-row-name {
@@ -1679,6 +1954,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 }
 .brand-logo.sm {
   margin-top: 0;
+  display: grid;
+  place-items: center;
 }
 .toolbar-label {
   font-size: 12px;
@@ -1773,12 +2050,89 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 
 <style scoped>
 .is-reader-rail { background:transparent!important; border:0!important; overflow:visible!important; z-index:60 }
-.reader-rail { width:44px; display:flex; align-items:center; flex-direction:column; padding-top:16px }
+.reader-rail { width:44px; display:flex; align-items:center; flex-direction:column; padding-top:15px }
 .manage-entry { margin:0 12px 10px; padding:8px 10px; display:flex; align-items:center; gap:8px; border:1px solid var(--c-line); border-radius:var(--radius-control); color:var(--c-sub); font-size:12px; text-align:left; cursor:pointer; background:var(--c-surface) }
 .manage-entry:hover { background:var(--c-field); color:var(--c-text) }
 .manage-entry:focus-visible { outline:2px solid var(--c-ink); outline-offset:2px }
 .entry-chevron { margin-left:auto }
 .tree-menu-item:disabled { opacity:.45; cursor:default }
+.tree-menu-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib-panel-sort .select-menu-trigger{min-height:30px;padding:5px 11px;background:transparent;border-color:transparent}
+.lib-panel-sort .select-menu-trigger:hover{background:var(--c-field)}
+.lib-panel-sort :deep(.select-menu-trigger){min-height:30px;width:100%;padding:5px 11px;background:transparent;border-color:transparent}
+.lib-panel-sort :deep(.select-menu-trigger:hover){background:var(--c-field)}
+.lib-manager-tools{display:flex;flex-direction:column;gap:12px;padding-bottom:18px}
+.lib-manager-search-row{display:flex;align-items:center;gap:10px;min-width:0}
+.lib-manager-search-row>input{flex:1;min-width:0;padding:11px 14px;font-size:13px}
+.lib-manager-filter-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lib-manager-filters{display:flex;align-items:center;gap:4px;min-width:0;overflow:auto}
+.lib-manager-filters button{flex:none;padding:7px 11px;border-radius:var(--radius-control);corner-shape:superellipse(2);color:var(--c-sub);font-size:12px}
+.lib-manager-filters button:hover{background:var(--c-hover)}
+.lib-manager-filters button.is-on{background:var(--c-field);color:var(--c-ink)}
+.lib-manager-search-row :deep(.select-menu-trigger){flex:none;width:125px;min-height:39px;padding:8px 12px;background:var(--c-field);white-space:nowrap}
+.lib-manager-search-row :deep(.select-menu-trigger:hover){background:var(--c-hover)}
+.lib-manager-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.lib-manager-card{min-height:120px;padding:17px;border-radius:26px;transition:background .16s ease,transform .16s ease}
+.lib-manager-card:hover{transform:translateY(-1px)}
+.lib-manager-card strong{font-size:13px;font-weight:400}
+.lib-card-meta{display:flex;align-items:center;flex-wrap:wrap;gap:7px 12px;color:var(--c-faint);font-size:11px}
+.lib-card-status{display:inline-flex;align-items:center;gap:4px;color:var(--c-sub);white-space:nowrap}
+.lib-card-status svg{flex:none;opacity:.85}
+.lib-manager-head h2,.transfer-dialog h2{font-weight:400}
+.lib-manager-head{padding:38px 36px 18px}
+.lib-manager-navigation{display:flex;align-items:center;min-width:0;gap:10px}
+.lib-manager-navigation h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib-manager-back{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:var(--radius-control);color:var(--c-sub)}
+.lib-manager-back:hover{background:var(--c-hover);color:var(--c-ink)}
+.lib-manager-previews{flex:1;min-height:0;overflow:auto}
+.preview-list{display:flex;flex-direction:column;gap:7px;padding:0 30px 24px}
+.preview-list-row{display:flex;align-items:center;gap:14px;min-height:65px;padding:8px 10px 8px 13px;border-radius:var(--radius-control);background:var(--c-field)}
+.preview-list-main{display:flex;align-items:center;gap:12px;flex:1;min-width:0;text-align:left}
+.preview-list-main>svg{flex:none;color:var(--c-sub)}
+.preview-list-main>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.preview-list-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;color:var(--c-ink)}
+.preview-list-main small{font-size:11px;color:var(--c-faint)}
+.preview-list-actions{display:flex;align-items:center;gap:4px;flex:none}
+.preview-list-actions button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:32px;padding:6px 9px;border-radius:var(--radius-control);background:var(--c-pop);font-size:12px;color:var(--c-sub);white-space:nowrap}
+.preview-list-actions button:hover:not(:disabled){background:var(--c-hover);color:var(--c-ink)}
+.preview-list-actions button:disabled{opacity:.45;cursor:default}
+.preview-list>.transfer-error{padding:2px 8px;font-size:11px;color:#bd4545}
+.lib-preview-detail{display:flex;flex-direction:column;min-height:0;max-height:calc(84dvh - 100px);margin:0 24px 24px}
+.lib-preview-body{flex:1;min-height:140px;max-height:none}
+.lib-preview-actions{flex:none;padding-top:12px}
+.lib-preview-actions button{display:inline-flex;align-items:center;justify-content:center;gap:5px}
+.lib-manager-tools{padding-inline:30px}
+.lib-manager-grid{padding-inline:30px}
+.lib-manager-footer{padding-inline:30px}
+.lib-manager-icon{width:23px;height:23px}
+.lib-manager-footer{display:flex;align-items:center;gap:7px;padding:16px 24px 18px}
+.lib-manager-footer button{display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:var(--radius-control);corner-shape:superellipse(2);color:var(--c-sub);font-size:12px}
+.lib-manager-footer button:hover{background:var(--c-field);color:var(--c-ink)}
+.transfer-field{display:flex;flex-direction:column;gap:7px;margin:14px 0;color:var(--c-sub);font-size:12px}
+.transfer-field :deep(.select-menu-trigger){width:100%;min-width:0;min-height:39px;background:var(--c-field);color:var(--c-ink)}
+.transfer-dialog{width:min(630px,calc(100vw - 32px));padding:26px}
+.transfer-source{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.transfer-library-head{display:flex;align-items:center;gap:16px;margin:18px 0 10px;color:var(--c-sub);font-size:12px}
+.transfer-library-head span{flex:none}
+.transfer-library-head input{margin:0;min-width:0;flex:1;padding:8px 11px}
+.transfer-library-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-height:290px;overflow:auto}
+.transfer-library-grid button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;min-height:85px;padding:11px 13px;border:1px solid transparent;border-radius:22px;corner-shape:superellipse(2);background:var(--c-field);text-align:left}
+.transfer-library-grid button:hover{background:var(--c-hover)}
+.transfer-library-grid button.is-on{border-color:var(--color-ds);background:var(--c-active)}
+.transfer-library-grid button.is-draft{background:color-mix(in srgb,var(--color-ds) 5%,var(--c-pop))}
+.transfer-library-grid button.is-draft:hover{background:color-mix(in srgb,var(--color-ds) 9%,var(--c-pop))}
+.transfer-library-grid button.is-draft.is-on{border-color:var(--color-ds);background:var(--c-active)}
+.transfer-library-grid button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-ink);font-size:12px}
+.transfer-library-grid button small{color:var(--c-faint);font-size:10px}
+.transfer-backdrop.overlay-enter-active .transfer-dialog,.transfer-backdrop.overlay-leave-active .transfer-dialog{transition:transform var(--motion-enter) var(--motion-ease),opacity var(--motion-enter) ease}
+.transfer-backdrop.overlay-enter-from .transfer-dialog,.transfer-backdrop.overlay-leave-to .transfer-dialog{transform:translateY(5px) scale(.975);opacity:0}
+@media(max-width:520px){.transfer-dialog{padding:20px}.transfer-library-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.transfer-library-head{display:block}.transfer-library-head input{margin-top:8px}}
+@media(max-width:520px){.lib-manager{width:calc(100vw - 16px);max-height:calc(100dvh - 24px);border-radius:28px}.lib-manager-head{padding:20px 20px 14px}.lib-manager-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding-inline:20px}.lib-manager-tools{padding-inline:20px}.lib-manager-search-row :deep(.select-menu-trigger){width:105px}.lib-manager-filters button{padding-inline:8px}.lib-manager-footer{padding-inline:20px}.lib-preview-detail{max-height:calc(100dvh - 130px);margin:0 14px 14px;padding:14px}.lib-preview-actions{flex-wrap:wrap}.lib-preview-actions button{flex:1;white-space:nowrap}}
+@media(max-width:520px){.preview-list{padding-inline:20px}.preview-list-row{align-items:stretch;flex-direction:column;gap:7px}.preview-list-actions{justify-content:flex-end;flex-wrap:wrap}}
+.workspace-history-footer{flex:none;padding:7px 10px 12px;border-top:1px solid var(--c-line)}
+.workspace-history-link{display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:7px 10px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left;white-space:nowrap}
+.workspace-history-link:hover{background:var(--c-field);color:var(--c-ink)}
+.workspace-history-link svg{flex:none}
 </style>
 
 <style scoped>

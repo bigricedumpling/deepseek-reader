@@ -7,7 +7,7 @@
     >
       <transition name="pop" appear>
         <div role="dialog" aria-modal="true" :aria-label="title" class="app-dialog w-[380px] bg-[var(--c-surface)] ui-round-dialog p-6">
-          <h3 class="text-[15px] font-medium text-[var(--c-ink)] mb-2">{{ title }}</h3>
+          <h3 class="text-[15px] font-normal text-[var(--c-ink)] mb-2">{{ title }}</h3>
           <p v-if="message" class="text-[12.5px] leading-relaxed text-[var(--c-sub)] mb-4">
             {{ message }}
           </p>

@@ -1,0 +1,3 @@
+- insert:
+    - id: reader-workspace-tools
+      name: dsh-reader-workspace

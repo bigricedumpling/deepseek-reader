@@ -35,15 +35,9 @@
             @keydown.esc.prevent="tree.editCancel()"
             @blur="tree.editCommit()"
           />
-          <span v-else class="cat-name ml-2 text-[12.5px] text-[var(--c-sub)] truncate" :title="node.name" :draggable="store.canEdit(node)">{{ node.name }}</span>
-          <PhEyeSlash
-            v-if="node.shared === false"
-            :size="11"
-            class="share-eye"
-            title="不对外展示"
-          />
-          <PhLock v-if="node.locked" :size="11" class="share-eye" title="已锁定" />
+          <span v-else class="cat-name ml-2 text-[12.5px] text-[var(--c-sub)] truncate" :title="store.isGuest ? node.name + '（' + (store.canEdit(node) ? '可编辑' : '只读') + '）' : node.name" :draggable="store.canEdit(node)">{{ node.name }}</span>
           <button
+            v-if="!store.isGuest"
             class="icon-btn xs acts-btn"
             title="更多操作"
             @click.stop="tree.openMenu('folder', node, $event)"
@@ -106,7 +100,7 @@
           v-else
           :class="node.type === 'pdf' || node.type === 'h5' ? 'pdf-title' : 'doc-title'"
           :draggable="store.canEdit(node)"
-          :title="node.file"
+          :title="store.isGuest ? node.name + '（' + (guestEditable(node) ? '可编辑' : '只读') + '）' : node.file"
           @click="emit('select', node.file)"
           @dblclick="store.canEdit(node) && tree.editStart('doc', node)"
         >
@@ -114,15 +108,9 @@
           <PhFileHtml v-else-if="node.type === 'h5'" :size="13" class="doc-kind" />
           <span class="truncate">{{ node.name }}</span>
         </button>
-        <PhEyeSlash
-          v-if="node.shared === false"
-          :size="11"
-          class="share-eye"
-          title="不对外展示"
-        />
-        <PhLock v-if="node.locked" :size="11" class="share-eye" title="已锁定" />
         <span class="doc-time">{{ relTime(node.mtime) }}</span>
         <button
+          v-if="!store.isGuest"
           class="icon-btn xs acts-btn"
           title="更多操作"
           @click.stop="tree.openMenu('file', node, $event)"
@@ -139,7 +127,7 @@
 <script setup>
 import ContentIcon from './ContentIcon.vue'
 import { ref, computed, inject, nextTick, watch } from 'vue'
-import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree, PhLock, PhEyeSlash } from '@phosphor-icons/vue'
+import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
 
 const props = defineProps({
@@ -157,6 +145,7 @@ const emit = defineEmits([
 ])
 
 const store = useDocsStore()
+function guestEditable(node) { return node.type === 'doc' && store.canEdit(node) }
 /** 拖拽状态住在 Sidebar，递归层里直接用 */
 const tree = inject('tree')
 

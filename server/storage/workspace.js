@@ -24,6 +24,8 @@ export function workspace(root) {
   const home = path.join(root, '.reader')
   fs.mkdirSync(home, { recursive: true, mode:0o700 })
   const db = new DatabaseSync(path.join(home, 'state.sqlite'))
+  const schemaVersion = db.prepare('PRAGMA user_version').get().user_version
+  if (schemaVersion > 2) throw fault('SCHEMA_TOO_NEW', '知识库由更新版本的阅读器管理，请先升级阅读器', 500)
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, kind TEXT NOT NULL, meta TEXT NOT NULL DEFAULT '{}', fingerprint TEXT, missing INTEGER NOT NULL DEFAULT 0);
@@ -33,7 +35,18 @@ export function workspace(root) {
     CREATE TABLE IF NOT EXISTS retries (key TEXT PRIMARY KEY, fingerprint TEXT, result TEXT);
     CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, hash TEXT UNIQUE, name TEXT, scopes TEXT, permissions TEXT, expires INTEGER, revoked INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS versions (id TEXT PRIMARY KEY, node TEXT, revision TEXT, path TEXT, at INTEGER);
-    PRAGMA user_version=1;`)
+    CREATE TABLE IF NOT EXISTS workspace_previews (id TEXT PRIMARY KEY, reference TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, updated INTEGER NOT NULL, incomplete INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0);
+    CREATE INDEX IF NOT EXISTS workspace_previews_updated ON workspace_previews(updated DESC);
+    CREATE TABLE IF NOT EXISTS workspace_preview_assets (preview TEXT NOT NULL, id TEXT NOT NULL, mime TEXT NOT NULL, PRIMARY KEY(preview,id));`)
+  if (!db.prepare('PRAGMA table_info(workspace_previews)').all().some(column => column.name === 'archived')) db.exec('ALTER TABLE workspace_previews ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
+  if (!db.prepare('PRAGMA table_info(workspace_previews)').all().some(column => column.name === 'source_path')) db.exec("ALTER TABLE workspace_previews ADD COLUMN source_path TEXT NOT NULL DEFAULT ''")
+  if (schemaVersion < 2) {
+    db.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, node TEXT NOT NULL, kind TEXT NOT NULL, workspace TEXT NOT NULL DEFAULT '', reference TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS sources_by_node ON sources(node, at);
+      PRAGMA user_version=2;
+      COMMIT;`)
+  }
   let active = null
   const journalRoot = path.join(home, 'operations')
   fs.mkdirSync(journalRoot, { recursive: true })

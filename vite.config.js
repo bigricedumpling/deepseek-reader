@@ -72,11 +72,12 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    // 两个入口：阅读器（index.html）与知识库首页（kb/index.html）
+    // 阅读器、知识库首页与 DSH 工作区 Markdown 预览。
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
-        kb: path.resolve(__dirname, 'kb/index.html')
+        kb: path.resolve(__dirname, 'kb/index.html'),
+        preview: path.resolve(__dirname, 'preview/index.html')
       }
     },
     emptyOutDir: true,

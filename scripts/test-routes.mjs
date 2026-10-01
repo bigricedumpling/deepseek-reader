@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { resolveEntry } from '../src/utils/routes.js'
 for (const base of ['', '/deepseek/reader']) {
   assert.equal(resolveEntry(base + '/', '', base), base + '/')
+  assert.equal(resolveEntry(base + '/doc/', '', base), base + '/doc/')
+  assert.equal(resolveEntry(base + '/doc/', '?choose=1', base), base + '/doc/?choose=1')
+  assert.equal(resolveEntry(base + '/onlyread/', '', base), base + '/onlyread/')
   for (const [input, title] of [
-    ['/onlyread/', '题目一'],
     ['/onlyread/笔试题/笔试题交付：题目一', '题目一'],
     ['/onlyread/笔试题/笔试题交付：题目二', '题目二']
   ]) {

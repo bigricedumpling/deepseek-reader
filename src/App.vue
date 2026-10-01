@@ -67,7 +67,6 @@
       @go-page="store.pdfPage = $event"
     />
 
-    <AccessDialog />
     <AppDialog
       :open="dialog.open"
       :mode="dialog.mode"
@@ -99,7 +98,6 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 /* 页面加载时间：跟服务端的源码修改时间比对，判断手上这份页面是不是旧的 */
 const pageLoadedAt = Date.now()
-import AccessDialog from './components/AccessDialog.vue'
 import Sidebar from './components/Sidebar.vue'
 import DocView from './views/DocView.vue'
 import TocPanel from './components/TocPanel.vue'

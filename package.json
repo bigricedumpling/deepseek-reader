@@ -3,11 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "DeepSeek 面试准备 · 调研知识库",
+  "description": "Local Markdown reader and knowledge workspace for DeepSeek Harness",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 8090",
+    "start:local": "PORT=8090 node server/serve.js",
+    "service:install": "node scripts/local-service.mjs install",
+    "service:status": "node scripts/local-service.mjs status",
+    "service:uninstall": "node scripts/local-service.mjs uninstall",
     "share": "npm run build && node server/serve.js",
     "share:local": "npm run build && node server/serve.js --guest",
     "share:owner": "npm run build && node server/serve.js",
@@ -18,7 +23,9 @@
     "regression": "node scripts/regression.mjs",
     "e2e": "node scripts/e2e/roundtrip.mjs && node scripts/e2e/controls.mjs && node scripts/e2e/colwidth.mjs && node scripts/e2e/sidebar.mjs",
     "test:access": "node scripts/test-access.mjs",
-    "test:routes": "node scripts/test-routes.mjs"
+    "test:routes": "node scripts/test-routes.mjs",
+    "test:plugin": "node scripts/test-plugin.mjs && node scripts/test-plugin-bundle.mjs && node scripts/test-plugin-live.mjs",
+    "test:transfer": "node scripts/test-transfer-preview.mjs"
   },
   "dependencies": {
     "@codemirror/language-data": "^6.5.2",
@@ -46,5 +53,9 @@
     "@vitejs/plugin-vue": "^5.2.1",
     "tailwindcss": "^4.0.0",
     "vite": "^6.0.7"
+  },
+  "overrides": {
+    "dompurify": "3.4.16",
+    "lodash-es": "4.18.1"
   }
 }

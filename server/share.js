@@ -229,6 +229,11 @@ export function roleOf(req, url, share, { forceGuest = false } = {}) {
   if (req?.headers?.['x-reader-view'] === 'public' || url?.searchParams?.get('view') === 'public' || publicReferer) return 'guest'
 
   const headers = req?.headers || {}
+  const localAddress = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req?.socket?.remoteAddress)
+  const localHost = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(headers.host || '')
+  let sameOrigin = true
+  try { if (headers.origin) sameOrigin = new URL(headers.origin).host === headers.host } catch { sameOrigin = false }
+  if (process.env.READER_REQUIRE_LOGIN !== '1' && process.env.READER_PUBLIC_SNAPSHOT !== '1' && localAddress && localHost && sameOrigin && headers['sec-fetch-site'] !== 'cross-site' && !Object.keys(headers).some(key => key === 'forwarded' || key.startsWith('x-forwarded-'))) return 'owner'
 
   const cookie = String(headers.cookie || '')
   const pick = (name) => {

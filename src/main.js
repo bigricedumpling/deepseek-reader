@@ -20,8 +20,9 @@ import './style.css'
 import './styles/shapes.css'
 import './styles/surfaces.css'
 import { resolveEntry } from './utils/routes'
+import { installTooltips } from './utils/tooltips'
 
-// 首页保留身份选择；旧 /edit 兼容管理入口，/onlyread 始终使用访客视角。
+// 首页按身份进入当前工作区；旧 /edit 与 /onlyread 的书签仍按原路由兼容。
 const BASE_PATH = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '')
 history.replaceState(null, '', resolveEntry(location.pathname, location.search, BASE_PATH))
 window.__readerPublicView = location.pathname.slice(BASE_PATH.length).startsWith('/onlyread')
@@ -46,7 +47,21 @@ async function start() {
   const me = await fetch(BASE_PATH + '/api/me').then(r => r.json()).catch(() => null)
   if (me?.ok) window.__readerMode = me.data.role
   const home = location.pathname === BASE_PATH + '/'
+  if (home) {
+    let next = '/onlyread/'
+    let query = location.search
+    if (window.__readerMode === 'owner') {
+      next = '/doc/'
+      let recent = ''
+      try { recent = JSON.parse(localStorage.getItem('reader.library-switcher:' + BASE_PATH) || '{}').recent?.[0] || '' } catch {}
+      if (!new URLSearchParams(query).get('lib')) query = recent ? '?lib=' + encodeURIComponent(recent) : '?choose=1'
+    }
+    location.replace(resolveEntry(BASE_PATH + next, query, BASE_PATH))
+    return
+  }
   const needsLogin = !window.__readerPublicView && window.__readerMode !== 'owner'
-  createApp(home || needsLogin ? EntryPage : App, { loginRequired: !home && needsLogin }).use(createPinia()).mount('#app')
+  createApp(needsLogin ? EntryPage : App, { loginRequired: needsLogin }).use(createPinia()).mount('#app')
+  installTooltips()
+  if (window.parent !== window) window.parent.postMessage({ type: 'dsh-reader:ready' }, '*')
 }
 start()

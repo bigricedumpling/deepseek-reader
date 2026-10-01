@@ -1,9 +1,9 @@
 /* Shared shell geometry. Editor content and its internal controls keep their own shapes. */
 :root {
-  --radius-control: 11px;
-  --radius-surface: 20px;
-  --radius-row: 24px;
-  --radius-dialog: 36px;
+  --radius-control: 12px;
+  --radius-surface: 22px;
+  --radius-row: 27px;
+  --radius-dialog: 40px;
   --corner-ui: superellipse(2);
 }
 :where(*):not(:where(.editor-shell, .editor-shell *)),
@@ -14,7 +14,7 @@
 .ui-round-control { border-radius:var(--radius-control)!important }
 .ui-round-surface { border-radius:var(--radius-surface)!important }
 .ui-round-dialog { border-radius:var(--radius-dialog)!important }
-:is(.reader-dialog,.access-dialog,.app-dialog,.pick) { border-radius:var(--radius-dialog)!important }
+:is(.reader-dialog,.access-dialog,.app-dialog,.pick,.lib-manager,.transfer-dialog,.picker,.public-sharing-panel) { border-radius:var(--radius-dialog)!important }
 :is(.pop-menu,.side-menu,.tree-menu,.identity-menu,.doc-search-panel,.bt-menu,.text-style-menu) { border-radius:var(--radius-surface)!important }
 :is(.entry-option,.kb-card,.lib-row) { border-radius:var(--radius-row)!important }
 /* Dots, radio controls and slider thumbs are circles, not rounded rectangles. */

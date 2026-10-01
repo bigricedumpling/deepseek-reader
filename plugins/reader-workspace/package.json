@@ -1,0 +1,29 @@
+{
+  "name": "dsh-reader-workspace",
+  "version": "0.1.0-preview.1",
+  "description": "Local knowledge-base reader and Markdown workspace preview for DeepSeek Harness",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://zangqucheng.site/git/zangqucheng/deepseek-reader.git",
+    "directory": "plugins/reader-workspace"
+  },
+  "keywords": ["dsh-plugin", "deepseek-harness", "markdown", "knowledge-base", "reader"],
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "files": ["index.js", "client.js", "cordis.patch.yml", "scripts/reader.mjs", "README.md", "LICENSE"],
+  "engines": { "node": ">=24" },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-ui-sidebar-right", "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"],
+      "platform": "web"
+    }
+  }
+}

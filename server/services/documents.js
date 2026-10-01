@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID, randomBytes } from 'node:crypto'
 import { digest, fault } from '../storage/workspace.js'
+import { recordSource } from './sources.js'
 
 export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
   function current(body,url) {
@@ -34,6 +35,16 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
     return out
   }
   return {
+    'GET /sources':async(body,url)=>{
+      const n=current(body,url)
+      const sources=repo.db.prepare('SELECT id,kind,workspace,reference,note,at FROM sources WHERE node=? ORDER BY at DESC,id DESC').all(n.id)
+      return {ok:true,data:{id:n.id,path:n.path,sources}}
+    },
+    'POST /sources':async(body,url)=>{
+      const n=current(body,url)
+      const id=recordSource(repo,n.id,body.source)
+      return {ok:true,data:{id,path:n.path,documentId:n.id}}
+    },
     'GET /metadata':async(body,url)=>{const n=current(body,url);return {ok:true,data:{id:n.id,path:n.path,meta:n.meta,revision:digest(JSON.stringify(n.meta))}}},
     'PUT /metadata':async(body,url)=>{
       const n=current(body,url),revision=digest(JSON.stringify(n.meta))
@@ -88,6 +99,6 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
     },
     'DELETE /agent-keys':async body=>{repo.db.prepare('UPDATE credentials SET revoked=1 WHERE id=?').run(String(body.id));return {ok:true}},
     'GET /audit':async()=>({ok:true,data:repo.db.prepare('SELECT * FROM operations ORDER BY at DESC LIMIT 100').all()}),
-    'GET /metadata-export':async()=>({ok:true,data:{schemaVersion:1,nodes:repo.db.prepare('SELECT * FROM nodes').all(),assets:repo.db.prepare('SELECT * FROM assets').all(),settings:repo.db.prepare('SELECT * FROM settings').all(),aliases:repo.db.prepare('SELECT * FROM aliases').all()}})
+    'GET /metadata-export':async()=>({ok:true,data:{schemaVersion:2,nodes:repo.db.prepare('SELECT * FROM nodes').all(),assets:repo.db.prepare('SELECT * FROM assets').all(),settings:repo.db.prepare('SELECT * FROM settings').all(),aliases:repo.db.prepare('SELECT * FROM aliases').all(),sources:repo.db.prepare('SELECT * FROM sources').all()}})
   }
 }

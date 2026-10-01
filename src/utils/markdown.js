@@ -1,4 +1,4 @@
-import {layoutText} from './column-format'
+import {layoutText} from './column-format.js'
 import MarkdownIt from 'markdown-it'
 import taskLists from 'markdown-it-task-lists'
 import sub from 'markdown-it-sub'

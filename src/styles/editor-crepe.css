@@ -36,7 +36,7 @@
   max-width: var(--measure, 960px);
   margin: 16px auto 0;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fffbf0;
   border: 1px solid #f2e6c8;
   color: #8a6d1f;
@@ -53,7 +53,7 @@
 }
 .lossy-btn {
   padding: 3px 9px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid #e6d9b4;
   background: #fffdf7;
   color: #8a6d1f;
@@ -183,6 +183,14 @@
   text-justify: inter-ideograph;
   hyphens: auto;
   font-feature-settings: "kern" 1;
+}
+/* 窄窗口时与 PageHeader 使用相同内边距，图标和一级标题保持同一左线。 */
+@media (max-width: 720px) {
+  .crepe-host .milkdown .ProseMirror { padding-inline: 18px; }
+  .crepe-host .milkdown .ProseMirror > * { transition: none; }
+}
+@media (max-width: 480px) {
+  .crepe-host .milkdown .ProseMirror { padding-inline: 14px; }
 }
 
 /*
@@ -453,7 +461,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--c-line);
-  border-radius: 10px;
+  border-radius: 12px;
   margin-block: 1.6em;
   font-size: 0.86em;
   line-height: 1.6;
@@ -538,7 +546,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   width: 18px;
   height: 18px;
   padding: 0;
-  border-radius: 5px;
+  border-radius: 7px;
   background-color: transparent;
   color: var(--c-faint);
   box-shadow: none;
@@ -650,14 +658,19 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
  * 分隔条也压短。点选区域还有 28px，鼠标够用。
  */
 .crepe-host .milkdown .milkdown-toolbar {
-  border-radius: 9px;
+  padding: 2px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  corner-shape: superellipse(2);
+  background: var(--c-pop);
+  box-shadow: var(--c-pop-shadow);
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item {
   width: 28px;
   height: 28px;
-  margin: 3px;
+  margin: 2px;
   padding: 3px;
-  border-radius: 5px;
+  border-radius: 10px;
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item svg {
   width: 17px;
@@ -665,7 +678,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 }
 .crepe-host .milkdown .milkdown-toolbar .divider {
   height: 16px;
-  margin: 9px 7px;
+  margin: 8px 5px;
 }
 
 /*
@@ -688,7 +701,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   width: 24px;
   height: 24px;
   padding: 3px;
-  border-radius: 5px;
+  border-radius: 7px;
 }
 .crepe-host .milkdown .milkdown-block-handle .operation-item svg {
   width: 17px;
@@ -698,31 +711,43 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 /* ---------- 斜杠插入菜单 ---------- */
 /* Crepe 默认条目最小宽 220、内边距 14、图标 24，又大又长，整体收紧 */
 .crepe-host .milkdown .milkdown-slash-menu {
-  border-radius: 10px;
-  border: 1px solid var(--c-line-soft);
-  padding: 0;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05), 0 12px 36px rgba(0, 0, 0, 0.13);
+  box-sizing: border-box;
+  width: min(380px, calc(100vw - 24px));
+  border-radius: 20px;
+  corner-shape: superellipse(2);
+  border: 1px solid var(--c-line);
+  padding: 5px;
+  background: var(--c-pop);
+  box-shadow: var(--c-pop-shadow);
 }
 .crepe-host .milkdown .milkdown-slash-menu ul {
   padding: 0;
 }
 .crepe-host .milkdown .milkdown-slash-menu .tab-group {
-  padding: 5px 5px 0;
+  padding: 4px 4px 5px;
+  border-bottom: 1px solid var(--c-line);
 }
 .crepe-host .milkdown .milkdown-slash-menu .tab-group ul {
   padding: 2px;
-  gap: 1px;
+  gap: 2px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.crepe-host .milkdown .milkdown-slash-menu .tab-group ul::-webkit-scrollbar { display: none; }
 .crepe-host .milkdown .milkdown-slash-menu .tab-group ul li {
-  padding: 3px 8px;
+  flex: none;
+  padding: 5px 9px;
   font-size: 11.5px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 18px;
-  border-radius: 5px;
+  border-radius: 10px;
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups {
-  padding: 0 5px 5px;
-  max-height: 296px;
+  padding: 3px 4px 4px;
+  max-height: min(350px, calc(100dvh - 110px));
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-line) transparent;
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
   font-size: 10px;
@@ -737,8 +762,8 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   min-width: 0;
   width: 100%;
   gap: 9px;
-  padding: 5px 8px;
-  border-radius: 6px;
+  padding: 7px 9px;
+  border-radius: 11px;
   line-height: 18px;
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
@@ -841,17 +866,19 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
   display:inline-flex;
   flex-direction:column;
   align-items:center;
-  font-size:15px;
-  font-weight:700;
+  color:var(--c-sub);
+  font-size:14px;
+  font-weight:500;
   line-height:1;
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="reader-style"] .text-style-trigger span {
-  width:14px;
-  height:3px;
-  margin-top:2px;
+  width:12px;
+  height:2px;
+  margin-top:3px;
   border-radius:2px;
-  background:linear-gradient(90deg,#c94c4c,#b86b22,#368568,#356ccc,#8256b8);
+  background:linear-gradient(90deg,#d78d8d,#b9a473,#83ad9a,#89a9cf);
 }
+.crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="reader-style"]:hover .text-style-trigger{color:var(--c-ink)}
 
 .crepe-host .milkdown .ProseMirror .reader-rich-block p:last-child{margin-bottom:0}.crepe-host .milkdown .ProseMirror .reader-rich-block h3:first-child{margin-top:0}.crepe-host .milkdown .ProseMirror .reader-rich-block{text-align:left}
 
@@ -863,7 +890,7 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .crepe-host .milkdown .ProseMirror .milkdown-image-block{margin-block:1.4em!important;padding-block:0}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block + p{margin-top:1.4em!important}
 .crepe-host .milkdown .ProseMirror p:has(+ .milkdown-image-block){margin-bottom:1.4em!important}
-.reader-upload-status{display:inline-block;padding:3px 8px;background:var(--c-field);border-radius:8px;color:var(--c-faint);font:12px var(--font-sans)}
+.reader-upload-status{display:inline-block;padding:3px 8px;background:var(--c-field);border-radius: 10px;color:var(--c-faint);font:12px var(--font-sans)}
 
 .crepe-host .milkdown .ProseMirror .reader-columns{display:grid;grid-template-columns:repeat(var(--column-count,2),minmax(0,1fr));gap:24px;margin:1.4em auto;max-width:var(--measure);align-items:start}
 .crepe-host .milkdown .ProseMirror .reader-column{min-width:0;min-height:40px;position:relative}
@@ -881,7 +908,7 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .rich-callout-icon{user-select:none;line-height:1.7;cursor:pointer}
 
 /* Callout identity is a clickable control; body editing stays independent. */
-.editor-shell .rich-callout-icon{display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:28px;cursor:pointer;border-radius:6px}
+.editor-shell .rich-callout-icon{display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:28px;cursor:pointer;border-radius: 8px}
 .editor-shell .rich-callout-icon:hover{background:var(--c-hover)}
 .editor-shell .rich-callout-icon:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}
 .editor-shell [contenteditable="false"] .rich-callout-icon{cursor:default}

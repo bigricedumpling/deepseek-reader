@@ -9,7 +9,9 @@ function rpc(method,params){const n=++id;return new Promise((resolve,reject)=>{c
 try{
  const init=await rpc('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'test',version:'1'}});assert.equal(init.result.protocolVersion,'2025-06-18')
  child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n')
- const list=await rpc('tools/list');assert.equal(list.result.tools.length,10)
+ const list=await rpc('tools/list');assert.equal(list.result.tools.length,14)
+ assert(list.result.tools.find(x=>x.name==='reader_libraries'))
+ assert(list.result.tools.find(x=>x.name==='reader_create').inputSchema.properties.source)
  assert(list.result.tools.find(x=>x.name==='reader_update').inputSchema.required.includes('revision'))
  const call=await rpc('tools/call',{name:'reader_read',arguments:{path:'Test/doc.md'}});assert.equal(call.result.isError,true)
  assert.match(call.result.content[0].text,/READER_TOKEN/)

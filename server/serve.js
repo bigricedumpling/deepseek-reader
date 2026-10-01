@@ -231,6 +231,9 @@ function notFound(res) {
 }
 
 server.listen(PORT, '127.0.0.1', () => {
+  process.send?.({ port: server.address().port })
   console.log('文档工作台已启动：http://127.0.0.1:' + PORT + '/')
   console.log('文档根目录：' + DOCS_ROOT)
 })
+
+if (process.env.READER_PUBLIC_SNAPSHOT === '1' && process.send) process.once('disconnect', () => process.exit(0))

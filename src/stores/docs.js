@@ -192,7 +192,15 @@ export const useDocsStore = defineStore('docs', () => {
   const isGuest = computed(() => role.value !== 'owner')
   const accessRequest = ref(null)
   const currentReadonly = computed(() => !canEdit(currentNode.value))
-  function requestAccess(path, change, label) { accessRequest.value = { path, change, label } }
+  async function requestAccess(path, change) {
+    if (isGuest.value || !path) return
+    try {
+      if (isDirty.value && !(await save())) throw Error('请先保存当前改动')
+      await api('PUT', '/access', { path, ...change })
+      await loadAll()
+      window.dispatchEvent(new Event('reader-access-updated'))
+    } catch (error) { error.value = String(error.message || error) }
+  }
   function canEdit(node) { return !!node && (!isGuest.value || (node.locked === false && node.shared === true)) }
 
   /** 分享设置：{ shared: { 路径: true }, editable: {...}, guestToken } */
@@ -796,6 +804,18 @@ export const useDocsStore = defineStore('docs', () => {
     return data
   }
 
+  async function copyDoc(file, dir) {
+    const { data } = await api('POST', '/copy/doc', { file, dir })
+    await loadTree()
+    return data
+  }
+
+  async function copyCategory(path, toParent) {
+    const { data } = await api('POST', '/copy/category', { path, toParent })
+    await loadTree()
+    return data
+  }
+
   /** 把目录挪到另一个目录下（拖拽）。目录连同里面的东西一起走。 */
   async function moveCategory(path, toParent) {
     if (currentPath.value.startsWith(path + '/') && rawMap.value[currentPath.value] !== undefined && !(await savePath(currentPath.value))) {
@@ -906,6 +926,8 @@ export const useDocsStore = defineStore('docs', () => {
     switchLib,
     moveDoc,
     moveCategory,
+    copyDoc,
+    copyCategory,
     reorderEntries,
     pdfToc,
     pdfTocSource,

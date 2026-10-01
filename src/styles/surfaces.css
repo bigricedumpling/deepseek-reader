@@ -1,6 +1,6 @@
 /* All floating shells share one visual surface; components own only their layout.
    Explicit precedence prevents scoped component styles from reintroducing drift. */
-:is(.reader-dialog,.app-dialog,.access-dialog,.pick,.pop-menu,.side-menu,
+:is(.reader-dialog,.app-dialog,.access-dialog,.pick,.pop-menu,.side-menu,.lib-manager,.transfer-dialog,.picker,.public-sharing-panel,.select-menu-panel,
     .tree-menu,.identity-menu,.doc-search-panel,.bt-menu,.text-style-menu,.rail-toc-hint) {
   background:var(--c-pop)!important;
   border:1px solid var(--c-line)!important;
