@@ -5,12 +5,20 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const DEFAULT_URL = 'http://127.0.0.1:8090/'
     const URL_KEY = 'dsh-reader-workspace:url'
+    const URL_EVENT = 'dsh-reader-workspace:url-change'
     const STYLE_ID = 'dsh-reader-workspace-style'
     const FILTER_ID = 'dsh-reader-superellipse'
+    let managedUrl = ''
+    let managedState = 'starting'
+    let managedError = ''
+
+    function configuredUrl() {
+      try { return window.localStorage.getItem(URL_KEY) || '' } catch { return '' }
+    }
 
     function readerUrl() {
       try {
-        const stored = window.localStorage.getItem(URL_KEY) || DEFAULT_URL
+        const stored = configuredUrl() || managedUrl || DEFAULT_URL
         const url = new URL(stored)
         if (url.username || url.password || !['http:', 'https:'].includes(url.protocol)) return DEFAULT_URL
         if (url.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return DEFAULT_URL
@@ -24,37 +32,72 @@ window.__ModuleLoader__.load({
       return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Mac/i.test(navigator.platform) && navigator.maxTouchPoints > 1)
     }
 
+    function waitingForManagedReader() { return !configuredUrl() && !managedUrl && managedState === 'starting' && !mobileDevice() }
+    function ReaderStarting() { return React.createElement('div', { className: 'dsh-reader-connect', role: 'status' },
+      React.createElement(ReaderIcon, { size: 24 }), React.createElement('strong', null, '正在打开阅读器'),
+      React.createElement('p', null, '首次启动可能需要几秒钟。')) }
+
     function needsReaderConnection() { return mobileDevice() && readerUrl() === DEFAULT_URL }
 
-    function ReaderConnection({ onConnect, onCancel, initialUrl = readerUrl() }) {
+    function parseReaderUrl(value) {
+      const address = new URL(value.trim())
+      const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
+      if (address.username || address.password || address.protocol !== 'https:' && (address.protocol !== 'http:' || !local || mobileDevice())) throw Error(mobileDevice() ? '请输入可从此设备访问的 HTTPS 地址' : '远程地址需使用 HTTPS，本机可用 HTTP')
+      address.pathname = '/'; address.search = ''; address.hash = ''
+      return address.toString()
+    }
+
+    function saveReaderUrl(address) {
+      window.localStorage.setItem(URL_KEY, address)
+      window.dispatchEvent(new CustomEvent(URL_EVENT, { detail: address }))
+    }
+
+    function ReaderConnection({ onConnect, onRetry, initialUrl = readerUrl(), firstUse = false }) {
+      const [editing, setEditing] = React.useState(firstUse)
       const [value, setValue] = React.useState(mobileDevice() && initialUrl === DEFAULT_URL ? '' : initialUrl)
       const [error, setError] = React.useState('')
       return React.createElement('form', { className: 'dsh-reader-connect', onSubmit: event => {
         event.preventDefault()
-        try {
-          const address = new URL(value.trim())
-          const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
-          if (address.username || address.password || address.protocol !== 'https:' && (address.protocol !== 'http:' || !local || mobileDevice())) throw Error(mobileDevice() ? '请输入可从此设备访问的 HTTPS 地址' : '远程地址需使用 HTTPS，本机可用 HTTP')
-          address.pathname = '/'; address.search = ''; address.hash = ''
-          window.localStorage.setItem(URL_KEY, address.toString())
-          onConnect(address.toString())
-        } catch (reason) { setError(reason.message || '地址无效') }
+        try { const address = parseReaderUrl(value); saveReaderUrl(address); onConnect(address) }
+        catch (reason) { setError(reason.message || '地址无效') }
       } }, React.createElement(ReaderIcon, { size: 24 }),
-      React.createElement('strong', null, '连接阅读器'),
-      React.createElement('p', null, '先启动 Reader，再填写它的访问地址。'),
-      React.createElement('label', null, '阅读器地址',
-        React.createElement('input', { type: 'url', value, placeholder: mobileDevice() ? 'https://…' : DEFAULT_URL, onChange: event => setValue(event.target.value), autoComplete: 'url', required: true })),
+      React.createElement('strong', null, firstUse ? '连接阅读器' : '无法连接阅读器'),
+      React.createElement('p', null, firstUse ? '填写此设备可访问的 Reader 地址。' : managedError || '请重试，或连接已有的 Reader。'),
+      editing ? React.createElement('label', null, '阅读器地址',
+        React.createElement('input', { type: 'url', value, placeholder: mobileDevice() ? 'https://…' : DEFAULT_URL, onChange: event => { setValue(event.target.value); setError('') }, autoComplete: 'url', required: true })) : null,
       React.createElement('div', { className: 'dsh-reader-connect-actions' },
-        onCancel ? React.createElement('button', { type: 'button', className: 'dsh-reader-connect-cancel', onClick: onCancel }, '返回') : null,
-        React.createElement('button', { type: 'submit' }, '连接')),
+        !firstUse && React.createElement('button', { type: 'button', className: 'dsh-reader-connect-cancel', onClick: () => { setError(''); if (editing) setEditing(false); else onRetry() } }, editing ? '取消' : '重试'),
+        editing ? React.createElement('button', { type: 'submit' }, '连接') : React.createElement('button', { type: 'button', onClick: () => setEditing(true) }, '更换地址')),
       React.createElement('a', { href: 'https://zangqucheng.site/git/zangqucheng/deepseek-reader', target: '_blank', rel: 'noopener noreferrer' }, '查看安装说明'),
       error ? React.createElement('span', { role: 'alert' }, error) : null)
     }
 
-    function SettingsIcon() {
-      return React.createElement('svg', { width: 17, height: 17, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' },
-        React.createElement('circle', { cx: 12, cy: 12, r: 3 }),
-        React.createElement('path', { d: 'M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1.2 1.6v.1h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.2 15a1.7 1.7 0 0 0-1.6-1.2h-.1v-4h.1A1.7 1.7 0 0 0 4.2 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.66 3.8l.06.06A1.7 1.7 0 0 0 8.6 4.2a1.7 1.7 0 0 0 1.2-1.6v-.1h4v.1A1.7 1.7 0 0 0 15 4.2a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8.6a1.7 1.7 0 0 0 1.6 1.2h.1v4H21a1.7 1.7 0 0 0-1.6 1.2Z' }))
+    function ReaderConnectionSettings() {
+      const [url, setUrl] = React.useState(readerUrl())
+      const [value, setValue] = React.useState(url)
+      const [editing, setEditing] = React.useState(false)
+      const [error, setError] = React.useState('')
+      React.useEffect(() => {
+        const sync = event => { setUrl(event.detail); if (!editing) setValue(event.detail) }
+        window.addEventListener(URL_EVENT, sync)
+        return () => window.removeEventListener(URL_EVENT, sync)
+      }, [editing])
+      return React.createElement('section', { className: 'dsh-reader-config' },
+        React.createElement('h3', null, '阅读器连接'),
+        React.createElement('p', null, '插件会自动启动本机 Reader。只有连接已有服务时才需要填写地址。'),
+        editing ? React.createElement('form', { onSubmit: event => {
+          event.preventDefault()
+          try { const address = parseReaderUrl(value); saveReaderUrl(address); setUrl(address); setEditing(false); setError('') }
+          catch (reason) { setError(reason.message || '地址无效') }
+        } },
+          React.createElement('label', null, '访问地址', React.createElement('input', { type: 'url', value, onChange: event => { setValue(event.target.value); setError('') }, required: true, autoComplete: 'url' })),
+          React.createElement('div', { className: 'dsh-reader-config-actions' },
+            React.createElement('button', { type: 'button', onClick: () => { setValue(url); setEditing(false); setError('') } }, '取消'),
+            React.createElement('button', { type: 'submit' }, '保存')),
+          error ? React.createElement('span', { role: 'alert' }, error) : null
+        ) : React.createElement('div', { className: 'dsh-reader-config-current' },
+          React.createElement('code', null, url),
+          React.createElement('button', { type: 'button', onClick: () => setEditing(true) }, '更换地址')))
     }
 
     function ReaderIcon({ size = 24, className, tone = 'brand' }) {
@@ -88,10 +131,19 @@ window.__ModuleLoader__.load({
       const [url, setUrl] = React.useState(readerUrl())
       const [connected, setConnected] = React.useState(false)
       const [connectionOpen, setConnectionOpen] = React.useState(needsReaderConnection())
+      const [attempt, setAttempt] = React.useState(0)
+      const [, forceUpdate] = React.useState(0)
       const frame = React.useRef(null)
       const { tab } = props.useTabInfo()
       React.useEffect(() => {
-        if (connectionOpen) return
+        const sync = event => { if (event.detail !== url) { setUrl(event.detail); setConnected(false); setConnectionOpen(false); setAttempt(value => value + 1) } }
+        window.addEventListener(URL_EVENT, sync)
+        const status = () => forceUpdate(value => value + 1)
+        window.addEventListener('dsh-reader-workspace:status', status)
+        return () => { window.removeEventListener(URL_EVENT, sync); window.removeEventListener('dsh-reader-workspace:status', status) }
+      }, [url])
+      React.useEffect(() => {
+        if (connectionOpen || waitingForManagedReader()) return
         const origin = new URL(url).origin
         const timer = connected ? null : setTimeout(() => setConnectionOpen(true), 7000)
         const onMessage = event => {
@@ -106,15 +158,17 @@ window.__ModuleLoader__.load({
         window.addEventListener('message', onMessage)
         return () => { clearTimeout(timer); window.removeEventListener('message', onMessage) }
       }, [url, tab, connectionOpen, connected])
-      if (connectionOpen) return React.createElement(ReaderConnection, { initialUrl: url, onConnect: address => { setConnected(false); setUrl(address); setConnectionOpen(false) }, onCancel: connected ? () => { setConnected(false); setConnectionOpen(false) } : null })
+      if (waitingForManagedReader()) return React.createElement(ReaderStarting)
+      if (connectionOpen || !configuredUrl() && !managedUrl && managedState === 'error') return React.createElement(ReaderConnection, { initialUrl: url, firstUse: needsReaderConnection(),
+        onConnect: address => { setConnected(false); setUrl(address); setConnectionOpen(false); setAttempt(value => value + 1) },
+        onRetry: () => { setConnected(false); setConnectionOpen(false); setAttempt(value => value + 1) } })
       return React.createElement('div', { className: 'dsh-reader-frame' },
         React.createElement('iframe', {
-          ref: frame,
+          ref: frame, key: attempt,
           title: '阅读器', src: url, loading: 'eager', referrerPolicy: 'no-referrer',
           sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals',
           allow: 'clipboard-read; clipboard-write'
-        }),
-        React.createElement('button', { type: 'button', className: 'dsh-reader-settings', title: '连接设置', 'aria-label': '连接设置', onClick: () => setConnectionOpen(true) }, React.createElement(SettingsIcon)))
+        }))
     } }
 
     function createReaderMarkdownPreview(ctx) { function ReaderMarkdownPreview(props) {
@@ -243,28 +297,33 @@ window.__ModuleLoader__.load({
           loading: 'eager', referrerPolicy: 'no-referrer',
           sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals',
           allow: 'clipboard-read; clipboard-write'
-        }),
-        collectedUrl ? React.createElement('a', {
-          className: 'dsh-reader-open-external', href: collectedUrl, target: '_blank', rel: 'noopener noreferrer',
-          title: '在浏览器打开', 'aria-label': '在浏览器打开'
-        }, '↗') : null,
-        React.createElement('button', { type: 'button', className: 'dsh-reader-settings', title: '连接设置', 'aria-label': '连接设置', onClick: props.onOpenConnection }, React.createElement(SettingsIcon))
+        })
       )
     }
       return function ConnectedReaderMarkdownPreview(props) {
         const [connection, setConnection] = React.useState(readerUrl())
+        const [, forceUpdate] = React.useState(0)
         const [connectionOpen, setConnectionOpen] = React.useState(needsReaderConnection())
         const [ready, setReady] = React.useState(false)
+        const [attempt, setAttempt] = React.useState(0)
         const onReady = React.useCallback(() => setReady(true), [])
         React.useEffect(() => {
-          if (connectionOpen || ready) return
+          const sync = event => { if (event.detail !== connection) { setConnection(event.detail); setReady(false); setConnectionOpen(false); setAttempt(value => value + 1) } }
+          window.addEventListener(URL_EVENT, sync)
+          const status = () => forceUpdate(value => value + 1)
+          window.addEventListener('dsh-reader-workspace:status', status)
+          return () => { window.removeEventListener(URL_EVENT, sync); window.removeEventListener('dsh-reader-workspace:status', status) }
+        }, [connection])
+        React.useEffect(() => {
+          if (connectionOpen || ready || waitingForManagedReader()) return
           const timer = setTimeout(() => setConnectionOpen(true), 7000)
           return () => clearTimeout(timer)
         }, [connection, connectionOpen, ready])
-        if (connectionOpen) return React.createElement(ReaderConnection, { initialUrl: connection,
-          onConnect: address => { setReady(false); setConnection(address); setConnectionOpen(false) },
-          onCancel: ready ? () => { setReady(false); setConnectionOpen(false) } : null })
-        return React.createElement(ReaderMarkdownPreview, { ...props, key: connection, onReady, onOpenConnection: () => setConnectionOpen(true) })
+        if (waitingForManagedReader()) return React.createElement(ReaderStarting)
+        if (connectionOpen || !configuredUrl() && !managedUrl && managedState === 'error') return React.createElement(ReaderConnection, { initialUrl: connection, firstUse: needsReaderConnection(),
+          onConnect: address => { setReady(false); setConnection(address); setConnectionOpen(false); setAttempt(value => value + 1) },
+          onRetry: () => { setReady(false); setConnectionOpen(false); setAttempt(value => value + 1) } })
+        return React.createElement(ReaderMarkdownPreview, { ...props, key: `${connection}:${attempt}`, onReady })
       }
     }
 
@@ -285,24 +344,21 @@ window.__ModuleLoader__.load({
         .dsh-reader-connect a { color:#697589;text-decoration:none;font-size:12px; }
         .dsh-reader-connect a:hover { text-decoration:underline; }
         .dsh-reader-connect [role=alert] { color:#be4848;font-size:12px; }
-        .dsh-reader-open-external { background: var(--dsw-alias-bg-layer-1,#fff); border: 1px solid var(--dsw-alias-border-l3,#e9e9e9); }
+        .dsh-reader-config { box-sizing:border-box;width:100%;max-width:680px;padding:22px 24px;border:1px solid var(--dsw-alias-border-l3,#e9e9e9);border-radius:18px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#222);font:14px -apple-system,BlinkMacSystemFont,sans-serif; }
+        .dsh-reader-config h3 { margin:0 0 8px;font-size:16px;font-weight:600; }
+        .dsh-reader-config p { margin:0 0 18px;color:var(--dsw-alias-label-secondary,#777);line-height:1.55; }
+        .dsh-reader-config-current { display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0; }
+        .dsh-reader-config-current code { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit; }
+        .dsh-reader-config button { flex:none;padding:8px 12px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-2,#f1f2f4);color:var(--dsw-alias-label-primary,#333);font:inherit;cursor:pointer; }
+        .dsh-reader-config form { display:flex;flex-direction:column;gap:10px; }
+        .dsh-reader-config label { display:flex;flex-direction:column;gap:8px; }
+        .dsh-reader-config input { box-sizing:border-box;width:100%;height:38px;padding:0 11px;border:1px solid var(--dsw-alias-border-l3,#ddd);border-radius:10px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit;font:inherit; }
+        .dsh-reader-config-actions { display:flex;justify-content:flex-end;gap:8px; }
+        .dsh-reader-config-actions button[type=submit] { background:#526dff;color:#fff; }
+        .dsh-reader-config [role=alert] { color:#be4848;font-size:12px; }
         .dsh-reader-frame { position: relative; width: 100%; height: 100%; min-height: 0; background: #fff; }
         .dsh-reader-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
-        .dsh-reader-settings { position:absolute;right:10px;bottom:10px;z-index:2;display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--dsw-alias-border-l3,#e9e9e9);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-secondary,#777);cursor:pointer;opacity:.72;transition:opacity .16s ease,color .16s ease; }
-        .dsh-reader-settings:hover,.dsh-reader-settings:focus-visible { opacity:1;color:var(--dsw-alias-label-primary,#111); }
-        .dsh-reader-open-external {
-          position: absolute; right: 10px; bottom: 10px; display: grid;
-          place-items: center; width: 30px; height: 30px;
-          color: var(--dsw-alias-label-secondary, #666); text-decoration: none;
-          border-radius: 12px; corner-shape: superellipse(2);
-          isolation: isolate; opacity: 1; transition: color .16s ease;
-        }
-        .dsh-reader-open-external:hover,
-        .dsh-reader-open-external:focus-visible { color: var(--dsw-alias-label-primary, #111); }
-        .dsh-reader-open-external::before { border-radius: 12px; }
-        .dsh-reader-md .dsh-reader-open-external { right:48px; }
         .dsh-reader-md { min-height: 320px; height: 100%; overflow: hidden; }
-        .dsh-reader-md:has(.dsh-reader-open-external) { height: 100%; overflow: hidden; }
         .dsh-reader-collected { position:absolute;right:12px;bottom:12px;padding:8px 12px;border-radius:16px;background:#f0f1f6;color:#3f4659;font-size:12px;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
         .dsh-reader-tab-title { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
         .dsh-reader-tab-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -320,7 +376,36 @@ window.__ModuleLoader__.load({
 
     const inject = ['sidebarRightTabs', 'sidebarRight', 'shortcuts', 'documentPreviews', 'slots', 'remote', 'remote.workspaceFiles']
     function apply(ctx) {
+      ctx.effect(() => {
+        let stopped = false
+        async function refresh() {
+          try {
+            const response = await fetch('api/reader-workspace/status', { cache: 'no-store' })
+            if (!response.ok) throw Error(`Reader 服务状态不可用（HTTP ${response.status}）`)
+            const status = await response.json()
+            if (stopped) return
+            managedState = status.state
+            managedError = status.error || ''
+            if (status.state === 'ready' && /^http:\/\/127\.0\.0\.1:\d+\/$/.test(status.url)) {
+              if (managedUrl !== status.url) {
+                managedUrl = status.url
+                window.dispatchEvent(new CustomEvent(URL_EVENT, { detail: readerUrl() }))
+              }
+            } else if (managedUrl) {
+              managedUrl = ''
+              window.dispatchEvent(new CustomEvent(URL_EVENT, { detail: readerUrl() }))
+            }
+            window.dispatchEvent(new Event('dsh-reader-workspace:status'))
+          } catch (error) { if (!stopped) { managedState = 'error'; managedError = error.message || '无法启动阅读器'; window.dispatchEvent(new Event('dsh-reader-workspace:status')) } }
+        }
+        refresh()
+        const timer = setInterval(refresh, 2000)
+        return () => { stopped = true; clearInterval(timer) }
+      }, 'reader local service discovery')
       ctx.effect(installStyle, 'reader guide shape')
+      ctx.effect(() => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register(
+        { name: 'plugins.bundle.config', key: 'dsh-reader-workspace' }, ReaderConnectionSettings
+      )), 'reader connection settings')
       // The Reader entry is the essential part of this plugin. Register it
       // before optional Markdown integration so preview issues cannot hide it.
       ctx.effect(() => ctx.sidebarRightTabs.register({

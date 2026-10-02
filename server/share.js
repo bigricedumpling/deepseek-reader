@@ -27,7 +27,7 @@ export function createShare(root) {
   const file = path.join(root, SHARE_FILE)
   const repo=workspace(root)
   const authName=crypto.createHash('sha256').update(root).digest('hex').slice(0,16)+'.json'
-  const authFile=path.join(fileURLToPath(new URL('../.runtime/',import.meta.url)),authName)
+  const authFile=path.join(process.env.READER_RUNTIME_DIR ? path.resolve(process.env.READER_RUNTIME_DIR) : fileURLToPath(new URL('../.runtime/',import.meta.url)),authName)
   const encodedLegacy=path.resolve(new URL('../.runtime/',import.meta.url).pathname,authName)
   if(!fs.existsSync(authFile)&&fs.existsSync(encodedLegacy))atomicWrite(authFile,fs.readFileSync(encodedLegacy))
   let credentials={}

@@ -4,7 +4,9 @@
 
 ## Preview 安装
 
-需要 Node.js 24 或更新版本。在仓库根目录运行：
+macOS DSH NEXT 用户：从 [v0.1.0-preview.2 发布页](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.2)下载插件包，在「插件 → 添加插件」安装，然后从右侧栏「开始」页打开阅读器。插件自带 Reader 页面和本机服务，自动启动；无需克隆仓库、安装 Node.js 或单独部署服务。默认文档目录为 `~/Library/Application Support/Reader/知识库`，更新或卸载插件不会删除文档。完整步骤和已知问题见 [DSH 插件说明](plugins/reader-workspace/README.md)。源码同步在 [Gitea](https://zangqucheng.site/git/zangqucheng/deepseek-reader)。社区市场完成审核前，仍需从发布页安装。
+
+独立运行源码或开发时，需要 Node.js 24 或更新版本。在仓库根目录运行：
 
 ```bash
 npm ci
@@ -13,8 +15,6 @@ npm run start:local
 ```
 
 然后打开 `http://127.0.0.1:8090/`，创建知识库和文档。本机访问直接进入管理界面，无须注册账号；服务默认仅监听本机。内容默认存放在仓库旁边的 `知识库` 目录。可在启动前设置绝对路径 `DOCS_ROOT` 来选择数据目录，勿将它放入公开网站目录或 Git 仓库。
-
-在 DSH 中使用，还需安装接入插件并连接 Reader。预览版安装包在 [GitHub Releases](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.1)，步骤和已知问题见 [DSH 插件说明](plugins/reader-workspace/README.md)。源码也同步在 [Gitea](https://zangqucheng.site/git/zangqucheng/deepseek-reader)。社区市场尚未收录，因此目前不能靠市场搜索安装；即使之后从市场安装接入插件，Reader 服务仍需单独启动。
 
 ![简洁侧栏与章节导航](docs/04-悬停目录.png)
 

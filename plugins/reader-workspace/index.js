@@ -1,7 +1,8 @@
 import { callTool, definitions } from './scripts/reader.mjs'
+import { startManagedServer } from './managed-server.js'
 
 export const name = 'reader-workspace'
-export const inject = ['tools']
+export const inject = ['tools', 'connection']
 
 function validateInput(schema, value, field = '参数') {
   if (schema.type === 'string') {
@@ -21,6 +22,15 @@ function validateInput(schema, value, field = '参数') {
 }
 
 export function apply(ctx) {
+  let managed = { status: { state: 'starting', url: '', error: '' }, stop() {} }
+  ctx.effect(() => {
+    managed = startManagedServer()
+    return () => managed.stop()
+  }, 'Reader local service')
+  ctx.connection.fetch.register({
+    path: '/api/reader-workspace/status', methods: ['GET'], requestBody: 'buffered',
+    fetch: () => Promise.resolve(Response.json({ ...managed.status }, { headers: { 'cache-control': 'no-store' } }))
+  })
   // The browser entry works without Agent access. Do not expose tools that
   // would fail every call until an authorized Reader token is configured.
   if (!process.env.READER_TOKEN) return

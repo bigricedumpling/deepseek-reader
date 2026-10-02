@@ -19,7 +19,7 @@ import { roleOf } from './share.js'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 /* 前端产物目录也可以按实例覆盖（独立实例部署在自己的子路径下，base 不同，要单独构建） */
 const DIST = process.env.DIST_DIR ? path.resolve(process.env.DIST_DIR) : path.resolve(HERE, '..', 'dist')
-const PORT = Number(process.env.PORT || 8091)
+const PORT = Number(process.env.PORT ?? 8091)
 /*
  * 站点标识与清单都可以按实例覆盖，用来跑第二个实例（独立的示例知识库）：
  * 同一个 dist，换标题、图标与 kb.json 就是另一个站点，不必再构建一份。
@@ -232,8 +232,8 @@ function notFound(res) {
 
 server.listen(PORT, '127.0.0.1', () => {
   process.send?.({ port: server.address().port })
-  console.log('文档工作台已启动：http://127.0.0.1:' + PORT + '/')
+  console.log('文档工作台已启动：http://127.0.0.1:' + server.address().port + '/')
   console.log('文档根目录：' + DOCS_ROOT)
 })
 
-if (process.env.READER_PUBLIC_SNAPSHOT === '1' && process.send) process.once('disconnect', () => process.exit(0))
+if (process.send) process.once('disconnect', () => server.close(() => process.exit(0)))

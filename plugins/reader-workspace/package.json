@@ -1,7 +1,7 @@
 {
   "name": "dsh-reader-workspace",
-  "version": "0.1.0-preview.1",
-  "description": "Local knowledge-base reader and Markdown workspace preview for DeepSeek Harness",
+  "version": "0.1.0-preview.2",
+  "description": "Open Reader in the DSH sidebar to read and organize local knowledge bases and preview workspace Markdown",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,9 +13,13 @@
   "main": "./index.js",
   "exports": {
     ".": "./index.js",
-    "./client": "./client.js"
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
-  "files": ["index.js", "client.js", "cordis.patch.yml", "scripts/reader.mjs", "README.md", "LICENSE"],
+  "files": ["index.js", "client.js", "managed-server.js", "cordis.patch.yml", "scripts/reader.mjs", "locale/*.json", "runtime/dist/**", "runtime/server/**", "README.md", "LICENSE"],
+  "scripts": { "prepack": "node ../../scripts/prepare-plugin.mjs" },
+  "os": ["darwin"],
   "engines": { "node": ">=24" },
   "dsh": {
     "bundle": {

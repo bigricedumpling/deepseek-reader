@@ -4,7 +4,11 @@ import { apply } from '../plugins/reader-workspace/index.js'
 const original = process.env.READER_TOKEN
 try {
   const registered = []
-  const ctx = { tools: { register: definition => registered.push(definition) } }
+  const ctx = {
+    tools: { register: definition => registered.push(definition) },
+    effect: () => {},
+    connection: { fetch: { register: () => {} } }
+  }
   delete process.env.READER_TOKEN
   apply(ctx)
   assert.equal(registered.length, 0, '未连接时不应显示不可用的 Agent 工具')

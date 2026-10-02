@@ -1,5 +1,6 @@
 node_modules/
 dist/
+plugins/reader-workspace/runtime/
 .vite-cache/
 *.log
 .DS_Store
