@@ -389,10 +389,12 @@
       </nav>
       <div v-if="!isGuest" class="workspace-history-footer">
         <button class="workspace-history-link" title="在 DSH 用阅读器打开过的 Markdown" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
+        <button class="workspace-history-link" @click="recoveryOpen=true"><PhTrash :size="17"/><span>恢复与备份</span></button>
       </div>
     </template>
     </aside>
 
+    <RecoveryPanel :open="recoveryOpen" @close="recoveryOpen=false" @restored="onRecovered" />
     <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false" />
     <IconPicker v-if="iconPicking" :save="saveLibIcon" :anchor="libIconAnchor" @close="iconPicking=false" />
     <!-- 新建 / 删除知识库的确认框：用站内统一那套，不用浏览器原生弹窗 -->
@@ -417,6 +419,7 @@ import PublicSharing from './PublicSharing.vue'
 import {setFavicon} from '../utils/favicon'
 
 import AgentSettings from './AgentSettings.vue'
+import RecoveryPanel from './RecoveryPanel.vue'
 import ContentIcon from './ContentIcon.vue'
 import IconPicker from './IconPicker.vue'
 import { resizePanel } from '../utils/panel-resize'
@@ -1026,6 +1029,8 @@ async function onBrandEdited(i, value) {
 }
 
 /** 换某个知识库的图标 */
+const recoveryOpen=ref(false)
+async function onRecovered(){await loadLibs();await store.loadTree()}
 const agentSettings=ref(false), iconPicking=ref(false)
 const libIconTarget = ref(null), libIconAnchor=ref(null)
 function pickLibIcon(lib,event) { libIconAnchor.value=event?.currentTarget;libIconTarget.value=lib;iconPicking.value=true }

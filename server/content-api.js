@@ -1,3 +1,5 @@
+import { backupService } from './services/backups.js'
+import { trashService } from './services/trash.js'
 /**
  * 本地内容读写接口。
  *
@@ -520,22 +522,9 @@ async function readPdfToc(rel) {
  * 删除一律走这里：不真删，挪进 .回收站 并加时间戳。
  * 文件和目录都能丢进来，误删了还能自己捞回来，不至于把面试资料搞丢。
  */
-function moveToTrash(rel) {
-  if (!rel) throw new Error('不能删根目录')
-  const abs = safeResolve(rel)
-  if (!fs.existsSync(abs)) return null
-  const dir = path.join(DOCS_ROOT, TRASH)
-  fs.mkdirSync(dir, { recursive: true })
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  let target = path.join(dir, stamp + '__' + path.basename(abs))
-  let i = 2
-  while (fs.existsSync(target)) {
-    target = path.join(dir, stamp + '__' + i + '__' + path.basename(abs))
-    i++
-  }
-  assets.beforeMove(rel); repo.move(abs, target); repo.remap(rel, path.relative(DOCS_ROOT, target))
-  return path.relative(DOCS_ROOT, target)
-}
+const backups = backupService(repo)
+const trash = trashService(repo, { safeResolve, assets, share, registry: readRegistry, saveRegistry: writeRegistry })
+function moveToTrash(rel) { return trash.move(rel) }
 
 /** 同一目录下不覆盖已有文件，重名就加序号。ext 默认 .md，pdf 要原样带上自己的扩展名。 */
 function uniqueFile(dir, name, ext = '.md') {
@@ -1055,6 +1044,8 @@ function libSummary(abs) {
 }
 
 const routes = {
+  'GET /trash': async () => ({ ok: true, data: trash.list() }),
+  'POST /trash/restore': async body => ({ ok: true, data: trash.restore(String(body.trashId || '')) }),
   'GET /instance': async (_body, _url, ctx) => {
     if (ctx.role !== 'owner') throw fault('FORBIDDEN', '仅本机或管理者可查看实例', 403)
     return { ok: true, data: { product: 'reader', protocol: 1, identity: digest(DOCS_ROOT).slice(0, 24), platform: process.platform, dataDirectory: DOCS_ROOT } }
@@ -1217,13 +1208,7 @@ const routes = {
     const abs = safeResolve(name)
     if (!fs.existsSync(abs)) throw new Error('知识库不存在: ' + name)
     if (!fs.statSync(abs).isDirectory()) throw new Error('不是目录: ' + name)
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-    const inTrash = TRASH + '/' + stamp + '__' + name
-    const absTrash = safeResolve(inTrash)
-    fs.mkdirSync(path.dirname(absTrash), { recursive: true })
-    assets.beforeMove(name); repo.move(abs, absTrash); repo.remap(name, inTrash)
-    /* 分享状态跟着进回收站，免得留一堆指向不存在路径的键 */
-    share.rename(name, inTrash)
+    moveToTrash(name)
     const reg = syncRegistry()
     reg.libs = reg.libs.filter((l) => l.name !== name)
     writeRegistry(reg)
@@ -1767,6 +1752,10 @@ function canWrite(rel, role, recursive = false) {
   }
 }
 function checkWrite(key, body, role) {
+  if (key === 'POST /trash/restore') {
+    if (role !== 'owner') throw fault('FORBIDDEN', '回收站仅供管理者使用', 403)
+    return
+  }
   const source = body.path || body.file
   if (key === 'POST /workspace-preview' || key === 'DELETE /workspace-preview' || key === 'PUT /workspace-preview/archive' || key === 'POST /collect-workspace-preview' || key === 'POST /icon-history') {
     if (role !== 'owner') throw fault('FORBIDDEN', '工作区浏览记录仅供管理者使用', 403)
@@ -1873,11 +1862,22 @@ export async function handleApi(req, res, ctx = {}) {
       for(const field of fields){const rel=repo.resolve(field);if(!scopes.some(p=>rel===p||rel.startsWith(p+'/')))throw fault('FORBIDDEN','超出 Agent 授权范围',403)}
       ctx.actor='agent:'+agent.id
     }
+    if (key === 'GET /backups' || key === 'POST /backups') {
+      if (role !== 'owner' || ctx.agentScopes || !localFileManagerRequest(req)) throw fault('FORBIDDEN', '备份管理仅限本机使用', 403)
+      let data
+      if (req.method === 'GET') data = backups.list()
+      else if (body.action === 'create') data = backups.create()
+      else if (body.action === 'restore') data = await backups.restore(String(body.backupId || ''))
+      else if (body.action === 'reveal') { backups.list(); await revealInFileManager(backups.directory, true); data = {} }
+      else throw fault('INVALID_ACTION', '未知备份操作')
+      return send(res,200,{ok:true,data})
+    }
     if (key === 'GET /public-session' || key === 'POST /public-session') {
       if (role !== 'owner') throw fault('FORBIDDEN', '需要管理身份', 403)
       const data = req.method === 'GET' ? publicSharing.status() : await publicSharing.control(body.action)
       return send(res, 200, { ok: true, data: { ...data, busy: false } })
     }
+    if (key.includes('/trash') && role !== 'owner') throw fault('FORBIDDEN', '回收站仅供管理者使用', 403)
     if(['GET /agent-keys','POST /agent-keys','DELETE /agent-keys','GET /audit','GET /metadata-export','GET /reconcile','POST /reconcile','GET /history'].includes(key)&&role!=='owner')throw fault('FORBIDDEN','需要管理身份',403)
     if (key.endsWith('/sources') && role !== 'owner') throw fault('FORBIDDEN', '来源记录仅供管理者查看', 403)
     if ((key.startsWith('GET /workspace-preview') || key === 'GET /icon-history') && role !== 'owner') throw fault('FORBIDDEN', '私人资料仅供管理者使用', 403)

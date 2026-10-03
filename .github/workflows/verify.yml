@@ -28,6 +28,7 @@ jobs:
       - run: npm run test:transfer
       - run: node scripts/test-workspace.mjs
       - run: node scripts/test-recovery.mjs
+      - run: npm run test:user-recovery
       - run: npm run build
       - run: npm pack --workspace=false --pack-destination ../../
         working-directory: plugins/reader-workspace
