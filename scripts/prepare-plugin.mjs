@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const runtime = path.join(root, 'plugins', 'reader-workspace', 'runtime')
-const build = spawnSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit', env: process.env })
+const build = spawnSync(process.execPath, [process.env.npm_execpath || 'node_modules/npm/bin/npm-cli.js', 'run', 'build'], { cwd: root, stdio: 'inherit', env: process.env })
 if (build.status !== 0) process.exit(build.status || 1)
 fs.rmSync(runtime, { recursive: true, force: true })
 fs.mkdirSync(runtime, { recursive: true })

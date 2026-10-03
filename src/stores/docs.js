@@ -894,6 +894,7 @@ export const useDocsStore = defineStore('docs', () => {
     return data
   }
   async function resolveConflict(mode,merged) {
+    if (!['copy','merge','remote'].includes(mode)) throw Error('未知冲突处理方式')
     const c=conflict.value;if(!c)return
     if(mode==='copy') {
       const dir=c.path.split('/').slice(0,-1).join('/')

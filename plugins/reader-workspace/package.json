@@ -1,14 +1,20 @@
 {
   "name": "dsh-reader-workspace",
-  "version": "0.1.0-preview.2",
+  "version": "0.2.0-preview.1",
   "description": "Open Reader in the DSH sidebar to read and organize local knowledge bases and preview workspace Markdown",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://zangqucheng.site/git/zangqucheng/deepseek-reader.git",
+    "url": "git+https://github.com/bigricedumpling/deepseek-reader.git",
     "directory": "plugins/reader-workspace"
   },
-  "keywords": ["dsh-plugin", "deepseek-harness", "markdown", "knowledge-base", "reader"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "markdown",
+    "knowledge-base",
+    "reader"
+  ],
   "type": "module",
   "main": "./index.js",
   "exports": {
@@ -17,16 +23,39 @@
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
-  "files": ["index.js", "client.js", "managed-server.js", "cordis.patch.yml", "scripts/reader.mjs", "locale/*.json", "runtime/dist/**", "runtime/server/**", "README.md", "LICENSE"],
-  "scripts": { "prepack": "node ../../scripts/prepare-plugin.mjs" },
-  "os": ["darwin"],
-  "engines": { "node": ">=24" },
+  "files": [
+    "index.js",
+    "client.js",
+    "managed-server.js",
+    "platform.js",
+    "cordis.patch.yml",
+    "scripts/reader.mjs",
+    "locale/*.json",
+    "runtime/dist/**",
+    "runtime/server/**",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node ../../scripts/prepare-plugin.mjs"
+  },
+  "os": [
+    "darwin",
+    "win32",
+    "linux"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": ["@deepseek-ai/dsh-client-ui-sidebar-right", "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"],
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"
+      ],
       "platform": "web"
     }
   }

@@ -17,6 +17,8 @@ async function request(method,url,body,role='guest',transport={}){
  return new Promise(resolve=>handleApi(req,{statusCode:200,setHeader(){},end(s){resolve({status:this.statusCode,...JSON.parse(s)})}},{role}))
 }
 try{
+ assert.equal((await request('GET','/api/instance',null,'guest')).status,403,'实例目录不对访客公开')
+ assert.equal((await request('GET','/api/instance',null,'owner')).data.product,'reader')
  const existingIcon='data:image/png;base64,AAAA'
  const iconMeta=await request('GET','/api/metadata?path=Private/doc.md',null,'owner')
  assert.equal((await request('PUT','/api/metadata',{path:'Private/doc.md',revision:iconMeta.data.revision,meta:{icon:existingIcon}},'owner')).ok,true)

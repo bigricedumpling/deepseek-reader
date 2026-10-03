@@ -25,7 +25,9 @@
     "test:access": "node scripts/test-access.mjs",
     "test:routes": "node scripts/test-routes.mjs",
     "test:plugin": "node scripts/test-plugin.mjs && node scripts/test-plugin-bundle.mjs && node scripts/test-plugin-live.mjs",
-    "test:transfer": "node scripts/test-transfer-preview.mjs"
+    "test:transfer": "node scripts/test-transfer-preview.mjs",
+    "typecheck": "tsc --project tsconfig.json",
+    "test:lifecycle": "node scripts/test-managed-server.mjs"
   },
   "dependencies": {
     "@codemirror/language-data": "^6.5.2",
@@ -52,6 +54,7 @@
     "@tailwindcss/vite": "^4.0.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "tailwindcss": "^4.0.0",
+    "typescript": "^7.0.2",
     "vite": "^6.0.7"
   },
   "overrides": {

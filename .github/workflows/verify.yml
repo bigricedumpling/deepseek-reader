@@ -1,0 +1,33 @@
+name: Reader verification
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run typecheck
+      - run: npm run test:access
+      - run: npm run test:readonly
+      - run: npm run test:block
+      - run: npm run test:fold
+      - run: npm run test:routes
+      - run: npm run test:plugin
+      - run: npm run test:lifecycle
+      - run: npm run test:transfer
+      - run: node scripts/test-workspace.mjs
+      - run: node scripts/test-recovery.mjs
+      - run: npm run build
+      - run: npm pack --workspace=false --pack-destination ../../
+        working-directory: plugins/reader-workspace

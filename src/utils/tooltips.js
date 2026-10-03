@@ -3,14 +3,17 @@ export function installTooltips() {
   const tip = document.createElement('div')
   tip.className = 'reader-tooltip'
   tip.setAttribute('role', 'tooltip')
+  tip.setAttribute('aria-hidden', 'true')
   document.body.append(tip)
 
   let active = null
   let timer = 0
+  let keyboardFocus = false
   function hide() {
     clearTimeout(timer)
     active = null
     tip.classList.remove('is-visible')
+    tip.setAttribute('aria-hidden', 'true')
   }
   function show(anchor) {
     if (active === anchor && tip.classList.contains('is-visible')) return
@@ -29,9 +32,10 @@ export function installTooltips() {
     tip.textContent = label
     tip.classList.toggle('is-long', label.length > 22)
     timer = window.setTimeout(() => {
-      if (active !== anchor || !anchor.isConnected) return
+      if (active !== anchor || !anchor.isConnected || anchor.getAttribute('aria-expanded') === 'true') return
       const rect = anchor.getBoundingClientRect()
       tip.classList.add('is-visible')
+      tip.setAttribute('aria-hidden', 'false')
       const width = tip.offsetWidth
       const height = tip.offsetHeight
       const left = Math.min(innerWidth - width - 8, Math.max(8, rect.left + rect.width / 2 - width / 2))
@@ -50,12 +54,18 @@ export function installTooltips() {
   })
   document.addEventListener('focusin', event => {
     const anchor = anchorFor(event.target)
-    if (anchor) show(anchor)
+    if (anchor && keyboardFocus) show(anchor)
   })
   document.addEventListener('focusout', event => {
     if (active && active.contains(event.target) && !active.contains(event.relatedTarget)) hide()
   })
-  document.addEventListener('pointerdown', hide)
+  document.addEventListener('pointerdown', () => { keyboardFocus = false; hide() }, true)
+  document.addEventListener('click', hide, true)
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Tab') keyboardFocus = true
+    if (event.key === 'Escape') hide()
+  }, true)
+  new MutationObserver(() => { if (active && (!active.isConnected || active.getAttribute('aria-expanded') === 'true')) hide() }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-expanded'] })
   window.addEventListener('scroll', hide, true)
   window.addEventListener('resize', hide)
 }

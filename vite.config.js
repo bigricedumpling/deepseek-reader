@@ -3,7 +3,6 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import contentApi from './server/content-api.js'
 import fs from 'node:fs'
 
 /*
@@ -40,9 +39,9 @@ function inlineIcon() {
   }
 }
 
-export default defineConfig({
+export default defineConfig(async ({ command }) => ({
   base: process.env.VITE_BASE || '/',
-  plugins: [inlineIcon(), contentApi(), tailwindcss(), vue()],
+  plugins: [inlineIcon(), ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')
@@ -84,4 +83,4 @@ export default defineConfig({
     reportCompressedSize: false,
     chunkSizeWarningLimit: 1000
   }
-})
+}))

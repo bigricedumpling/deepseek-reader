@@ -31,6 +31,7 @@ try{
    */
   const titles = await ev(`return [...document.querySelectorAll('button.doc-title')].map(function(b){return b.textContent.trim()})`)
   console.log('侧栏文档：' + titles.join(' / '))
+  if (!titles.length) throw Error('没有可验证的文档，不能判定通过')
   for (let i = 0; i < titles.length; i++) {
     await ev(`const b=[...document.querySelectorAll('button.doc-title')][${i}]; if(b)b.click(); return !!b;`)
     for(let k=0;k<60;k++){const ok=await ev(`return !!(window.__crepe && window.__baseline)`); if(ok)break; await sleep(400)}
@@ -44,6 +45,7 @@ try{
      * 不一样就把两侧原文取回来，做一次行级 diff 打出来。
      * 否则每次都得再跑一轮去猜是哪一行，一轮就是一分多钟。
      */
+    if (!r.same || r.lossy) process.exitCode = 1
     if (!r.same) {
       // 差异算法跟界面共用一份（markdown-normalize.js 的 diffLines），别再写第二遍
       const pair = await ev('return { base: String(window.__baseline), out: window.__normalize(window.__crepe.getMarkdown(), window.__baseline) }')
@@ -60,4 +62,4 @@ try{
       }
     }
   }
-}catch(e){console.error('出错:',e.message)}finally{try{ws?.close()}catch{};chrome.kill()}
+}catch(e){console.error('出错:',e.message);process.exitCode=1}finally{try{ws?.close()}catch{};chrome.kill()}

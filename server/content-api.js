@@ -1055,6 +1055,10 @@ function libSummary(abs) {
 }
 
 const routes = {
+  'GET /instance': async (_body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw fault('FORBIDDEN', '仅本机或管理者可查看实例', 403)
+    return { ok: true, data: { product: 'reader', protocol: 1, identity: digest(DOCS_ROOT).slice(0, 24), platform: process.platform, dataDirectory: DOCS_ROOT } }
+  },
   ...documentRoutes(repo,{share,assertFile,assertMd,assertVisible}),
   /** 这次请求算谁：我 还是 别人。前端靠它决定要不要露出编辑相关的东西 */
   'GET /me': async (_body, _url, ctx) => ({ ok: true, data: { role: ctx.role } }),

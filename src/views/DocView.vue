@@ -247,7 +247,7 @@
       </div>
 
       <div v-if="docId" class="relative">
-        <button class="btn-icon" :title="store.isGuest ? '导出' : '导出与文档设置'" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhExport :size="16" /></button>
+        <button ref="exportButton" class="btn-icon" :title="store.isGuest ? '导出' : '导出与文档设置'" :aria-expanded="open === 'access'" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhExport :size="16" /></button>
         <transition name="pop">
         <div v-if="open === 'access'" class="pop-menu is-panel w-[250px]">
           <div v-if="!store.isGuest" class="doc-state-pair">
@@ -261,6 +261,7 @@
           <p v-if="!store.isGuest && meta.lockedAt && meta.lockedAt !== docId" class="search-scope">由上级设为只读</p>
           <div v-if="!store.isGuest" class="doc-options-divider" />
           <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="14" /> {{ fileManagerLabel() }}</button>
+          <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open=''; historyOpen=true"><PhClockCounterClockwise :size="14" /> 历史版本</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="14" /> 导出 Markdown</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="14" /> 导出网页（含图片）</button>
           <button class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="14" /> 打印 / 导出 PDF</button>
@@ -392,6 +393,7 @@
 
 
   </div>
+  <VersionHistory :open="historyOpen" :path="docId" :preserve-current="() => store.save()" @close="closeHistory" @restore="restoreContent" />
 </template>
 
 <script setup>
@@ -401,7 +403,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   PhMagnifyingGlass, PhTextAa, PhTextT, PhArrowsOutLineHorizontal,
   PhExport, PhListDashes, PhArrowSquareOut, PhX, PhArrowUp, PhSpinnerGap, PhWarningCircle,
-  PhCircleHalf, PhPrinter,
+  PhCircleHalf, PhPrinter, PhClockCounterClockwise,
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
   PhArrowsOutSimple, PhArrowsInSimple, PhSun, PhCoffee, PhMoon,
@@ -413,6 +415,7 @@ import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
 import ConflictDialog from '../components/ConflictDialog.vue'
+import VersionHistory from '../components/VersionHistory.vue'
 import PageHeader from '../components/PageHeader.vue'
 import DocPicker from '../components/DocPicker.vue'
 import { insertDocLink } from '../utils/editor-shortcuts'
@@ -423,6 +426,8 @@ import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../
 
 const reader = useReaderStore()
 // pdf 翻译任务的状态住在 docs store 里，不必再经 App 转一手
+const historyOpen=ref(false),exportButton=ref(null)
+async function closeHistory(){historyOpen.value=false;await nextTick();exportButton.value?.focus()}
 const restoredEpoch=ref(0)
 function restoreContent(text){emit('input',text);restoredEpoch.value++}
 const store = useDocsStore()

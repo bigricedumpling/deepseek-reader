@@ -2,7 +2,7 @@
   <main class="preview-shell">
     <header class="preview-header">
       <div class="preview-identity"><span class="preview-kicker">工作区文件</span><span class="preview-filename" :title="filePath">{{ title || 'Markdown 预览' }}</span></div>
-      <button v-if="ready" class="collect-button" type="button" @click="openPicker">收录到知识库</button>
+      <button v-if="ready" class="collect-button" type="button" @click="openPicker">收录副本到知识库</button>
     </header>
     <div v-if="!ready" class="preview-state">正在读取工作区文件…</div>
     <div v-else class="preview-reader" @click="onArticleClick">
@@ -10,8 +10,8 @@
       <article class="preview-image-probe" aria-hidden="true" v-html="html" />
     </div>
     <div v-if="picker" class="picker-mask" @click.self="picker=false">
-      <section class="picker" role="dialog" aria-modal="true" aria-label="收录到知识库" @keydown.esc="picker=false">
-        <div class="picker-heading">收录到知识库<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
+      <section class="picker" role="dialog" aria-modal="true" aria-label="收录副本到知识库" @keydown.esc="picker=false">
+        <div class="picker-heading">收录副本到知识库<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
         <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus /><SelectMenu v-model="libFilter" :options="[{value:'all',label:'全部'},{value:'private',label:'未公开'},{value:'public',label:'公开'}]" label="筛选知识库" /></div>
         <div class="picker-grid">
           <button v-for="lib in filteredLibraries" :key="lib.name" type="button" class="picker-card" :class="{ selected: destination === lib.name, draft: lib.name === DRAFT_NAME }" @click="destination=lib.name">
