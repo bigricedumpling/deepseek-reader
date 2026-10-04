@@ -196,8 +196,8 @@ function askCreateCategory(parent) {
   const target = parent || ''
   ask({
     mode: 'prompt',
-    title: target ? '在' + target + '下新建目录' : '在根目录下新建目录',
-    placeholder: '目录名，例如 参考资料',
+    title: target ? '在' + target + '下新建文件夹' : '在根目录下新建文件夹',
+    placeholder: '文件夹名，例如 参考资料',
     confirmText: '创建',
     onConfirm: async (name) => {
       dialog.open = false

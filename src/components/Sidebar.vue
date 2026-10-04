@@ -225,17 +225,23 @@
         </button>
       </div>
 
-    <!-- 工具条 -->
-    <div class="sidebar-toolbar px-3 pt-2 pb-2 flex items-center gap-0.5 shrink-0">
+    <!-- 新建文档 -->
+    <div v-if="currentLibEditable" class="px-3 pt-2 pb-3">
       <button
-        v-if="currentLibEditable"
-        class="newdoc-btn flex h-7 items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-[12px] text-[var(--c-ink)] hover:bg-[var(--c-hover)]"
-        title="新建文档"
-        aria-label="新建文档"
+        class="newdoc-btn w-full h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
+        title="在根目录新建文档"
         @click="emit('create-doc', currentLib || '')"
       >
-        <PhFilePlus :size="16" />
-        <span class="newdoc-label">新建</span>
+        <PhPlus :size="13" weight="bold" />
+        新建文档
+      </button>
+    </div>
+
+    <!-- 工具条 -->
+    <div class="px-3 pb-2 flex items-center gap-0.5 shrink-0">
+      <button v-if="currentLibEditable" class="newfolder-btn" aria-label="新建文件夹" @click="emit('create-category', currentLib || '')">
+        <PhFolderSimplePlus :size="16" />
+        <span>文件夹</span>
       </button>
       <span class="ml-auto flex items-center gap-0.5">
         <button
@@ -283,12 +289,6 @@
             </div>
           </transition>
         </div>
-        <button v-if="!isGuest" class="icon-btn" title="重新读取文件" @click="rescan">
-          <PhArrowClockwise :size="15" />
-        </button>
-        <button v-if="currentLibEditable" class="icon-btn" title="新建分类" @click="emit('create-category', currentLib || '')">
-          <PhFolderSimplePlus :size="16" />
-        </button>
       </span>
     </div>
 
@@ -305,10 +305,16 @@
       </div>
     </transition>
 
+    <div v-if="batch.mode" class="batch-bar px-3 pb-2" role="group" aria-label="批量删除">
+      <span>已选 {{ batch.selected.size }} 项</span>
+      <button @click="batch.cancel()">取消</button>
+      <button class="batch-delete" :disabled="!batch.selected.size" @click="requestBatchDelete">删除</button>
+    </div>
+
     <!-- 树里那个…的菜单：teleport 出去，免得被侧栏的滚动裁掉 -->
     <Teleport to="body">
       <Transition name="pop">
-      <div v-if="tree.menu.open" class="tree-menu" role="menu" aria-label="条目操作" :style="tree.menu.style" @keydown.esc.stop.prevent="tree.closeMenu()" @keydown.tab="tree.closeMenu()">
+      <div v-if="tree.menu.open" class="tree-menu" role="menu" :aria-label="tree.menu.kind === 'root' ? '侧栏操作' : '条目操作'" :style="tree.menu.style" @keydown.esc.stop.prevent="tree.closeMenu()" @keydown.tab="tree.closeMenu()">
         <button
           v-for="it in menuItems"
           :key="it.id"
@@ -341,6 +347,7 @@
       class="flex-1 min-h-0 overflow-y-auto no-scrollbar px-2.5 pb-4 pt-0.5"
       @dragover="tree.overRoot($event)"
       @drop.prevent="tree.drop()"
+      @contextmenu="onBlankTreeContext"
     >
       <template v-if="groupMode === 'tree'">
         <DocTree
@@ -367,19 +374,21 @@
           v-for="doc in flatDocs"
           :key="doc.file"
           class="doc-row group/doc"
-          :class="{ 'is-on': doc.file === currentPath }"
-          :draggable="store.canEdit(doc)"
+          :class="{ 'is-on': doc.file === currentPath, 'is-batch-selected': batch.checked(doc) }"
+          :draggable="!batch.mode && store.canEdit(doc)"
           @dragstart="tree.start(doc, $event)"
           @dragover="tree.overRow(doc, $event)"
           @drop.prevent="tree.drop()"
           @dragend="tree.end()"
-          @click="emit('select', doc.file)"
+          @click="batch.mode ? batch.toggle(doc) : emit('select', doc.file)"
+          @contextmenu="onFlatDocContext($event, doc)"
         >
+          <button v-if="batch.mode" class="batch-check" role="checkbox" :aria-label="'选择' + doc.name" :aria-checked="batch.checked(doc)" :disabled="!batch.canToggle(doc)" @click.stop="batch.toggle(doc)"><PhCheck v-if="batch.checked(doc)" :size="11" weight="bold" /></button>
           <button class="doc-title" :title="isGuest ? doc.name + '（' + (store.canEdit(doc) ? '可编辑' : '只读') + '）' : doc.file"><ContentIcon v-if="doc.meta?.icon" :value="doc.meta.icon" :size="14" />
             <span class="truncate">{{ doc.name }}</span>
             <span v-if="doc.dir" class="doc-dir">{{ doc.dir }}</span>
           </button>
-          <button v-if="!isGuest" class="icon-btn xs acts-btn" title="更多操作" @click.stop="tree.openMenu('file', doc, $event)"><PhDotsThree :size="16" /></button>
+          <button v-if="!isGuest && !batch.mode" class="icon-btn xs acts-btn" title="更多操作" @click.stop="tree.openMenu('file', doc, $event)"><PhDotsThree :size="16" /></button>
         </div>
         <p v-if="!visibleCount" class="text-[12px] text-[var(--c-faint)] px-3 py-3 text-center">
           {{ query ? '没有匹配的文档' : '还没有文档' }}
@@ -1290,8 +1299,8 @@ const tree = reactive({
 
   openMenu(kind, node, ev) {
     this.closeMenu()
-    this.menuTrigger = ev.currentTarget.matches('button, [tabindex]')
-      ? ev.currentTarget : ev.currentTarget.querySelector('button, [tabindex]')
+    this.menuTrigger = kind === 'root' ? null : (ev.currentTarget.matches('button, [tabindex]')
+      ? ev.currentTarget : ev.currentTarget.querySelector('button, [tabindex]'))
     const r = ev.currentTarget.getBoundingClientRect()
     const w = 148
     this.menu = {
@@ -1335,6 +1344,89 @@ const tree = reactive({
 })
 provide('tree', tree)
 
+const batch = reactive({
+  mode: false,
+  selected: new Map(),
+  path(node) { return node.type === 'folder' ? node.path : node.file },
+  covered(node) {
+    const path = this.path(node)
+    return [...this.selected.values()].some(item => item.type === 'folder' && path.startsWith(item.path + '/'))
+  },
+  checked(node) { return this.selected.has(this.path(node)) || this.covered(node) },
+  canToggle(node) { return store.canEdit(node) && !this.covered(node) },
+  toggle(node) {
+    if (!this.mode || !this.canToggle(node)) return
+    const path = this.path(node)
+    if (this.selected.has(path)) { this.selected.delete(path); return }
+    if (node.type === 'folder') {
+      for (const key of this.selected.keys()) if (key.startsWith(path + '/')) this.selected.delete(key)
+    }
+    this.selected.set(path, { path, name: node.name, type: node.type })
+  },
+  cancel() { this.mode = false; this.selected.clear() }
+})
+provide('batch', batch)
+watch(currentLib, () => batch.cancel())
+
+function requestBatchDelete() {
+  if (!batch.selected.size) return
+  const current = new Map()
+  const visit = nodes => { for (const node of nodes) { current.set(batch.path(node), node); if (node.children) visit(node.children) } }
+  visit(props.nodes)
+  const selected = [...batch.selected.values()].map(item => current.get(item.path))
+  if (selected.some(node => !node || !store.canEdit(node))) {
+    store.error = '文档列表已变化，请重新选择'
+    batch.cancel()
+    return
+  }
+  const summary = selected.slice(0, 5).map(node => batch.path(node)).join('、')
+  const rest = selected.length > 5 ? `，还有 ${selected.length - 5} 项` : ''
+  askLibDialog({
+    title: `删除选中的 ${selected.length} 项？`,
+    message: `${summary}${rest}。将移入回收站${selected.some(node => node.type === 'folder') ? '，文件夹内的内容也会一并移入' : ''}。`,
+    confirmText: '移入回收站',
+    danger: true,
+    onConfirm: async () => {
+      closeLibDialog()
+      const currentPath = store.currentPath
+      const deletesCurrent = selected.some(node => currentPath === batch.path(node) || node.type === 'folder' && currentPath.startsWith(node.path + '/'))
+      if (deletesCurrent && store.isDirty && !(await store.save())) {
+        store.error = '当前文档未保存，未执行删除'
+        return
+      }
+      let done = 0
+      for (const node of selected) {
+        const path = batch.path(node)
+        try {
+          if (node.type === 'folder') await store.deleteCategory(path)
+          else await store.deleteDoc(path)
+          batch.selected.delete(path)
+          done++
+        } catch (error) {
+          store.error = `已移入回收站 ${done} 项；${path} 未删除：${String(error.message || error)}`
+          return
+        }
+      }
+      batch.cancel()
+    }
+  })
+}
+
+function onBlankTreeContext(event) {
+  if (isGuest.value || event.target.closest('.cat-row, .doc-row, button, input, textarea, [contenteditable="true"]')) return
+  event.preventDefault()
+  if (batch.mode) return
+  tree.openMenu('root', null, event)
+}
+
+function onFlatDocContext(event, doc) {
+  if (isGuest.value || event.target.closest('input, textarea, [contenteditable="true"]')) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (batch.mode) return
+  tree.openMenu('file', doc, event)
+}
+
 /** 菜单里列什么：目录多两项新建 */
 /** 改分享状态：失败了把错误显示出来（store.error 会在主区顶上提示） */
 async function guardShare(fn) {
@@ -1349,6 +1441,15 @@ const menuItems = computed(() => {
   if (!tree.menu.open || isGuest.value) return []
   const node = tree.menu.node
   const kind = tree.menu.kind
+  if (kind === 'root') {
+    const items = currentLibEditable.value ? [
+      { id: 'new-doc', label: '新建文档', icon: PhFilePlus },
+      { id: 'new-folder', label: '新建文件夹', icon: PhFolderSimplePlus }
+    ] : []
+    items.push({ id: 'rescan', label: '刷新', icon: PhArrowClockwise })
+    if (currentLibEditable.value) items.push({ id: 'batch-delete', label: '批量删除', icon: PhTrash })
+    return items
+  }
   const path = node?.path || node?.file
   const inherited = node?.lockedAt && node.lockedAt !== path
   const items = [
@@ -1361,7 +1462,7 @@ const menuItems = computed(() => {
   if (kind === 'lib') {
     if (!isGuest.value) items.push({ id:'lib-icon',label:'更换图标',icon:PhImage },{ id:'lib-rename',label:'重命名',icon:PhPencilSimple },{ id:'lib-delete',label:'删除知识库',icon:PhTrash,danger:true })
   } else {
-    if (kind === 'folder') items.push({id:'new-doc',label:'新建文档',icon:PhFilePlus},{id:'new-folder',label:'新建目录',icon:PhFolderSimplePlus})
+    if (kind === 'folder') items.push({id:'new-doc',label:'新建文档',icon:PhFilePlus},{id:'new-folder',label:'新建文件夹',icon:PhFolderSimplePlus})
     items.push({id:'copy-to',label:'复制到知识库',icon:PhCopy},{id:'move-to',label:'移动到知识库',icon:PhArrowRight})
     items.push({id:'rename',label:'重命名',icon:PhPencilSimple},{id:'delete',label:kind==='folder'?'删除目录':'删除',icon:PhTrash,danger:true})
   }
@@ -1383,6 +1484,13 @@ function onMenuPick(item) {
   const kind = tree.menu.kind
   const node = tree.menu.node
   tree.closeMenu()
+  if (kind === 'root') {
+    if (item.id === 'new-doc' && currentLibEditable.value) emit('create-doc', currentLib.value || '')
+    else if (item.id === 'new-folder' && currentLibEditable.value) emit('create-category', currentLib.value || '')
+    else if (item.id === 'rescan') rescan()
+    else if (item.id === 'batch-delete' && currentLibEditable.value) { batch.selected.clear(); batch.mode = true }
+    return
+  }
   if (!node || item.disabled) return
   if (item.id === 'reveal') {
     showInFinder(node.path || node.file)
@@ -1573,7 +1681,7 @@ function expandTo(name) {
  * 重新扫描磁盘。
  *
  * 树本来就是每次扫盘生成的，所以在 app 外面改名、挪目录、新建、删除之后，
- * 点一下这个按钮（或者刷新页面）就一致了，不需要文件监听。
+ * 从侧栏空白处右键刷新（或者刷新页面）就一致了，不需要文件监听。
  * 当前这篇没改过的话顺便把正文也重新读一遍，外面改过内容也能看到。
  */
 async function rescan() {
@@ -1689,6 +1797,7 @@ function onLibEscape(e) {
   if(footerTools.value){footerTools.value=false;toolsTrigger.value?.focus();return}
   if (transfer.open) { transfer.open = false; return }
   if (managerOpen.value) { managerOpen.value = false; return }
+  if (batch.mode) { batch.cancel(); return }
   if (!libPanel.open || !isMobileLibView()) return
   if (tree.menu.open) {
     tree.closeMenu()
@@ -1896,12 +2005,15 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
   display: grid;
   place-items: center;
 }
-.sidebar-toolbar { container-type: inline-size; }
-.sidebar-toolbar .newdoc-btn { flex: none; }
-@container (max-width: 175px) {
-  .sidebar-toolbar .newdoc-label { display: none; }
-  .sidebar-toolbar .newdoc-btn { width: 28px; padding: 0; justify-content: center; }
-}
+/* 文件夹入口与工具条同排，文字直接说明图标的动作。 */
+.newfolder-btn { display:inline-flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:0 6px;border-radius:var(--radius-control);color:var(--c-faint);font-size:12px;white-space:nowrap; }
+.newfolder-btn:hover { background:var(--c-hover);color:var(--c-ink); }
+.batch-bar{display:flex;align-items:center;gap:5px;color:var(--c-sub);font-size:12px}
+.batch-bar span{flex:1;min-width:0}
+.batch-bar button{padding:5px 7px;border-radius:var(--radius-control);white-space:nowrap}
+.batch-bar button:hover{background:var(--c-hover)}
+.batch-bar .batch-delete{color:#c8403b}
+.batch-bar .batch-delete:disabled{opacity:.4;cursor:default}
 .newdoc-btn { transition: transform .12s ease; }
 .newdoc-btn:active {
   transform: scale(0.985);

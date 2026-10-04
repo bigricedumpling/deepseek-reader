@@ -7,17 +7,18 @@
         <div
           class="cat-row group/cat"
           @contextmenu="contextRow($event,'folder',node)"
-          :class="{ 'is-drop': tree.dropInto === node.path, 'is-on': containsCurrent(node), 'is-dragging': isDragging(node) }"
+          :class="{ 'is-drop': tree.dropInto === node.path, 'is-on': containsCurrent(node), 'is-dragging': isDragging(node), 'is-batch-selected': batch.checked(node) }"
           :data-level="depth"
           :style="{ paddingLeft: 8 + depth * 11 + 'px' }"
-          :draggable="store.canEdit(node)"
-          @click="emit('toggle', node.path)"
+          :draggable="!batch.mode && store.canEdit(node)"
+          @click="batch.mode ? batch.toggle(node) : emit('toggle', node.path)"
           @dragstart="tree.start(node, $event)"
           @dragover="tree.overRow(node, $event)"
           @drop.prevent="tree.drop()"
           @dragend="tree.end()"
         >
-          <span class="w-3.5 shrink-0 flex items-center justify-center text-[var(--c-sub)]">
+          <button v-if="batch.mode" class="batch-check" role="checkbox" :aria-label="'选择' + node.name" :aria-checked="batch.checked(node)" :disabled="!batch.canToggle(node)" @click.stop="batch.toggle(node)"><PhCheck v-if="batch.checked(node)" :size="11" weight="bold" /></button>
+          <span class="w-3.5 shrink-0 flex items-center justify-center text-[var(--c-sub)]" @click.stop="emit('toggle', node.path)">
             <PhCaretDown v-if="!isCollapsed(node.path)" :size="11" />
             <PhCaretRight v-else :size="11" />
           </span>
@@ -38,7 +39,7 @@
           />
           <span v-else class="cat-name ml-2 text-[12.5px] text-[var(--c-sub)] truncate" :title="store.isGuest ? node.name + '（' + (store.canEdit(node) ? '可编辑' : '只读') + '）' : node.name" :draggable="store.canEdit(node)">{{ node.name }}</span>
           <button
-            v-if="!store.isGuest"
+            v-if="!store.isGuest && !batch.mode"
             class="icon-btn xs acts-btn"
             title="更多操作"
             @click.stop="tree.openMenu('folder', node, $event)"
@@ -79,15 +80,16 @@
       <div
         class="doc-row group/doc"
         @contextmenu="contextRow($event,'file',node)"
-        :class="{ 'is-on': node.file === currentPath, 'is-dragging': isDragging(node), 'is-pdf': node.type === 'pdf' }"
+        :class="{ 'is-on': node.file === currentPath, 'is-dragging': isDragging(node), 'is-pdf': node.type === 'pdf', 'is-batch-selected': batch.checked(node) }"
         :data-level="depth"
         :style="{ paddingLeft: 26 + depth * 11 + 'px' }"
-        :draggable="store.canEdit(node)"
+        :draggable="!batch.mode && store.canEdit(node)"
         @dragstart="tree.start(node, $event)"
         @dragover="tree.overRow(node, $event)"
         @drop.prevent="tree.drop()"
         @dragend="tree.end()"
       >
+        <button v-if="batch.mode" class="batch-check" role="checkbox" :aria-label="'选择' + node.name" :aria-checked="batch.checked(node)" :disabled="!batch.canToggle(node)" @click.stop="batch.toggle(node)"><PhCheck v-if="batch.checked(node)" :size="11" weight="bold" /></button>
         <input
           v-if="isEditing('doc', node)"
           ref="editEl"
@@ -103,8 +105,8 @@
           :class="node.type === 'pdf' || node.type === 'h5' ? 'pdf-title' : 'doc-title'"
           :draggable="store.canEdit(node)"
           :title="store.isGuest ? node.name + '（' + (guestEditable(node) ? '可编辑' : '只读') + '）' : node.file"
-          @click="emit('select', node.file)"
-          @dblclick="store.canEdit(node) && tree.editStart('doc', node)"
+          @click="batch.mode ? batch.toggle(node) : emit('select', node.file)"
+          @dblclick="!batch.mode && store.canEdit(node) && tree.editStart('doc', node)"
         >
           <ContentIcon v-if="node.meta?.icon" :value="node.meta.icon" :size="14" class="doc-kind" /><PhFilePdf v-else-if="node.type === 'pdf'" :size="13" class="doc-kind" />
           <PhFileHtml v-else-if="node.type === 'h5'" :size="13" class="doc-kind" />
@@ -112,7 +114,7 @@
         </button>
         <span class="doc-time">{{ relTime(node.mtime) }}</span>
         <button
-          v-if="!store.isGuest"
+          v-if="!store.isGuest && !batch.mode"
           class="icon-btn xs acts-btn"
           title="更多操作"
           @click.stop="tree.openMenu('file', node, $event)"
@@ -127,11 +129,11 @@
 </template>
 
 <script setup>
-function contextRow(e,kind,node){if(store.isGuest||e.target.closest('input,textarea,[contenteditable=true]'))return;e.preventDefault();e.stopPropagation();tree.openMenu(kind,node,e)}
+function contextRow(e,kind,node){if(store.isGuest||e.target.closest('input,textarea,[contenteditable=true]'))return;e.preventDefault();e.stopPropagation();if(!batch.mode)tree.openMenu(kind,node,e)}
 
 import ContentIcon from './ContentIcon.vue'
 import { ref, computed, inject, nextTick, watch } from 'vue'
-import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree } from '@phosphor-icons/vue'
+import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree, PhCheck } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
 
 const props = defineProps({
@@ -144,6 +146,7 @@ const props = defineProps({
   /** 这一层挂在哪个目录下（拖拽排序要知道是不是同一层） */
   parent: { type: String, default: '' }
 })
+const batch = inject('batch')
 const emit = defineEmits([
   'select', 'create-doc', 'create-category', 'delete-doc', 'delete-category', 'toggle'
 ])

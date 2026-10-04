@@ -657,4 +657,9 @@ button:focus-visible{outline:2px solid var(--color-ds);outline-offset:3px}
 .lib-row::before{border-radius:var(--radius-row)}
 .doc-row:hover,.lib-row:hover,.lib-row.is-current{--row-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-panel))}
 .doc-row.is-on{--row-fill:color-mix(in srgb,var(--color-ds) 10%,var(--c-panel))}
+.doc-row.is-batch-selected{--row-fill:color-mix(in srgb,var(--color-ds) 13%,var(--c-panel))}
+.cat-row.is-batch-selected{background:color-mix(in srgb,var(--color-ds) 13%,var(--c-panel))}
+.batch-check{display:inline-grid;place-items:center;flex:none;width:17px;height:17px;margin-right:7px;border:1px solid var(--c-faint);border-radius:5px;color:#fff}
+.batch-check[aria-checked="true"]{border-color:var(--color-ds);background:var(--color-ds)}
+.batch-check:disabled:not([aria-checked="true"]){opacity:.35}
 .doc-tab-dot{corner-shape:round}
