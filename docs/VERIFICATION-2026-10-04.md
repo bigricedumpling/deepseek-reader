@@ -2,7 +2,7 @@
 
 ## 环境与隔离
 
-- 分支：`product-v1-foundation`，版本 `0.2.0-preview.1`，尚未发布。
+- 分支：`product-v1-foundation`，版本 `0.2.0-preview.1`，已作为 GitHub Preview 发布。
 - macOS，Node.js 24.19.0；DSH NEXT 2.0.16-next，内含 DSH 0.2.0-rc.1。
 - UI 使用独立 8197 服务与临时测试知识库；安装验收使用独立 DSH_HOME/profile，数据路径包含中文和空格。
 - 原仓库仍为 `8c9e50e54948f0bda6893594ad4fd22571f05d7e`，工作区干净；未写入个人笔试题文档，未重启 8090，未部署服务器或替换公开包。
@@ -30,7 +30,7 @@
 
 三平台 Node 24 矩阵已在 GitHub 实际执行。首次运行发现 DOMPurify 直接依赖范围与 override 精确版本不一致，导致干净 `npm ci` 失败；已经统一为 `3.4.16`，临时干净目录复验安装解析通过。第二轮 macOS/Linux 功能测试通过，CI 打包参数误写为 workspace 选择器；Windows 权限检查通过后因测试数据库句柄未关闭而清理失败。两处已修复，Windows 目录逃逸测试改用系统支持的 junction。第三轮 macOS/Linux 全部通过；Windows 检出改名时把系统反斜杠写入内部路径键的问题，已统一为 `/`，继续用原有稳定标识、权限和附件测试验证。随后修复 Windows tar 清单的 CRLF 解析。最终提交 `52ff76e67f489fd56b5970e55c471b47b6c91c9f` 在 macOS、Windows、Ubuntu 三个平台全部通过，包括干净安装、构建、全部功能测试、打包和解包后的真实服务启动。
 
-[基础版本 CI：三平台全部通过](https://github.com/bigricedumpling/deepseek-reader/actions/runs/37179466583)。该记录对应 `52ff76e`。随后还修复了编辑体验、菜单、标签与浏览记录界面，运行代码已变化，最新本机证据另见 [最终审查](RELEASE-AUDIT-2026-10-04.md)，不能把旧 CI 当作最新提交的远程验收。
+[基础版本 CI：三平台全部通过](https://github.com/bigricedumpling/deepseek-reader/actions/runs/37179466583)。最终发布提交 `e69e0d1` 的 [三平台 CI](https://github.com/bigricedumpling/deepseek-reader/actions/runs/37194406725) 也已通过，最新本机证据见 [最终审查](RELEASE-AUDIT-2026-10-04.md)。
 
 ## 界面复查
 
@@ -64,4 +64,4 @@
 
 ## 同步状态
 
-基础版本已提交到 GitHub 隔离分支。最新界面修复本地提交为 `eaf4903`，本轮推送遇到 HTTPS 连接超时，远端仍是 `27d424a`。未合并主分支或发布安装包。Gitea 连接返回证书过期，保持 TLS 校验，没有绕过；待连接和服务器证书恢复后补齐同步。
+最终提交 `e69e0d1` 已按原 SHA 同步到 GitHub 隔离分支，并发布 `v0.2.0-preview.1` 安装包。市场 PR 已更新为新包，仍待检查与审批。Gitea 连接返回证书过期，保持 TLS 校验，没有绕过；证书恢复后再补齐同步。现有交付服务器未部署这次更新。
