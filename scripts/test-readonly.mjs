@@ -76,7 +76,7 @@ try {
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'reader-outside-'))
   try {
     fs.writeFileSync(path.join(outside, 'secret.md'), '# Outside\n')
-    fs.symlinkSync(outside, path.join(root, 'link'))
+    fs.symlinkSync(outside, path.join(root, 'link'), process.platform === 'win32' ? 'junction' : 'dir')
     const escaped = await request('GET', '/api/doc?path=link%2Fsecret.md', null, 'owner')
     assert.equal(escaped.json.ok, false, 'a symbolic link must not escape the document root')
     const escapedTree = await request('GET', '/api/tree?lib=link', null, 'owner')
@@ -88,5 +88,7 @@ try {
   }
   console.log('只读写入、路径越界和覆盖前备份检查均通过')
 } finally {
+  const {workspace}=await import('../server/storage/workspace.js')
+  workspace(root).db.close()
   fs.rmSync(root, { recursive: true, force: true })
 }

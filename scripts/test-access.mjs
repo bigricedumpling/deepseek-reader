@@ -76,4 +76,4 @@ try{
  share.setLocked('Demo',false)
  assert.equal(share.isShared('Demo'),true,'解锁不应改变公开状态')
  console.log('公开范围、继承锁、管理密码、读写/移动/删除/排序防绕过与公开示例编辑均通过')
-}finally{fs.rmSync(root,{recursive:true,force:true})}
+}finally{const {workspace}=await import('../server/storage/workspace.js');workspace(root).db.close();fs.rmSync(root,{recursive:true,force:true})}
