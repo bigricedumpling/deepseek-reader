@@ -21,9 +21,9 @@ Agent 可以在工作区生成文档、收集网页和处理资料，但产出�
 
 ## 安装与版本
 
-当前公开安装包：[v0.1.0-preview.2](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.2)。在 DSH NEXT 的「插件 → 添加插件」选择发布页的 `.tgz`，再从右侧栏「开始 → 阅读器」进入。**安装包自带 Reader 页面和本机服务，不需要用户另装 Reader 或 Node.js。**
+Preview 安装包：[v0.2.0-preview.1](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.2.0-preview.1)。在 DSH NEXT 的「插件 → 添加插件」选择发布页的 `.tgz`，再从右侧栏「开始 → 阅读器」进入。**安装包自带 Reader 页面和本机服务，不需要用户另装 Reader 或 Node.js。**
 
-本分支正在开发 `0.2.0-preview.1`，尚未发布，不能把这里的新能力视为已安装版本的能力。市场审核与安装包发布是两个独立步骤；市场是否可搜索以实际收录为准。
+市场审核与安装包发布是两个独立步骤；市场是否可搜索以实际收录为准。旧版 [v0.1.0-preview.2](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.2) 保留供需要回退的用户下载。
 
 公开 Preview 已验证 macOS DSH NEXT。新分支已补 Windows/Linux 的数据路径与安装声明，但仍需真实宿主安装验收。Web 技术栈不意味着宿主、进程和文件管理器行为自动跨平台一致。见 [平台与发布验收](docs/RELEASE-READINESS.md)。
 

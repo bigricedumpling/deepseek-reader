@@ -225,21 +225,18 @@
         </button>
       </div>
 
-    <!-- 新建文档（新建目录在下面工具条那一排的文件夹按钮，不重复放） -->
-    <div v-if="currentLibEditable" class="px-3 pt-2 pb-3">
+    <!-- 工具条 -->
+    <div class="sidebar-toolbar px-3 pt-2 pb-2 flex items-center gap-0.5 shrink-0">
       <button
-        class="newdoc-btn w-full h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
-        title="在根目录新建文档"
+        v-if="currentLibEditable"
+        class="newdoc-btn flex h-7 items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-[12px] text-[var(--c-ink)] hover:bg-[var(--c-hover)]"
+        title="新建文档"
+        aria-label="新建文档"
         @click="emit('create-doc', currentLib || '')"
       >
-        <PhPlus :size="13" weight="bold" />
-        新建文档
+        <PhFilePlus :size="16" />
+        <span class="newdoc-label">新建</span>
       </button>
-    </div>
-
-    <!-- 工具条 -->
-    <div class="px-3 pb-2 flex items-center gap-0.5 shrink-0">
-      <span class="toolbar-label">文档</span>
       <span class="ml-auto flex items-center gap-0.5">
         <button
           class="icon-btn"
@@ -1899,15 +1896,12 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
   display: grid;
   place-items: center;
 }
-.toolbar-label {
-  font-size: 12px;
-  color: var(--c-faint);
-  padding-left: 6px;
-  letter-spacing: 0.02em;
+.sidebar-toolbar { container-type: inline-size; }
+.sidebar-toolbar .newdoc-btn { flex: none; }
+@container (max-width: 175px) {
+  .sidebar-toolbar .newdoc-label { display: none; }
+  .sidebar-toolbar .newdoc-btn { width: 28px; padding: 0; justify-content: center; }
 }
-
-
-/* 新建文档使用填充底色区分状态，无描边。 */
 .newdoc-btn { transition: transform .12s ease; }
 .newdoc-btn:active {
   transform: scale(0.985);

@@ -2,11 +2,9 @@
 
 Reader 在 DSH 右侧栏提供本机知识库阅读、编辑，以及工作区 Markdown 预览。插件安装包包含完整网页和本机服务。启用插件后自动启动，无需另装 Reader、Node.js 或运行终端命令。
 
-> 本目录当前为 0.2.0-preview.1 开发代码，尚未发布。以下下载步骤安装的是 preview.2。
-
 ## 安装
 
-1. 从 [Preview 发布页](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.2)下载 `dsh-reader-workspace-0.1.0-preview.2.tgz`，在 DSH NEXT 的「插件 → 添加插件」选择这个文件。
+1. 从 [Preview 发布页](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.2.0-preview.1)下载 `dsh-reader-workspace-0.2.0-preview.1.tgz`，在 DSH NEXT 的「插件 → 添加插件」选择这个文件。
 2. 在右侧栏「开始」页点击「阅读器」。首次使用会自动创建本机数据目录。
 3. 在 DSH 文件区打开 Markdown，可用 Reader 预览；在 Reader 顶栏点外部打开图标，可在浏览器打开当前页面。
 
@@ -14,9 +12,9 @@ Reader 在 DSH 右侧栏提供本机知识库阅读、编辑，以及工作区 M
 
 ## 本机数据
 
-默认知识库目录是 `~/Library/Application Support/Reader/知识库`。它不在插件安装目录中，更新或卸载插件不会删除文档。本机服务只监听回环地址。开发中的 0.2.0-preview.1 会保存首次分配的端口并在重启后复用。
+macOS 默认知识库目录是 `~/Library/Application Support/Reader/知识库`。它不在插件安装目录中，更新或卸载插件不会删除文档。本机服务只监听回环地址，并会保存首次分配的端口供重启复用。
 
-如果本机 `127.0.0.1:8090` 已有旧 Reader，插件会先接入它，以保留此前的知识库体验；公开 preview.2 在旧服务关闭后会自动使用随包服务；开发中的 0.2 分支已改为保留原连接并提示离线，避免切换到另一份空库。迁移旧目录前请先备份。需要沿用原目录的高级用户可在启动 DSH 前设置 `DSH_READER_DATA_DIR`，插件不会自行移动旧数据。在插件详情中可手动连接另一台 Reader；远程地址需使用 HTTPS。
+如果本机 `127.0.0.1:8090` 已有旧 Reader，插件会先接入它，以保留此前的知识库体验；旧服务离线时会提示离线，避免切换到另一份空库。迁移旧目录前请先备份。需要沿用原目录的高级用户可在启动 DSH 前设置 `DSH_READER_DATA_DIR`，插件不会自行移动旧数据。在插件详情中可手动连接另一台 Reader；远程地址需使用 HTTPS。
 
 ## 工作区 Markdown 与 Agent
 
@@ -28,7 +26,7 @@ Reader 在 DSH 右侧栏提供本机知识库阅读、编辑，以及工作区 M
 
 ## 支持范围与已知问题
 
-- 已公开的 preview.2 面向 macOS 本机 DSH NEXT。已用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）及全新 DSH Web profile 验证安装包自动启动和阅读器入口。新分支增加 Windows/Linux 安装与路径支持，仍待真实 DSH 桌面验收；iOS 不作为 DSH 插件平台。
+- 0.2.0-preview.1 面向 macOS 本机 DSH NEXT。已用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）及全新 DSH Web profile 验证安装包自动启动和阅读器入口。Windows/Linux 安装与路径支持仍待真实 DSH 桌面验收；iOS 不作为 DSH 插件平台。
 - Agent 工具仍需单独授权；客户端连接地址不会自动配置 Agent 令牌。
 - 临时访客链接依赖 `cloudflared` 与网络；真实外部设备的端到端连通性尚未完成验收。
 - 工作区预览是快照，收录后为独立副本，不提供双向同步或多人协作。
