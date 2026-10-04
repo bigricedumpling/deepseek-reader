@@ -10,3 +10,14 @@
 /* Anchored icon pickers do not dim the page, so they use the menu level. */
 .icon-picker.reader-dialog{border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-menu-shadow)!important}
 .crepe-host{--crepe-shadow-1:var(--surface-menu-shadow);--crepe-shadow-2:var(--surface-menu-shadow)}
+/* Application groups are separated by spacing, never horizontal rules. */
+:is(.doc-options-divider,.type-section-break,.share-sep,.side-menu-sep,.side-menu hr,.tree-menu hr,.lib-manager hr,.reader-dialog hr){height:0!important;border:0!important;background:none!important;margin:10px 0!important}
+:is(.lib-manager-head,.lib-manager-footer,.lib-panel-topbar,.workspace-history-footer,.reader-bottombar,.pick-head,.pick-foot){border-top:0!important;border-bottom:0!important}
+.crepe-host .milkdown .milkdown-slash-menu .tab-group{border:0;margin-bottom:8px}
+/* Collapsed navigation must never paint over a floating control. */
+:root{--layer-navigation:30;--layer-popover:90;--layer-modal-backdrop:110;--layer-modal:120;--layer-hint:160}
+aside.is-reader-rail{z-index:var(--layer-navigation)!important}
+:is(.pop-menu,.select-menu-panel,.text-style-menu,.bt-menu){z-index:var(--layer-popover)!important}
+:is(.reader-modal-shade,.app-backdrop,.access-backdrop,.public-sharing-backdrop,.transfer-backdrop,.lib-manager-backdrop){z-index:var(--layer-modal-backdrop)!important}
+.lib-manager{z-index:var(--layer-modal)!important}
+:is(.reader-tooltip,.rail-toc-hint){z-index:var(--layer-hint)!important}

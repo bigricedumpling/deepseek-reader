@@ -12,14 +12,8 @@
       </details>
       <input ref="replacementInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="replaceImage" />
     </div>
-    <div v-if="!readonly" class="source-mode-note ui-font">
-      <div class="source-mode-bar" role="group" aria-label="编辑方式">
-        <button class="lossy-btn" :aria-pressed="!sourceEditing" @click="returnToEditor">{{ lossy ? '阅读' : '编辑' }}</button>
-        <button class="lossy-btn" :aria-pressed="sourceEditing" @click="sourceEditing=true">Markdown</button>
-      </div>
-    </div>
     <textarea
-      v-if="sourceEditing && !readonly"
+      v-if="lossy && !readonly"
       ref="srcEl"
       class="src-editor"
       aria-label="Markdown 内容"
@@ -28,9 +22,10 @@
       spellcheck="false"
       @input="onSourceInput"
     />
-    <MarkdownReading v-if="lossy && (!sourceEditing || readonly)" :value="value" />
-    <div v-show="!lossy && !sourceEditing" ref="host" class="crepe-host"></div>
+    <MarkdownReading v-if="lossy && readonly" :value="value" />
+    <div v-show="!lossy" ref="host" class="crepe-host"></div>
 
+    <FormulaEditor v-if="formula" :value="formula.node.attrs.value" @close="formula=null" @save="saveFormula" />
     <RawBlockEditor v-if="rawBlock" :value="rawBlock.node.attrs.value" @close="rawBlock=null" @save="saveRawBlock" />
     <!-- 块左侧那个六点手柄，点一下弹出来的转为菜单 -->
     <Transition name="pop">
@@ -60,7 +55,8 @@ import TextStyleMenu from './TextStyleMenu.vue'
 import IconPicker from './IconPicker.vue'
 import MarkdownReading from './MarkdownReading.vue'
 import RawBlockEditor from './RawBlockEditor.vue'
-import { preservedRemark, preservedSchema, configurePreservedMarkdown } from '../utils/editor-preserved'
+import FormulaEditor from './FormulaEditor.vue'
+import { preservedRemark, preservedSchema, editableHtmlSchema, configurePreservedMarkdown } from '../utils/editor-preserved'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
@@ -105,7 +101,6 @@ const colw = useTableColumnWidths({
 })
 /** 这篇有没有编辑器表达不了的结构，有就走源码编辑 */
 const lossy = ref(false)
-const sourceEditing = ref(false)
 /** 有损时：还原后的文本（用户点"按编辑器规范重排"就写它）与差异行 */
 const uploadError = ref('')
 const replacementInput = ref(null)
@@ -315,7 +310,7 @@ onMounted(async () => {
   crepe.editor.use(columnsRemark).use(columnSchema).use(columnsSchema).use(columnsDrag)
   crepe.editor.use(richBlockRemark).use(calloutSchema).use(richBlockSchema).use(calloutKeys)
   crepe.editor.use(inlineStyleRemark).use(textColorMark).use(highlightMark).use(underlineMark)
-  crepe.editor.use(preservedRemark).use(preservedSchema)
+  crepe.editor.use(preservedRemark).use(preservedSchema).use(editableHtmlSchema)
   // 正文里的标题折叠（跟右侧目录共用一份折叠状态）
   crepe.editor.use(editorFold())
 
@@ -341,6 +336,8 @@ onMounted(async () => {
    * 所以在宿主上捕获一层。第一个按钮是加号（加点下面插入新块），
    * 第二个是六点拖拽手柄 —— 单击它弹转为菜单，拖动就还给 Crepe 去挪块。
    */
+  host.value?.addEventListener('pointerdown', openFormula, true)
+  host.value?.addEventListener('keydown', openFormula, true)
   host.value?.addEventListener('pointerdown', onHandleDown, true)
   host.value?.addEventListener('click', onHandleClick, true)
   host.value?.addEventListener('click', onHeadingClick, true)
@@ -392,11 +389,13 @@ onMounted(async () => {
    * 列宽用更短的等待：拖拽时要跟手，mermaid 要等异步渲染，两者节奏不一样。
    */
   observer = new MutationObserver(() => {
+    decorateFormula()
     mermaid.schedule()
     colw.schedule()
   })
   observer.observe(host.value, { childList: true, subtree: true, characterData: true })
   mermaid.schedule()
+  decorateFormula()
 
   // 表格列宽：把这篇存过的取回来，再挂上拖拽
   colw.load()
@@ -424,7 +423,16 @@ function viewOf() {
 
 function restoreVersion(e){if(!props.readonly&&e.detail.path===props.docFile)emit('restore',e.detail.content)}
 function openRichDoc(e){emit('open-doc',e.detail)}
-const calloutPicker=shallowRef(null),rawBlock=shallowRef(null)
+const calloutPicker=shallowRef(null),rawBlock=shallowRef(null),formula=shallowRef(null)
+function decorateFormula(){if(props.readonly)return;for(const el of host.value?.querySelectorAll('[data-type="math_inline"]')||[]){el.setAttribute('tabindex','0');el.setAttribute('role','button');el.setAttribute('aria-label','编辑公式')}}
+function openFormula(e){
+ if(props.readonly||(e.type==='keydown'&&e.key!=='Enter'))return
+ const el=e.target.closest('[data-type="math_inline"]'),view=viewOf();if(!el||!view)return
+ e.preventDefault();e.stopImmediatePropagation()
+ view.state.doc.descendants((node,pos)=>{if(node.type.name==='math_inline'&&view.nodeDOM(pos)===el){formula.value={pos,node};return false}})
+}
+function saveFormula(value){const view=viewOf(),target=formula.value;if(!view||!target||view.state.doc.nodeAt(target.pos)!==target.node)return;userTyped=true;view.dispatch(view.state.tr.setNodeMarkup(target.pos,undefined,{...target.node.attrs,value}));formula.value=null;view.focus()}
+
 function openRawBlock(e){
  if(props.readonly)return
  const raw=e.target.closest('[data-reader-raw]'),view=viewOf()
@@ -736,7 +744,6 @@ async function onMenuPick(kind) {
   applyBlockKind(view, kind)
 }
 
-function returnToEditor(){if(sourceEditing.value)emit('rebuild');sourceEditing.value=false}
 function onSourceInput(e) {
   emit('update:value', e.target.value)
 }
@@ -749,6 +756,8 @@ onBeforeUnmount(async () => {
   host.value?.removeEventListener('click', openCalloutIcon)
   host.value?.removeEventListener('click', openRawBlock)
   host.value?.removeEventListener('keydown', onCalloutIconKey, true)
+  host.value?.removeEventListener('pointerdown', openFormula, true)
+  host.value?.removeEventListener('keydown', openFormula, true)
   host.value?.removeEventListener('pointerdown', onHandleDown, true)
   host.value?.removeEventListener('click', onHandleClick, true)
   host.value?.removeEventListener('click', onHeadingClick, true)

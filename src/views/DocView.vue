@@ -34,169 +34,21 @@
           <div v-if="open === 'type'" class="pop-menu is-panel type-panel">
 
             <div class="type-tabs" role="tablist" aria-label="排版设置">
-              <button v-for="section in [{ id: 'text', label: '文字' }, { id: 'paragraph', label: '段落' }, { id: 'table', label: '表格' }]" :key="section.id" role="tab" :aria-selected="typeSection === section.id" :class="{ 'is-on': typeSection === section.id }" @click="typeSection = section.id">{{ section.label }}</button>
+              <button v-for="section in [{id:'text',label:'常用'},{id:'advanced',label:'更多'}]" :key="section.id" role="tab" :aria-selected="typeSection===section.id" :class="{'is-on':typeSection===section.id}" @click="typeSection=section.id">{{section.label}}</button>
             </div>
-            <div v-if="typeSection === 'paragraph'">
-            <p class="type-label"><span class="label-main"><component :is="PhArrowsHorizontal" :size="12" class="label-icon" />正文宽度</span></p>
-            <div class="type-row columns-3">
-              <button
-                v-for="w in WIDTHS"
-                :key="w.value"
-                class="type-chip"
-                :class="{ 'is-on': reader.measure === w.value }"
-                @click="pickWidth(w.value)"
-              >
-                <component v-if="w.icon" :is="w.icon" :size="13" class="chip-icon" />
-                {{ w.label }}
-              </button>
+            <div v-if="typeSection==='text'" class="type-groups">
+              <section class="type-group"><p class="type-label">正文宽度</p><div class="type-row columns-3"><button v-for="w in WIDTHS" :key="w.value" class="type-chip" :class="{'is-on':reader.measure===w.value}" @click="reader.measure=w.value">{{w.label}}</button></div></section>
+              <section class="type-group"><p class="type-label">字号</p><div class="type-row columns-4"><button v-for="size in SIZES" :key="size.value" class="type-chip" :class="{'is-on':reader.size===size.value}" @click="reader.size=size.value">{{size.label}}</button></div></section>
+              <section class="type-group"><p class="type-label">字体</p><SelectMenu v-model="reader.font" :options="FONTS.map(f=>({value:f.id,label:f.label}))" label="字体" /></section>
+              <section class="type-group"><p class="type-label"><span>行距</span><span class="tabular-nums">{{reader.leading.toFixed(2)}}</span></p><div class="type-row columns-3"><button v-for="pace in PACE_OPTIONS" :key="pace.id" class="type-chip" :class="{'is-on':Math.abs(reader.leading-pace.lh)<.02}" @click="reader.leading=pace.lh">{{pace.label}}</button></div><input class="type-range" type="range" aria-label="行距" min="1.4" max="2.4" step=".05" :value="reader.leading" @input="reader.leading=Number($event.target.value)" /></section>
             </div>
-            </div>
-            <div v-if="typeSection === 'text'">
-
-            <p class="type-label"><span class="label-main"><component :is="PhTextT" :size="12" class="label-icon" />正文字号</span></p>
-            <div class="type-row columns-4">
-              <button
-                v-for="s2 in SIZES"
-                :key="s2.value"
-                class="type-chip"
-                :class="{ 'is-on': reader.size === s2.value }"
-                @click="pickSize(s2.value)"
-              >
-                <component v-if="s2.icon" :is="s2.icon" :size="13" class="chip-icon" />
-                {{ s2.label }}
-              </button>
-            </div>
-
-            <p class="type-label"><span class="label-main"><component :is="PhTextAa" :size="12" class="label-icon" />正文字体</span></p>
-            <div class="type-row columns-2 font-choices">
-              <button
-                v-for="f in FONTS"
-                :key="f.id"
-                class="type-chip"
-                :class="{ 'is-on': reader.font === f.id }"
-                :title="f.hint || f.label"
-                @click="reader.font = f.id"
-              >
-                <span class="font-sample" :style="{ fontFamily: f.stack }">文</span>
-                {{ f.label }}
-              </button>
-            </div>
-            <p class="type-label"><span class="label-main"><component :is="PhTextB" :size="12" class="label-icon" />中文加粗</span></p>
-            <div class="type-row columns-2">
-              <button
-                v-for="w in STRONG_FACES"
-                :key="w.id"
-                class="type-chip"
-                :class="{ 'is-on': reader.strongFace === w.id }"
-                @click="reader.strongFace = w.id"
-              >
-                <component v-if="w.icon" :is="w.icon" :size="13" class="chip-icon" />
-                {{ w.label }}
-              </button>
-            </div>
-
-            <p class="type-label"><span class="label-main"><component :is="PhTextItalic" :size="12" class="label-icon" />中文斜体显示</span></p>
-            <div class="type-row columns-2">
-              <button
-                v-for="i2 in ITALIC_FACES"
-                :key="i2.id"
-                class="type-chip"
-                :class="{ 'is-on': reader.italicFace === i2.id }"
-                @click="reader.italicFace = i2.id"
-              >
-                <component v-if="i2.icon" :is="i2.icon" :size="13" class="chip-icon" />
-                {{ i2.label }}
-              </button>
-            </div>
-
-            </div>
-            <div v-if="typeSection === 'paragraph'">
-            <p class="type-label"><span class="label-main"><component :is="PhParagraph" :size="12" class="label-icon" />段落样式</span></p>
-            <div class="type-row columns-2">
-              <button
-                v-for="p2 in PARA_STYLES"
-                :key="p2.id"
-                class="type-chip"
-                :class="{ 'is-on': reader.paraStyle === p2.id }"
-                @click="reader.paraStyle = p2.id"
-              >
-                <component v-if="p2.icon" :is="p2.icon" :size="13" class="chip-icon" />
-                {{ p2.label }}
-              </button>
-            </div>
-            </div>
-            <div v-if="typeSection === 'table'">
-
-            <p class="type-label"><span class="label-main"><component :is="PhTable" :size="12" class="label-icon" />表格宽度</span></p>
-            <div class="type-row columns-2">
-              <button
-                v-for="tw in TABLE_WIDTHS"
-                :key="tw.id"
-                class="type-chip"
-                :class="{ 'is-on': reader.tableWidth === tw.id }"
-                @click="reader.tableWidth = tw.id"
-              >
-                <component v-if="tw.icon" :is="tw.icon" :size="13" class="chip-icon" />
-                {{ tw.label }}
-              </button>
-            </div>
-
-            <p class="type-label"><span class="label-main"><component :is="PhTextAlignLeft" :size="12" class="label-icon" />表格对齐</span></p>
-            <div class="type-row columns-3">
-              <button
-                v-for="ta in TABLE_ALIGNS"
-                :key="ta.id"
-                class="type-chip"
-                :class="{ 'is-on': reader.tableAlign === ta.id }"
-                @click="reader.tableAlign = ta.id"
-              >
-                <component v-if="ta.icon" :is="ta.icon" :size="13" class="chip-icon" />
-                {{ ta.label }}
-              </button>
-            </div>
-            </div>
-            <div v-if="typeSection === 'paragraph'">
-
-            <p class="type-label">
-              <span class="label-main"><PhArrowsVertical :size="12" class="label-icon" />行距</span>
-              <span class="tabular-nums text-[var(--c-faint)]">{{ reader.leading.toFixed(2) }}</span>
-            </p>
-            <div class="type-row columns-3">
-              <button
-                v-for="p in PACE_OPTIONS"
-                :key="p.id"
-                class="type-chip"
-                :class="{ 'is-on': Math.abs(reader.leading - p.lh) < 0.02 }"
-                @click="reader.leading = p.lh"
-              >
-                {{ p.label }}
-              </button>
-            </div>
-            <input
-              class="type-range"
-              type="range"
-              aria-label="行距"
-              min="1.4"
-              max="2.4"
-              step="0.05"
-              :value="reader.leading"
-              @input="reader.leading = Number($event.target.value)"
-            />
-
-            <p class="type-label">
-              <span class="label-main"><PhArrowsHorizontal :size="12" class="label-icon" />字间距</span>
-              <span class="tabular-nums text-[var(--c-faint)]">{{ reader.tracking.toFixed(2) }} em</span>
-            </p>
-            <input
-              class="type-range"
-              type="range"
-              aria-label="字间距"
-              min="-0.02"
-              max="0.12"
-              step="0.01"
-              :value="reader.tracking"
-              @input="reader.tracking = Number($event.target.value)"
-            />
+            <div v-else class="type-groups">
+              <section class="type-group"><p class="type-label">段落样式</p><div class="type-row columns-2"><button v-for="para in PARA_STYLES" :key="para.id" class="type-chip" :class="{'is-on':reader.paraStyle===para.id}" @click="reader.paraStyle=para.id">{{para.label}}</button></div></section>
+              <section class="type-group"><p class="type-label">中文加粗</p><div class="type-row columns-2"><button v-for="face in STRONG_FACES" :key="face.id" class="type-chip" :class="{'is-on':reader.strongFace===face.id}" @click="reader.strongFace=face.id">{{face.label}}</button></div></section>
+              <section class="type-group"><p class="type-label">中文斜体</p><div class="type-row columns-2"><button v-for="face in ITALIC_FACES" :key="face.id" class="type-chip" :class="{'is-on':reader.italicFace===face.id}" @click="reader.italicFace=face.id">{{face.label}}</button></div></section>
+              <section class="type-group"><p class="type-label"><span>字间距</span><span class="tabular-nums">{{reader.tracking.toFixed(2)}} em</span></p><input class="type-range" type="range" aria-label="字间距" min="-.02" max=".12" step=".01" :value="reader.tracking" @input="reader.tracking=Number($event.target.value)" /></section>
+              <section class="type-group"><p class="type-label">表格宽度</p><div class="type-row columns-2"><button v-for="width in TABLE_WIDTHS" :key="width.id" class="type-chip" :class="{'is-on':reader.tableWidth===width.id}" @click="reader.tableWidth=width.id">{{width.label}}</button></div></section>
+              <section class="type-group"><p class="type-label">表格对齐</p><div class="type-row columns-3"><button v-for="align in TABLE_ALIGNS" :key="align.id" class="type-chip" :class="{'is-on':reader.tableAlign===align.id}" @click="reader.tableAlign=align.id">{{align.label}}</button></div></section>
             </div>
           </div>
         </transition>
@@ -369,7 +221,7 @@
     <!-- 底栏 -->
     <div
       v-if="docId"
-      class="reader-bottombar h-8 px-8 flex items-center gap-3 text-[11.5px] text-[var(--c-faint)] shrink-0 border-t border-[var(--c-line-soft)]"
+      class="reader-bottombar h-8 px-8 flex items-center gap-3 text-[11.5px] text-[var(--c-faint)] shrink-0"
     >
       <!-- h5 没有页数可数，只报体积 -->
       <template v-if="isH5">
@@ -427,6 +279,7 @@ import {
 import { highlight } from '../utils/markdown'
 import PdfPreview from '../components/PdfPreview.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import SelectMenu from '../components/SelectMenu.vue'
 import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
@@ -1056,4 +909,8 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 </style>
 
 <style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
+</style>
+
+<style scoped>
+.type-tabs{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:18px}.type-groups{display:grid;gap:20px}.type-group{display:grid;gap:8px;min-width:0}.type-group .type-label{margin:0;min-height:16px}.type-group .type-range{margin:4px 0 0}.type-group :deep(.select-menu-trigger){width:100%;min-height:34px;padding:8px 12px;justify-content:space-between}.type-chip{min-height:32px}.reader-bottombar{border:0;background:var(--c-panel)}
 </style>

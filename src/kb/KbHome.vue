@@ -183,7 +183,7 @@ onMounted(async () => {
 .kb-foot {
   margin-top: 32px;
   padding-top: 14px;
-  border-top: 1px solid var(--c-line-soft);
+  border-top:0;
   font-size: 11.5px;
   line-height: 1.9;
   color: var(--c-faint);

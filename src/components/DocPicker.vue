@@ -122,7 +122,7 @@ function folderOf(file) {
   gap: 8px;
   height: 38px;
   padding: 0 11px 0 13px;
-  border-bottom: 1px solid var(--c-line-soft);
+  border:0;
   flex-shrink: 0;
 }
 .pick-glass { color: var(--c-faint); flex-shrink: 0; }
@@ -182,7 +182,7 @@ function folderOf(file) {
   display: flex;
   gap: 12px;
   padding: 8px 14px;
-  border-top: 1px solid var(--c-line-soft);
+  border:0;
   font-size: 11px;
   color: var(--c-faint);
   flex-shrink: 0;

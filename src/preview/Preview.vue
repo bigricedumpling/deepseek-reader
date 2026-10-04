@@ -17,9 +17,9 @@
           <button v-for="lib in filteredLibraries" :key="lib.name" type="button" class="picker-card" :class="{ selected: destination === lib.name, draft: lib.name === DRAFT_NAME }" @click="destination=lib.name">
             <ContentIcon :value="lib.name === DRAFT_NAME ? 'icon:draft' : lib.icon || 'icon:book'" :size="24" />
             <strong>{{ lib.name }}</strong>
-            <small>{{ lib.name === DRAFT_NAME ? '先放这里，之后再整理' : `${lib.docs || 0} 篇` }}</small>
+            <small>{{ lib.docs || 0 }} 篇</small>
           </button>
-          <p v-if="!filteredLibraries.length" class="picker-empty">没有匹配的知识库</p>
+          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的知识库</p><div v-if="!libraries.length" class="empty-library-create"><label>知识库名称<input v-model="newLibraryName" placeholder="新知识库" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建知识库</button></div>
         </div>
         <label>文档名称<input v-model="newName" maxlength="160" /></label>
         <p v-if="pickerError" class="picker-error">{{ pickerError }}</p>
@@ -71,6 +71,8 @@ const libraries = ref([])
 const libQuery = ref('')
 const libFilter = ref('all')
 const DRAFT_NAME = '草稿'
+const newLibraryName=ref('')
+async function createLibrary(){busy.value=true;pickerError.value='';try{const result=await fetch(API_BASE+'/api/lib',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newLibraryName.value.trim()})}).then(r=>r.json());if(!result.ok)throw Error(result.error);destination.value=newLibraryName.value.trim();await openPicker()}catch(e){pickerError.value=e.message}finally{busy.value=false}}
 const filteredLibraries = computed(() => libraries.value.filter(lib => lib.name.toLocaleLowerCase().includes(libQuery.value.toLocaleLowerCase()) && (libFilter.value === 'all' || lib.name === DRAFT_NAME || (libFilter.value === 'public' ? lib.shared : !lib.shared))))
 const pendingImages = ref(0)
 const imageData = new Map()
@@ -217,8 +219,8 @@ async function openPicker() {
     ])
     if (me?.data?.role !== 'owner') throw Error('请先在阅读器中进入管理工作区')
     if (!result.ok) throw Error(result.error || '无法读取知识库')
-    libraries.value = [result.data.libs.find(lib => lib.name === DRAFT_NAME) || { name: DRAFT_NAME }, ...result.data.libs.filter(lib => lib.name !== DRAFT_NAME)]
-    if (!libraries.value.some(lib => lib.name === destination.value)) destination.value = DRAFT_NAME
+    libraries.value = result.data.libs
+    if (!libraries.value.some(lib => lib.name === destination.value)) destination.value = libraries.value[0]?.name || ''
   } catch (error) { pickerError.value = error.message }
   picker.value = true
 }
@@ -239,10 +241,6 @@ async function commitCollect() {
     return
   }
   try {
-    if (destination.value === DRAFT_NAME && !libraries.value.some(lib => lib.name === DRAFT_NAME && lib.id)) {
-      const created = await fetch(API_BASE + '/api/lib', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: DRAFT_NAME, icon: 'icon:draft' }) }).then(r => r.json())
-      if (!created.ok && !String(created.error || '').includes('同名')) throw Error(created.error || '无法创建草稿知识库')
-    }
     const response = await fetch(API_BASE + '/api/import-workspace-doc', {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dir: destination.value, name: newName.value.trim(), content: source.value,

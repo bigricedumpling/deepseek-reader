@@ -903,13 +903,17 @@ function syncRegistry() {
 }
 
 function ensureDraftLibrary() {
-  const name = '草稿'
-  const abs = safeResolve(name)
-  if (!fs.existsSync(abs)) repo.mkdir(abs)
-  if (share.isShared(name)) share.setShared(name, false)
+  const state = repo.getJSON('onboarding', {})
+  if (state.defaultLibraryInitialized) return
   const reg = syncRegistry()
-  const lib = reg.libs.find(item => item.name === name)
-  if (lib && !lib.icon) { lib.icon = 'icon:draft'; writeRegistry(reg) }
+  if (!reg.libs.some(lib => !lib.missing)) {
+    repo.mkdir(safeResolve('草稿'))
+    share.setShared('草稿', false)
+    const created = syncRegistry()
+    const lib = created.libs.find(item => item.name === '草稿')
+    if (lib) { lib.icon = 'icon:draft'; writeRegistry(created) }
+  }
+  repo.setJSON('onboarding', {...state, defaultLibraryInitialized:true})
 }
 
 function listLibs() {
@@ -1024,7 +1028,6 @@ const routes = {
     const from = String(body.from || '').replace(/^\/+|\/+$/g, '')
     const to = String(body.to || '').replace(/^\/+|\/+$/g, '')
     if (!from || !to) throw new Error('缺 from / to')
-    if (from === '草稿' || to === '草稿') throw fault('RESERVED_LIBRARY', '草稿知识库保留给临时收录', 400)
     if (from.includes('/') || to.includes('/')) throw new Error('知识库名不能带斜杠')
     const absOld = safeResolve(from)
     const absNew = safeResolve(to)
@@ -1121,7 +1124,6 @@ const routes = {
   'DELETE /lib': async (body, _url, ctx) => {
     if (ctx.role !== 'owner') throw new Error('只有你能删知识库')
     const name = String(body.name || '').replace(/^\/+|\/+$/g, '')
-    if (name === '草稿') throw fault('RESERVED_LIBRARY', '草稿知识库不能删除', 400)
     if (!name || name.includes('/')) throw new Error('缺 name')
     const abs = safeResolve(name)
     if (!fs.existsSync(abs)) throw new Error('知识库不存在: ' + name)
@@ -1815,7 +1817,6 @@ export async function handleApi(req, res, ctx = {}) {
     if (key === 'PUT /access') {
       if (role !== 'owner') throw fault('FORBIDDEN', '访客不能修改公开权限', 403)
       const rel = String(body.path || '')
-      if (rel.split('/')[0] === '草稿' && body.shared === true) throw fault('PRIVATE_DRAFT', '草稿不能公开，请先移到正式知识库', 400)
       if (!rel) throw new Error('缺少路径')
       assertVisible(rel)
       if (!fs.existsSync(safeResolve(rel))) throw new Error('内容不存在')

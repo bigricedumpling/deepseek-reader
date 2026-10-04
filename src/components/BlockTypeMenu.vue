@@ -70,7 +70,7 @@ const emit = defineEmits(['pick'])
   letter-spacing: 0;
   color: var(--c-faint, #9a9a9a);
 }
-.bt-group:not(:first-child) { margin-top: 7px; border-top: 1px solid var(--c-line); padding-top: 10px; }
+.bt-group:not(:first-child) { margin-top: 7px; border:0; padding-top: 10px; }
 .bt-item {
   display: flex;
   align-items: center;

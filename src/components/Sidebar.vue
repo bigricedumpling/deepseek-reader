@@ -76,7 +76,7 @@
 
             <!-- 与侧边栏一致：悬停出现三个点，操作收进菜单 -->
             <button
-              v-if="!isGuest && lib.name !== '草稿'"
+              v-if="!isGuest"
               class="icon-btn xs acts-btn"
               title="更多操作"
               @click.stop="openLibMenu(lib, $event)"
@@ -113,7 +113,7 @@
           <div v-if="managerSection === 'libs'" class="lib-manager-grid">
             <div v-for="lib in managerLibs" :key="lib.path" class="lib-manager-card" :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }">
               <button class="lib-manager-card-main" @click="goLib(lib); managerOpen=false"><ContentIcon :value="lib.icon || siteIcon" class="lib-manager-icon" /><strong>{{ lib.name }}</strong><span class="lib-card-meta"><span>{{ lib.docs }} 篇</span><span class="lib-card-status"><component :is="isGuest ? store.canEdit(lib) ? PhPencilSimple : PhLock : lib.shared ? lib.locked ? PhLock : PhPencilSimple : PhEyeSlash" :size="13" weight="regular" />{{ isGuest ? store.canEdit(lib) ? '可编辑' : '只读' : lib.shared ? lib.locked ? '访客只读' : '访客可编辑' : '仅自己' }}</span></span></button>
-              <button v-if="!isGuest && lib.name !== '草稿'" class="lib-manager-card-more icon-btn xs" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" weight="bold" /></button>
+              <button v-if="!isGuest" class="lib-manager-card-more icon-btn xs" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" weight="bold" /></button>
             </div>
             <p v-if="!managerLibs.length" class="lib-empty">没有匹配的知识库</p>
           </div>
@@ -390,12 +390,12 @@
       </nav>
       <div v-if="!isGuest" class="workspace-history-footer">
         <button class="workspace-history-link" title="在 DSH 用阅读器打开过的 Markdown" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
-        <button class="workspace-history-link" @click="recoveryOpen=true"><PhArchive :size="17"/><span>数据管理</span></button>
+        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
       </div>
     </template>
     </aside>
 
-    <RecoveryPanel :open="recoveryOpen" @close="recoveryOpen=false" @restored="onRecovered" />
+    <RecoveryPanel :initial-tab="recoveryTab" :open="recoveryOpen" @close="closeRecovery" @restored="onRecovered" />
     <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false;managerOpen=true" />
     <IconPicker v-if="iconPicking" :save="saveLibIcon" :anchor="libIconAnchor" @close="iconPicking=false" />
     <!-- 新建 / 删除知识库的确认框：用站内统一那套，不用浏览器原生弹窗 -->
@@ -584,6 +584,10 @@ async function confirmTransfer() {
   } catch (error) { transfer.error = String(error.message || error) }
   finally { transfer.busy = false }
 }
+const footerTools=ref(false),recoveryTab=ref('trash'),toolsTrigger=ref(null),toolsPanel=ref(null)
+async function toggleFooterTools(){footerTools.value=!footerTools.value;if(footerTools.value){await nextTick();toolsPanel.value?.querySelector('button')?.focus()}}
+async function closeRecovery(){recoveryOpen.value=false;await nextTick();toolsTrigger.value?.focus()}
+function openRecovery(tab){recoveryTab.value=tab;footerTools.value=false;recoveryOpen.value=true}
 const publicSharingOpen = ref(false)
 const libSortOptions = [{value:'recent',label:'最近打开'},{value:'name',label:'名称'},{value:'modified',label:'最近修改'}]
 const libSort = ref('recent')
@@ -611,7 +615,6 @@ function togglePin(name) {
 const displayedLibs = computed(() => {
   const list = [...libPanel.libs]
   list.sort((a, b) => {
-    if (a.name === '草稿' || b.name === '草稿') return a.name === '草稿' ? -1 : 1
     const pin = Number(pinnedLibs.value.includes(b.name)) - Number(pinnedLibs.value.includes(a.name))
     if (pin) return pin
     if (libSort.value === 'modified') return (b.mtime || 0) - (a.mtime || 0) || a.name.localeCompare(b.name, 'zh-CN')
@@ -1331,7 +1334,6 @@ const menuItems = computed(() => {
   const node = tree.menu.node
   const kind = tree.menu.kind
   const path = node?.path || node?.file
-  if (kind === 'lib' && path === '草稿') return []
   const inherited = node?.lockedAt && node.lockedAt !== path
   const items = [
     { id: 'access-lock', label: inherited ? '由上级设为只读' : node?.locked ? '允许访客编辑' : '设为访客只读', hint: inherited ? '请在上级目录修改访客权限' : '', icon: node?.locked || inherited ? PhLockOpen : PhLock, disabled: !!inherited },
@@ -1663,10 +1665,12 @@ function relTime(ms) {
 /* ---------- 点外面关菜单 ---------- */
 
 function onDocClick(e) {
+  if(!e.target.closest('.workspace-history-footer'))footerTools.value=false
   if (!e.target.closest('.side-menu, .icon-btn')) menuOpen.value = false
 }
 function onLibEscape(e) {
   if (e.key !== 'Escape') return
+  if(footerTools.value){footerTools.value=false;toolsTrigger.value?.focus();return}
   if (transfer.open) { transfer.open = false; return }
   if (managerOpen.value) { managerOpen.value = false; return }
   if (!libPanel.open || !isMobileLibView()) return
@@ -2048,7 +2052,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 @media(max-width:520px){.transfer-dialog{padding:20px}.transfer-library-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.transfer-library-head{display:block}.transfer-library-head input{margin-top:8px}}
 @media(max-width:520px){.lib-manager{width:calc(100vw - 16px);max-height:calc(100dvh - 24px);border-radius:28px}.lib-manager-head{padding:20px 20px 14px}.lib-manager-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding-inline:20px}.lib-manager-tools{padding-inline:20px}.lib-manager-search-row :deep(.select-menu-trigger){width:105px}.lib-manager-filters button{padding-inline:8px}.lib-manager-footer{padding-inline:20px}.lib-preview-detail{max-height:calc(100dvh - 130px);margin:0 14px 14px;padding:14px}.lib-preview-actions{flex-wrap:wrap}.lib-preview-actions button{flex:1;white-space:nowrap}}
 @media(max-width:520px){.preview-list{padding-inline:20px}.preview-list-row{align-items:stretch;flex-direction:column;gap:7px}.preview-list-actions{justify-content:flex-end;flex-wrap:wrap}}
-.workspace-history-footer{flex:none;padding:7px 10px 12px;border-top:1px solid var(--c-line)}
+.workspace-history-footer{flex:none;padding:7px 10px 12px;border:0}
 .workspace-history-link{display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:7px 10px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left;white-space:nowrap}
 .workspace-history-link:hover{background:var(--c-field);color:var(--c-ink)}
 .workspace-history-link svg{flex:none}
@@ -2058,3 +2062,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 .workspace-footer{position:relative;flex-shrink:0;padding-top:8px;border-top:0}.workspace-footer .manage-entry{width:calc(100% - 24px);border:0;background:transparent;margin-bottom:12px}.workspace-footer .manage-entry span{flex:1}.identity-menu{position:absolute;bottom:60px;left:12px;right:12px;padding:6px;background:var(--c-pop);box-shadow:var(--c-pop-shadow);border:0;border-radius:var(--radius-surface);z-index:50}.identity-menu button{display:block;width:100%;padding:9px;text-align:left;font-size:12px;border-radius:var(--radius-control)}.identity-menu button:hover{background:var(--c-hover)}
 </style>
 <style scoped>.lib-icon-edit{display:grid;place-items:center;padding:5px;border-radius:var(--radius-control);margin-left:-5px}.lib-icon-edit:not(:disabled):hover{background:var(--c-hover)}.lib-icon-edit:disabled{cursor:default}.workspace-footer .manage-entry{gap:10px;padding:10px 8px}.workspace-footer .manage-entry:hover{background:var(--c-hover)}</style>
+
+<style scoped>
+.workspace-history-footer{display:flex;align-items:center;gap:8px;padding:16px 12px 12px;border:0}.workspace-history-link{flex:1;min-width:0;padding:8px 6px;font-size:12px;color:var(--c-sub)}.workspace-history-link svg{display:none}.workspace-tools{position:relative}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}
+</style>

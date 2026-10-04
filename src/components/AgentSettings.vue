@@ -80,7 +80,7 @@ onMounted(() => run(async () => { await refresh(); const out = await request('GE
 .agent-scopes label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 5px 0; }
 .agent-scopes input[type=checkbox] { margin-right: 0; }
 .agent-list { margin-top: 20px; max-height: 180px; overflow: auto; }
-.agent-list > div { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--c-line); }
+.agent-list > div { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border:0; }
 small { display: block; color: var(--c-faint); font-size: 11px; margin-top: 4px; }
 .agent-setup{margin-top:16px;color:var(--c-sub);font-size:12px}.agent-setup summary{cursor:pointer}.agent-setup p{margin:8px 0 0}
 </style>
