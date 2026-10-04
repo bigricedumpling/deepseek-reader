@@ -3,10 +3,10 @@
 @theme {
   /* Palette, interaction and contrast are distinct semantic roles. */
   --color-accent: var(--c-accent);
-  --c-accent: var(--accent-light, #465fd1);
+  --c-accent: var(--accent-light, #303030);
   --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,var(--c-ink));
   --c-on-accent: #ffffff;
-  --c-selection: rgb(var(--accent-rgb-light, 70 95 209) / .18);
+  --c-selection: rgb(var(--accent-rgb-light, 48 48 48) / .18);
   --c-focus: var(--c-accent);
 
   /* --- 灰阶（正文层级全靠这个）--- */
@@ -21,7 +21,7 @@
   --c-code-bg: #f5f5f5;  /* 代码块底色，暖灰 */
   --c-code-inline: #f5f5f5;
   --c-hover: rgba(0, 0, 0, 0.035);
-  --c-active: rgb(var(--accent-rgb-light, 70 95 209) / .09);
+  --c-active: rgb(var(--accent-rgb-light, 48 48 48) / .09);
   --c-field: #f5f5f5;      /* 输入框 */
   --c-chip: #f5f5f5;       /* 小按钮 */
   --c-chip-hover: #ededed;
@@ -33,6 +33,12 @@
     BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
+
+body[data-ui-font="serif"] { --font-sans: "TeX Gyre Pagella", "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif; }
+body[data-ui-font="sans"] { --font-sans: "Noto Sans SC", "Source Han Sans SC", "Heiti SC", -apple-system, sans-serif; }
+body[data-ui-font="harmony"] { --font-sans: "HarmonyOS Sans SC", "Noto Sans SC", sans-serif; }
+body[data-ui-font="kai"] { --font-sans: "TeX Gyre Pagella", "ChillKai", "Kaiti SC", STKaiti, "楷体", serif; }
+body[data-ui-font="ping"] { --font-sans: "PingFang SC", "Hiragino Sans GB", "Heiti SC", -apple-system, sans-serif; }
 
 :root {
   --reading-size: 15.5px;
@@ -141,7 +147,7 @@ body[data-theme="sepia"] {
   --c-code-bg: #ebe2cd;
   --c-code-inline: #e7ddc6;
   --c-hover: rgba(90, 74, 40, 0.06);
-  --c-active: rgb(var(--accent-rgb-light, 70 95 209) / .10);
+  --c-active: rgb(var(--accent-rgb-light, 48 48 48) / .10);
   --c-field: rgba(90, 74, 40, 0.07);
   --c-chip: rgba(90, 74, 40, 0.08);
   --c-chip-hover: rgba(90, 74, 40, 0.14);
@@ -162,18 +168,18 @@ body[data-theme="dark"] {
   --c-code-bg: #292929;
   --c-code-inline: #303030;
   --c-hover: rgba(255, 255, 255, 0.05);
-  --c-active: rgb(var(--accent-rgb-dark, 167 184 255) / .12);
+  --c-active: rgb(var(--accent-rgb-dark, 224 224 224) / .12);
   --c-field: rgba(255, 255, 255, 0.07);
   --c-chip: rgba(255, 255, 255, 0.08);
   --c-chip-hover: rgba(255, 255, 255, 0.14);
   --c-pop: #2d2d2d;
   --c-pop-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.18);
   --c-overlay: rgba(0, 0, 0, 0.20);
-  --c-accent: var(--accent-dark, #a7b8ff);
+  --c-accent: var(--accent-dark, #e0e0e0);
   --color-accent: var(--c-accent);
   --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,white);
   --c-on-accent: #202020;
-  --c-selection: rgb(var(--accent-rgb-dark, 167 184 255) / .23);
+  --c-selection: rgb(var(--accent-rgb-dark, 224 224 224) / .23);
   --c-focus: var(--c-accent);
   color-scheme: dark;
 }

@@ -13,6 +13,20 @@
             </label>
           </div>
         </fieldset>
+        <fieldset>
+          <legend>界面字体</legend>
+          <div class="font-presets" role="group" aria-label="界面字体">
+            <button
+              v-for="option in UI_FONT_OPTIONS"
+              :key="option.id"
+              type="button"
+              class="font-choice"
+              :class="{ selected: uiFont === option.id }"
+              :aria-pressed="uiFont === option.id"
+              @click="setUiFont(option.id)"
+            >{{ option.label }}</button>
+          </div>
+        </fieldset>
         <footer class="product-name">{{ BRAND_NAME }}</footer>
       </section>
     </div>
@@ -24,10 +38,12 @@ import { BRAND_NAME } from '../../brand.mjs'
 import { ref } from 'vue'
 import { PhX, PhCheck } from '@phosphor-icons/vue'
 import { ACCENT_PRESETS, useAccent } from '../composables/useAccent'
+import { UI_FONT_OPTIONS, useUiFont } from '../composables/useUiFont'
 import { useDialogFocus } from '../composables/useDialogFocus'
 const emit = defineEmits(['close'])
 const dialog = ref(null)
 const { accent, setAccent } = useAccent()
+const { uiFont, setUiFont } = useUiFont()
 useDialogFocus(() => true, dialog, () => emit('close'))
 </script>
 
@@ -43,5 +59,9 @@ legend{font-size:12px;color:var(--c-sub);padding:0;margin-bottom:12px}
 .accent-choice input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;margin:0}
 .accent-choice:has(input:focus-visible){outline:2px solid var(--c-focus);outline-offset:2px}
 .accent-swatch{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--swatch);color:#fff}
+.font-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.font-choice{min-height:34px;padding:6px 4px;border-radius:9px;background:var(--c-field);color:var(--c-sub);font-size:12px;white-space:nowrap}
+.font-choice:hover{background:var(--c-chip-hover);color:var(--c-ink)}
+.font-choice.selected{background:var(--c-active);color:var(--c-accent);font-weight:600}
 .product-settings .product-name{margin:24px 0 0;font-size:12px;color:var(--c-faint)}
 </style>

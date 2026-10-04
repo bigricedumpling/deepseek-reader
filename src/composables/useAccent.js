@@ -9,12 +9,15 @@ export const ACCENT_PRESETS = Object.freeze([
   { id: 'clay', label: '陶土', light: '#9c5b36', dark: '#e2b28f' }
 ])
 const KEY = 'typocket.accent'
-const current = ref('blue')
+export const DEFAULT_ACCENT = 'graphite'
+const current = ref(DEFAULT_ACCENT)
 let installed = false
 const rgb = hex => hex.slice(1).match(/../g).map(value => parseInt(value, 16)).join(' ')
 
 function apply(id) {
-  const preset = ACCENT_PRESETS.find(item => item.id === id) || ACCENT_PRESETS[0]
+  const siteDefault = window.__typocketAccentDefault
+  const fallback = ACCENT_PRESETS.find(item => item.id === siteDefault) || ACCENT_PRESETS.find(item => item.id === DEFAULT_ACCENT)
+  const preset = ACCENT_PRESETS.find(item => item.id === id) || fallback
   current.value = preset.id
   document.body.dataset.accent = preset.id
   for (const tone of ['light', 'dark']) {

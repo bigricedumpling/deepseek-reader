@@ -50,10 +50,10 @@ code, pre, kbd { font-family: var(--font-mono); }
   src: local('Weixin'); /* Optional installed font; not redistributed in the product package. */
   font-display: swap;
 }
-/* 界面字体：微信体，用于正文以外的所有地方 */
+/* 界面字体由设置中的 --font-sans 控制，默认沿用微信体。 */
 .font-weixin,
 .ui-font {
-  font-family: "Weixin", "PingFang SC", -apple-system, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* 西文正文字体：TeX Gyre Pagella，GUST Font License，许可证随包附带 */
