@@ -408,12 +408,9 @@ onBeforeUnmount(() => window.removeEventListener('message', onPreviewAction))
 /** 翻译按钮的提示语与动作 */
 const translateTip = computed(() => {
   const t = store.pdfTranslate
-  if (t.status === 'running') {
-    const pages = store.pdfPages ? '共 ' + store.pdfPages + ' 页，' : ''
-    return '正在翻译 ' + t.progress + '%（' + pages + '大约每页 10 秒，可以继续看别的）'
-  }
+  if (t.status === 'running') return '正在翻译 ' + t.progress + '%'
   if (t.status === 'done') return store.pdfView === 'translated' ? '看原文' : '看译文'
-  return '翻译这篇 pdf（后台跑，几分钟）'
+  return '翻译 PDF'
 })
 
 function onTranslate() {

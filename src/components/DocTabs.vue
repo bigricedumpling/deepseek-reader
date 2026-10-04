@@ -31,12 +31,12 @@
         >
           <ContentIcon v-if="t.icon" :value="t.icon" :size="16" />
           <span class="doc-tab-name">{{ t.name }}</span>
-          <span v-if="t.dirty" class="doc-tab-dot" title="改动还在往回写的路上" />
+          <span v-if="t.dirty" class="doc-tab-dot" aria-hidden="true" />
         </button>
         <button
           v-if="items.length > 1"
           class="doc-tab-x"
-          title="关掉这一篇"
+          aria-label="关闭标签页"
           @click.stop="$emit('close', t.file)"
         >
           <PhX :size="11" />
