@@ -91,7 +91,7 @@
       </aside>
     </transition>
 
-    <PublicSharing v-if="publicSharingOpen && !isGuest" @close="publicSharingOpen=false" />
+    <PublicSharing v-if="publicSharingOpen && !isGuest" @close="publicSharingOpen=false;managerOpen=true" />
     <Teleport to="body">
       <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false" /></transition>
       <transition name="lib-manager">
@@ -106,13 +106,13 @@
             </div>
             <div v-if="managerSection === 'libs' && !isGuest" class="lib-manager-filter-row">
               <div class="lib-manager-filters" role="group" aria-label="筛选知识库">
-                <button v-for="filter in [{value:'all',label:'全部'},{value:'public',label:'公开'},{value:'private',label:'未公开'},{value:'locked',label:'访客只读'}]" :key="filter.value" :class="{ 'is-on': managerFilter === filter.value }" :aria-pressed="managerFilter === filter.value" @click="managerFilter=filter.value">{{ filter.label }}</button>
+                <button v-for="filter in [{value:'all',label:'全部'},{value:'public',label:'分享范围'},{value:'private',label:'仅自己'}]" :key="filter.value" :class="{ 'is-on': managerFilter === filter.value }" :aria-pressed="managerFilter === filter.value" @click="managerFilter=filter.value">{{ filter.label }}</button>
               </div>
             </div>
           </div>
           <div v-if="managerSection === 'libs'" class="lib-manager-grid">
             <div v-for="lib in managerLibs" :key="lib.path" class="lib-manager-card" :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }">
-              <button class="lib-manager-card-main" @click="goLib(lib); managerOpen=false"><ContentIcon :value="lib.icon || siteIcon" class="lib-manager-icon" /><strong>{{ lib.name }}</strong><span class="lib-card-meta"><span>{{ lib.docs }} 篇</span><span class="lib-card-status"><component :is="isGuest ? store.canEdit(lib) ? PhPencilSimple : PhLock : lib.shared ? lib.locked ? PhLock : PhPencilSimple : PhEyeSlash" :size="13" weight="regular" />{{ isGuest ? store.canEdit(lib) ? '可编辑' : '只读' : lib.shared ? lib.locked ? '公开只读' : '公开可编辑' : '未公开' }}</span></span></button>
+              <button class="lib-manager-card-main" @click="goLib(lib); managerOpen=false"><ContentIcon :value="lib.icon || siteIcon" class="lib-manager-icon" /><strong>{{ lib.name }}</strong><span class="lib-card-meta"><span>{{ lib.docs }} 篇</span><span class="lib-card-status"><component :is="isGuest ? store.canEdit(lib) ? PhPencilSimple : PhLock : lib.shared ? lib.locked ? PhLock : PhPencilSimple : PhEyeSlash" :size="13" weight="regular" />{{ isGuest ? store.canEdit(lib) ? '可编辑' : '只读' : lib.shared ? lib.locked ? '访客只读' : '访客可编辑' : '仅自己' }}</span></span></button>
               <button v-if="!isGuest && lib.name !== '草稿'" class="lib-manager-card-more icon-btn xs" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" weight="bold" /></button>
             </div>
             <p v-if="!managerLibs.length" class="lib-empty">没有匹配的知识库</p>
@@ -390,13 +390,13 @@
       </nav>
       <div v-if="!isGuest" class="workspace-history-footer">
         <button class="workspace-history-link" title="在 DSH 用阅读器打开过的 Markdown" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
-        <button class="workspace-history-link" @click="recoveryOpen=true"><PhTrash :size="17"/><span>恢复与备份</span></button>
+        <button class="workspace-history-link" @click="recoveryOpen=true"><PhArchive :size="17"/><span>数据管理</span></button>
       </div>
     </template>
     </aside>
 
     <RecoveryPanel :open="recoveryOpen" @close="recoveryOpen=false" @restored="onRecovered" />
-    <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false" />
+    <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false;managerOpen=true" />
     <IconPicker v-if="iconPicking" :save="saveLibIcon" :anchor="libIconAnchor" @close="iconPicking=false" />
     <!-- 新建 / 删除知识库的确认框：用站内统一那套，不用浏览器原生弹窗 -->
     <AppDialog
@@ -429,7 +429,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, p
 import {
   PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
   PhSquaresFour, PhUserCircle, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
-  PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
+  PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
   PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight, PhArrowLeft, PhFileText
 } from '@phosphor-icons/vue'
@@ -628,7 +628,7 @@ const managerLibs = computed(() => {
   const q = libQuery.value.trim().toLocaleLowerCase()
   return displayedLibs.value.filter(l =>
     (!q || l.name.toLocaleLowerCase().includes(q) || String(l.desc || '').toLocaleLowerCase().includes(q)) &&
-    (managerFilter.value === 'all' || managerFilter.value === 'public' && l.shared !== false || managerFilter.value === 'private' && l.shared === false || managerFilter.value === 'locked' && l.locked)
+    (managerFilter.value === 'all' || managerFilter.value === 'public' && l.shared !== false || managerFilter.value === 'private' && l.shared === false)
   )
 })
 
@@ -1335,8 +1335,9 @@ const menuItems = computed(() => {
   const inherited = node?.lockedAt && node.lockedAt !== path
   const items = [
     { id: 'access-lock', label: inherited ? '由上级设为只读' : node?.locked ? '允许访客编辑' : '设为访客只读', hint: inherited ? '请在上级目录修改访客权限' : '', icon: node?.locked || inherited ? PhLockOpen : PhLock, disabled: !!inherited },
-    { id: 'access-share', label: node?.shared === false ? '对外展示' : '不对外展示', icon: node?.shared === false ? PhEye : PhEyeSlash }
+    { id: 'access-share', label: node?.shared === false ? '纳入分享范围' : '移出分享范围', icon: node?.shared === false ? PhEye : PhEyeSlash }
   ]
+  if (node?.shared === false) items.splice(0,1)
   if (canRevealInFinder.value) items.push({ id: 'reveal', label: fileManagerLabel(kind !== 'file'), icon: PhFolderSimple })
   if (!store.canEdit(node)) return items
   if (kind === 'lib') {
@@ -1706,7 +1707,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 .lib-panel-title { font-size: 12.5px; color: var(--c-sub); }
 .lib-panel-head-acts { display: flex; align-items: center; gap: 6px; }
 .lib-panel-sort { display:flex;align-items:center;gap:6px;padding:0 12px 10px; }.lib-panel-sort select { width: 100%; padding: 6px 9px; border: 0; border-radius: var(--radius-control); background: var(--c-field); color: var(--c-sub); font: inherit; font-size: 11px; }
-.lib-browse-entry { display:flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:32px;padding:5px 9px;border-radius:var(--radius-control);color:var(--c-sub);font-size:11px;white-space:nowrap;transition:background var(--motion-enter) ease,color var(--motion-enter) ease; }.lib-browse-entry:hover { background:var(--c-field);color:var(--c-ink); }
+.lib-browse-entry { margin-left:auto;display:flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:32px;padding:5px 9px;border-radius:var(--radius-control);color:var(--c-sub);font-size:11px;white-space:nowrap;transition:background var(--motion-enter) ease,color var(--motion-enter) ease; }.lib-browse-entry:hover { background:var(--c-field);color:var(--c-ink); }
 .lib-panel-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
 .lib-panel-footer { display:flex;flex-direction:column;margin:5px 8px 12px;gap:2px; }
 .lib-manager-entry { display: flex; align-items: center; gap: 9px; width:100%; padding: 10px 12px; border-radius: var(--radius-control); color: var(--c-sub); text-align: left; font-size: 12px; }.lib-manager-entry:hover { background: var(--c-hover); color: var(--c-ink); }
@@ -1765,7 +1766,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 }
 .lib-row.is-dragging { opacity: 0.45; }
 .lib-row:hover { background: var(--c-hover); }
-.lib-panel-sort .select-menu-trigger{width:100%}
+.lib-panel-sort .select-menu-trigger{width:auto;min-width:114px;flex:none}
 .lib-row.is-current { background: var(--c-hover); }
 .lib-row.is-draft { background: color-mix(in srgb, var(--color-ds) 5%, var(--c-panel)); }
 .lib-row.is-draft:hover, .lib-row.is-draft.is-current { background: color-mix(in srgb, var(--color-ds) 9%, var(--c-panel)); }
@@ -1975,9 +1976,9 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 .entry-chevron { margin-left:auto }
 .tree-menu-item:disabled { opacity:.45; cursor:default }
 .tree-menu-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lib-panel-sort .select-menu-trigger{min-height:30px;padding:5px 11px;background:transparent;border-color:transparent}
+.lib-panel-sort .select-menu-trigger{min-height:30px;padding:5px 11px;background:var(--c-field);border-color:var(--c-line)}
 .lib-panel-sort .select-menu-trigger:hover{background:var(--c-field)}
-.lib-panel-sort :deep(.select-menu-trigger){min-height:30px;width:100%;padding:5px 11px;background:transparent;border-color:transparent}
+.lib-panel-sort :deep(.select-menu-trigger){min-height:34px;width:auto;min-width:114px;flex:none;padding:6px 11px;background:var(--c-field);border-color:var(--c-line)}
 .lib-panel-sort :deep(.select-menu-trigger:hover){background:var(--c-field)}
 .lib-manager-tools{display:flex;flex-direction:column;gap:12px;padding-bottom:18px}
 .lib-manager-search-row{display:flex;align-items:center;gap:10px;min-width:0}

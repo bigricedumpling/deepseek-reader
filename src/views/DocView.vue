@@ -7,7 +7,7 @@
       <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原知识库"><PhClockCounterClockwise :size="12" />恢复副本</span>
       <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
-      <div ref="searchWrap" class="doc-search-wrap" :style="{ '--search-available': searchPanelWidth + 'px' }">
+      <div v-if="!isPreview" ref="searchWrap" class="doc-search-wrap" :style="{ '--search-available': searchPanelWidth + 'px' }">
         <button class="btn-icon" title="查找当前文档" aria-label="查找当前文档" :aria-expanded="searchOpen" @click="toggleDocSearch"><PhMagnifyingGlass :size="15" /></button>
         <transition name="pop">
         <div v-if="searchOpen" class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
@@ -20,8 +20,8 @@
         </transition>
       </div>
 
-      <!-- 排版：宽度、字号、字体、强调面、段落、表格、字间距 -->
-      <div class="relative">
+      <!-- 阅读偏好仅用于 Markdown；PDF 使用自己的阅读控件 -->
+      <div v-if="!isPreview" class="relative">
         <button
           class="btn-icon"
           :class="{ 'is-active': open === 'type' }"
@@ -32,6 +32,7 @@
         </button>
         <transition name="pop">
           <div v-if="open === 'type'" class="pop-menu is-panel type-panel">
+            <p class="settings-scope">阅读偏好 · 此浏览器的所有文档</p>
             <div class="type-tabs" role="tablist" aria-label="排版设置">
               <button v-for="section in [{ id: 'text', label: '文字' }, { id: 'paragraph', label: '段落' }, { id: 'table', label: '表格' }]" :key="section.id" role="tab" :aria-selected="typeSection === section.id" :class="{ 'is-on': typeSection === section.id }" @click="typeSection = section.id">{{ section.label }}</button>
             </div>
@@ -213,6 +214,7 @@
         </button>
         <transition name="pop">
           <div v-if="open === 'look'" class="pop-menu is-panel look-panel">
+            <p class="settings-scope">界面外观 · 仅此浏览器</p>
             <p class="type-label"><span class="label-main"><component :is="PhCircleHalf" :size="12" class="label-icon" />主题</span></p>
             <div class="type-row columns-2">
               <button
@@ -227,11 +229,11 @@
               </button>
             </div>
 
-            <p class="type-label">
-              <span class="label-main"><PhMagnifyingGlass :size="12" class="label-icon" />页面缩放</span>
+            <p v-if="!isPreview" class="type-label">
+              <span class="label-main"><PhMagnifyingGlass :size="12" class="label-icon" />Markdown 阅读缩放</span>
               <span class="tabular-nums text-[var(--c-faint)]">{{ reader.zoom }}%</span>
             </p>
-            <div class="type-row columns-3">
+            <div v-if="!isPreview" class="type-row columns-3">
               <button
                 v-for="z in ZOOMS"
                 :key="z.value"
@@ -248,25 +250,32 @@
       </div>
 
       <div v-if="docId" class="relative">
-        <button ref="exportButton" class="btn-icon" :title="store.isGuest ? '导出' : '导出与文档设置'" :aria-expanded="open === 'access'" :class="{ 'is-active': open === 'access' }" @click="toggle('access')"><PhExport :size="16" /></button>
+        <button ref="exportButton" class="btn-icon" title="文档操作" aria-label="文档操作" :aria-expanded="['access', 'visibility'].includes(open)" :class="{ 'is-active': ['access', 'visibility'].includes(open) }" @click="toggle('access')"><PhDotsThree :size="18" weight="bold" /></button>
         <transition name="pop">
-        <div v-if="open === 'access'" class="pop-menu is-panel w-[250px]">
-          <div v-if="!store.isGuest" class="doc-state-pair">
-            <button class="doc-state" role="switch" :aria-checked="meta.shared !== false" aria-label="对外展示" @click="changeAccess('shared')">
-              <component :is="meta.shared === false ? PhEyeSlash : PhEye" :size="15" /><span>对外展示</span><span class="state-switch" :class="{on:meta.shared !== false}" />
-            </button>
-            <button class="doc-state" role="switch" :aria-checked="!!meta.locked" :disabled="!!meta.lockedAt && meta.lockedAt !== docId" :title="meta.lockedAt && meta.lockedAt !== docId ? '请在上级目录修改访客权限' : '设置访客编辑权限'" aria-label="访客只读" @click="changeAccess('locked')">
-              <PhLock :size="15" /><span>访客只读</span><span class="state-switch" :class="{on:meta.locked}" />
-            </button>
-          </div>
-          <p v-if="!store.isGuest && meta.lockedAt && meta.lockedAt !== docId" class="search-scope">由上级设为只读</p>
-          <div v-if="!store.isGuest" class="doc-options-divider" />
-          <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="14" /> {{ fileManagerLabel() }}</button>
-          <button v-if="!store.isGuest" class="pop-item" @click="open='';infoOpen=true"><PhInfo :size="14" /> 文档信息</button>
-          <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open=''; historyOpen=true"><PhClockCounterClockwise :size="14" /> 历史版本</button>
-          <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="14" /> 导出 Markdown</button>
-          <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="14" /> 导出网页（含图片）</button>
-          <button class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="14" /> 打印 / 导出 PDF</button>
+        <div v-if="open === 'access'" class="pop-menu is-panel document-actions">
+          <template v-if="!store.isGuest">
+            <button ref="visibilityEntry" class="pop-item" @click="showVisibility"><component :is="meta.shared === false ? PhEyeSlash : PhEye" :size="15" /><span>{{ meta.shared === false ? '仅自己可见' : '已纳入分享范围' }}</span><PhCaretRight :size="13" class="menu-tail" /></button>
+            <div class="doc-options-divider" />
+          </template>
+          <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="15" /> {{ fileManagerLabel() }}</button>
+          <button v-if="!store.isGuest" class="pop-item" @click="open='';infoOpen=true"><PhInfo :size="15" /> 文档信息</button>
+          <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open=''; historyOpen=true"><PhClockCounterClockwise :size="15" /> 历史版本</button>
+          <div class="doc-options-divider" />
+          <p class="menu-section-label">导出</p>
+          <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="15" /> Markdown 文件</button>
+          <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
+          <button v-if="!isPreview" class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
+          <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener"><PhArrowSquareOut :size="15" />打开原文件</a>
+        </div>
+        <div v-else-if="open === 'visibility'" class="pop-menu is-panel document-actions">
+          <button ref="visibilityBack" class="pop-item" @click="backToActions"><PhCaretLeft :size="15" />分享范围</button>
+          <div class="doc-options-divider" />
+          <button class="doc-state" role="switch" :aria-checked="meta.shared !== false" aria-label="纳入分享范围" @click="changeAccess('shared')"><PhEye :size="15" /><span>纳入分享范围</span><span class="state-switch" :class="{on:meta.shared !== false}" /></button>
+          <p class="settings-scope">{{ meta.shared === false ? '仅自己可见。' : '此设置不生成或更新分享链接。' }}</p>
+          <template v-if="meta.shared !== false">
+            <button v-if="!isPreview" class="doc-state" role="switch" :aria-checked="!!meta.locked" :disabled="!!meta.lockedAt && meta.lockedAt !== docId" aria-label="访客只读" @click="changeAccess('locked')"><PhLock :size="15" /><span>访客只读</span><span class="state-switch" :class="{on:meta.locked}" /></button>
+            <p class="settings-scope">{{ meta.lockedAt && meta.lockedAt !== docId ? '由上级设为只读。' : '访客视角权限；分享副本始终只读。' }}</p>
+          </template>
         </div>
         </transition>
       </div>
@@ -407,7 +416,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   PhMagnifyingGlass, PhTextAa, PhTextT, PhArrowsOutLineHorizontal,
   PhExport, PhListDashes, PhArrowSquareOut, PhX, PhArrowUp, PhSpinnerGap, PhWarningCircle,
-  PhCircleHalf, PhPrinter, PhInfo, PhClockCounterClockwise,
+  PhCaretLeft, PhCaretRight, PhCircleHalf, PhPrinter, PhInfo, PhClockCounterClockwise,
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
   PhArrowsOutSimple, PhArrowsInSimple, PhSun, PhCoffee, PhMoon,
@@ -433,7 +442,9 @@ import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../
 const reader = useReaderStore()
 // pdf 翻译任务的状态住在 docs store 里，不必再经 App 转一手
 const infoOpen=ref(false)
-const historyOpen=ref(false),exportButton=ref(null)
+const historyOpen=ref(false),exportButton=ref(null),visibilityEntry=ref(null),visibilityBack=ref(null)
+async function showVisibility(){open.value='visibility';await nextTick();visibilityBack.value?.focus()}
+async function backToActions(){open.value='access';await nextTick();visibilityEntry.value?.focus()}
 async function closeHistory(){historyOpen.value=false;await nextTick();exportButton.value?.focus()}
 const restoredEpoch=ref(0)
 function restoreContent(text){emit('input',text);restoredEpoch.value++}
@@ -517,7 +528,7 @@ function onCloseTab(file) {
 
 /** 看原文还是看译文：译文是双语的、页号跟原文一致，所以目录跳页照样能用 */
 const pdfSrc = computed(() => {
-  const rel = store.pdfView === 'translated' && store.pdfTranslate.output
+  const rel = isPdf.value && store.pdfView === 'translated' && store.pdfTranslate.output
     ? store.pdfTranslate.output
     : (props.meta?.file || '')
   return API_BASE + '/api/file?path=' + encodeURIComponent(rel)
@@ -732,16 +743,15 @@ const saveStateClass = computed(() =>
 
 function changeAccess(key) {
   if (key === 'locked' && props.meta.lockedAt && props.meta.lockedAt !== props.docId) return
-  open.value = ''
   const value = key === 'shared' ? props.meta.shared === false : !props.meta.locked
-  store.requestAccess(props.docId, { [key]: value }, key === 'shared' ? (value ? '对外展示此文档' : '不对外展示此文档') : (value ? '设为访客只读' : '允许访客编辑'))
+  store.requestAccess(props.docId, { [key]: value }, key === 'shared' ? (value ? '纳入分享范围' : '仅自己可见') : (value ? '设为访客只读' : '允许访客编辑'))
 }
 function toggleDocSearch() {
   searchOpen.value = !searchOpen.value
   if (searchOpen.value) nextTick(() => { updateSearchPanelWidth(); searchInput.value?.focus() })
 }
 function toggle(name) {
-  open.value = open.value === name ? '' : name
+  open.value = open.value === name || (name === 'access' && open.value === 'visibility') ? '' : name
 }
 function pickWidth(v) {
   reader.measure = v
@@ -797,9 +807,9 @@ function onDocClick(e) {
   if (open.value && !e.target.closest('.pop-menu, .btn-icon')) open.value = ''
   if (searchOpen.value && !e.target.closest('.doc-search-wrap')) closeSearch()
 }
-function onFindKey(e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); searchOpen.value = true; nextTick(() => { updateSearchPanelWidth(); searchInput.value?.focus() }) } }
+function onFindKey(e) { if(e.key==='Escape' && open.value){ e.preventDefault();if(open.value==='visibility')backToActions();else{open.value='';exportButton.value?.focus()}return } if (!isPreview.value && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); searchOpen.value = true; nextTick(() => { updateSearchPanelWidth(); searchInput.value?.focus() }) } }
 function onOverlayOpen() { open.value = ''; closeSearch() }
-watch(() => props.docId, () => { closeSearch(); emit('update:keyword', '') })
+watch(() => props.docId, () => { open.value=''; closeSearch(); emit('update:keyword', '') })
 onMounted(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onFindKey); window.addEventListener('reader-overlay-open', onOverlayOpen); window.addEventListener('resize', updateSearchPanelWidth); searchResizeObserver = new ResizeObserver(updateSearchPanelWidth); if (searchWrap.value) searchResizeObserver.observe(searchWrap.value.closest('main')); updateSearchPanelWidth() })
 onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onFindKey); window.removeEventListener('reader-overlay-open', onOverlayOpen); window.removeEventListener('resize', updateSearchPanelWidth); searchResizeObserver?.disconnect() })
 </script>
@@ -835,7 +845,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .pop-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
   text-align: left;
@@ -1020,6 +1030,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
     transform: rotate(360deg);
   }
 }
+.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
 <style scoped>
@@ -1031,12 +1042,16 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .search-hit small { display:block; font-size:10px; color:var(--c-faint) }
 .pop-item:disabled { opacity:.5;cursor:default }
 @media(max-width:640px){ .reader-topbar{padding-left:8px!important;padding-right:8px!important;gap:2px!important}.single-doc-title{max-width:25vw} }
+.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
 <style scoped>
 .doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
+.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
-<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}.guest-access-note{gap:4px;flex-shrink:0;display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);color:var(--c-sub);font:11px var(--font-sans)}@media(max-width:640px){.guest-access-note{padding-inline:6px}}</style>
+<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}.guest-access-note{gap:4px;flex-shrink:0;display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);color:var(--c-sub);font:11px var(--font-sans)}@media(max-width:640px){.guest-access-note{padding-inline:6px}}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
+</style>
 
-<style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}</style>
+<style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
+</style>

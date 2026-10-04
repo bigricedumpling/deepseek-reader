@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { workspace } from '../server/storage/workspace.js'
 import { createShare } from '../server/share.js'
 import { resources } from '../server/services/resources.js'
-import { buildPublicSnapshot } from '../server/services/public-snapshot.js'
+import { buildPublicSnapshot, publicScope } from '../server/services/public-snapshot.js'
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reader-public-'))
 try {
@@ -21,6 +21,8 @@ try {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg=='
   const publicAsset = assets.upload('Public/doc.md', 'image/png', png), privateAsset = assets.upload('Private/doc.md', 'image/png', png)
   source.db.prepare('INSERT INTO sources VALUES (?,?,?,?,?,?,?)').run('origin', publicNode.id, 'workspace-file', 'private-workspace', '/private/source.md', '', Date.now())
+  const scope=publicScope(source,share)
+  assert.deepEqual(scope,{documents:1,libraries:[{name:'Public',documents:['Public/doc.md']}]},'scope must exclude hidden and private documents')
   const destination = path.join(root, 'snapshot')
   const result = buildPublicSnapshot(source, share, destination)
   assert.equal(result.documents, 1)
@@ -35,6 +37,6 @@ try {
   assert.equal(access.locked.Public, true)
   fs.writeFileSync(path.join(source.root, 'Public/doc.md'), '# Later edit')
   assert.equal(fs.readFileSync(path.join(destination, 'Public/doc.md'), 'utf8'), '# Published')
-  db.close()
+  db.close();source.db.close()
   console.log('PASS: snapshot privacy, asset isolation, read-only permissions and independent content')
 } finally { fs.rmSync(root, { recursive: true, force: true }) }

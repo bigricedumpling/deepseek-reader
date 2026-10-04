@@ -4,6 +4,7 @@
     <button title="上一页" aria-label="上一页" :disabled="current<=1||loading" @click="go(current-1)"><PhCaretLeft :size="16"/></button>
     <label><input type="number" aria-label="PDF 页码" :value="current" :min="1" :max="total||1" :disabled="!total" @change="go(Number($event.target.value))"/> / {{ total || '—' }}</label>
     <button title="下一页" aria-label="下一页" :disabled="current>=total||loading" @click="go(current+1)"><PhCaretRight :size="16"/></button>
+    <select v-model="zoom" aria-label="PDF 缩放" @change="draw"><option value="fit">适合宽度</option><option value="0.75">75%</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select>
     <a :href="url.split('#')[0]" target="_blank" rel="noopener" title="在浏览器打开 PDF">打开原文件</a>
   </nav>
   <p v-if="error" role="alert" class="pdf-message">{{ error }} <button @click="load">重试</button></p>
@@ -19,6 +20,7 @@ import {PhCaretLeft,PhCaretRight} from '@phosphor-icons/vue'
 import 'pdfjs-dist/web/pdf_viewer.css'
 import {readPdfOutline} from '../../server/services/pdf-outline.js'
 const props=defineProps({url:String,page:{type:Number,default:1}}),emit=defineEmits(['page','loaded','outline'])
+const zoom=ref('fit')
 const current=ref(1),total=ref(0),loading=ref(true),error=ref(''),canvas=ref(null),container=ref(null),paper=ref(null),textLayer=ref(null)
 let pdf,task,renderTask,textTask,observer,timer,generation=0,paint=0,engine
 async function draw(){
@@ -27,7 +29,7 @@ async function draw(){
  try{
    const page=await pdf.getPage(current.value)
    if(id!==paint)return
-   const base=page.getViewport({scale:1}),scale=Math.min(2,Math.max(150,container.value.clientWidth-32)/base.width)
+   const base=page.getViewport({scale:1}),scale=zoom.value==='fit'?Math.max(0.1,(container.value.clientWidth-32)/base.width):Number(zoom.value)
    const viewport=page.getViewport({scale}),ratio=Math.min(window.devicePixelRatio||1,2)
    const node=canvas.value
    node.width=Math.floor(viewport.width*ratio);node.height=Math.floor(viewport.height*ratio)
@@ -67,5 +69,5 @@ onMounted(()=>{load();observer=new ResizeObserver(()=>{clearTimeout(timer);timer
 onBeforeUnmount(()=>{++generation;++paint;clearTimeout(timer);observer?.disconnect();renderTask?.cancel();textTask?.cancel();task?.destroy()})
 </script>
 <style scoped>
-.pdf-preview{min-height:100%;background:var(--c-field);padding-bottom:24px}.pdf-controls{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px;background:var(--c-pop);font:12px var(--font-sans)}.pdf-controls button{display:grid;place-items:center;width:28px;height:28px;border-radius:8px}.pdf-controls button:hover{background:var(--c-field)}.pdf-controls button:disabled{opacity:.35}.pdf-controls input{width:42px;text-align:center;background:var(--c-field);padding:4px;border-radius:5px;font:inherit}.pdf-controls a{color:var(--c-sub);margin-left:12px}.pdf-page-area{padding-top:16px;overflow:auto}.pdf-paper{position:relative;margin:0 auto;background:#fff;box-shadow:0 2px 12px #0001}.pdf-paper.pending{visibility:hidden}.pdf-message{text-align:center;font-size:13px;color:var(--c-sub);padding:12px}.pdf-message button{color:var(--color-ds)}canvas{display:block}.textLayer{position:absolute;inset:0}
+.pdf-preview{min-height:100%;background:var(--c-field);padding-bottom:24px}.pdf-controls{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px;background:var(--c-pop);font:12px var(--font-sans)}.pdf-controls button{display:grid;place-items:center;width:28px;height:28px;border-radius:8px}.pdf-controls button:hover{background:var(--c-field)}.pdf-controls button:disabled{opacity:.35}.pdf-controls input{width:42px;text-align:center;background:var(--c-field);padding:4px;border-radius:5px;font:inherit}.pdf-controls select{font:inherit;color:var(--c-ink);background:var(--c-field);padding:6px 8px;border-radius:8px;max-width:110px}.pdf-controls a{color:var(--c-sub);margin-left:12px}.pdf-page-area{padding-top:16px;overflow:auto}.pdf-paper{position:relative;margin:0 auto;background:#fff;box-shadow:0 2px 12px #0001}.pdf-paper.pending{visibility:hidden}.pdf-message{text-align:center;font-size:13px;color:var(--c-sub);padding:12px}.pdf-message button{color:var(--color-ds)}canvas{display:block}.textLayer{position:absolute;inset:0}
 </style>

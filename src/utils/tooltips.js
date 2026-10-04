@@ -46,6 +46,7 @@ export function installTooltips() {
   }
   function anchorFor(target) { return target?.closest?.('[title], [data-tooltip]') }
   document.addEventListener('pointerover', event => {
+    if (event.pointerType !== 'mouse' || !window.matchMedia('(any-hover: hover)').matches) return
     const anchor = anchorFor(event.target)
     if (anchor && anchor !== active) show(anchor)
   })
@@ -59,7 +60,17 @@ export function installTooltips() {
   document.addEventListener('focusout', event => {
     if (active && active.contains(event.target) && !active.contains(event.relatedTarget)) hide()
   })
-  document.addEventListener('pointerdown', () => { keyboardFocus = false; hide() }, true)
+  document.addEventListener('pointerdown', event => {
+    keyboardFocus = false; hide()
+    if (event.pointerType !== 'mouse') {
+      const anchor = anchorFor(event.target)
+      if (anchor?.hasAttribute('title')) {
+        const label = anchor.getAttribute('title')
+        anchor.dataset.tooltip = label; anchor.removeAttribute('title')
+        if (!anchor.getAttribute('aria-label') && !anchor.textContent.trim()) anchor.setAttribute('aria-label', label)
+      }
+    }
+  }, true)
   document.addEventListener('click', hide, true)
   document.addEventListener('keydown', event => {
     if (event.key === 'Tab') keyboardFocus = true

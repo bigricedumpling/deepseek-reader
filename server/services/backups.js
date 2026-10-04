@@ -22,14 +22,15 @@ export function backupService(repo) {
     }
     fs.mkdirSync(home, { recursive: true, mode: 0o700 })
   }
+  const scope = () => fs.readdirSync(repo.root,{withFileTypes:true}).filter(item=>item.isDirectory()&&!item.isSymbolicLink()&&!item.name.startsWith('.')&&item.name!=='node_modules').map(item=>item.name)
   function list() {
     safeHome()
-    return { directory: home, restored: fs.readdirSync(home).filter(name => /^恢复副本-[\d-]+-[a-f0-9]{8}$/.test(name) && fs.lstatSync(path.join(home,name)).isDirectory()).map(id=>({id,at:fs.statSync(path.join(home,id)).birthtimeMs})), items: fs.readdirSync(home).filter(id => /^[a-f0-9-]{36}$/.test(id)).flatMap(id => {
+    return { directory: home, libraries:scope(), restored: fs.readdirSync(home).filter(name => /^恢复副本-[\d-]+-[a-f0-9]{8}$/.test(name) && fs.lstatSync(path.join(home,name)).isDirectory()).map(id=>({id,at:fs.statSync(path.join(home,id)).birthtimeMs})), items: fs.readdirSync(home).filter(id => /^[a-f0-9-]{36}$/.test(id)).flatMap(id => {
       try {
         const file = path.join(home,id,'metadata.json')
         if(fs.lstatSync(path.dirname(file)).isSymbolicLink() || fs.lstatSync(file).isSymbolicLink()) return []
         const metadata = JSON.parse(fs.readFileSync(file,'utf8'))
-        return [{ id, at: metadata.createdAt }]
+        return [{ id, at: metadata.createdAt, libraries:metadata.libraries || null }]
       } catch { return [] }
     }).sort((a,b) => b.at.localeCompare(a.at)) }
   }
@@ -39,7 +40,7 @@ export function backupService(repo) {
     try {
       fs.mkdirSync(staging, { mode: 0o700 })
       fs.cpSync(repo.root,path.join(staging,'知识库'),{recursive:true,filter:backupCopyFilter})
-      const metadata = { schemaVersion:3,createdAt:new Date().toISOString(),tables:Object.fromEntries(tables.map(table => [table,repo.db.prepare('SELECT * FROM '+table).all()])) }
+      const metadata = { libraries:scope(),schemaVersion:3,createdAt:new Date().toISOString(),tables:Object.fromEntries(tables.map(table => [table,repo.db.prepare('SELECT * FROM '+table).all()])) }
       fs.writeFileSync(path.join(staging,'metadata.json'),JSON.stringify(metadata),{mode:0o600})
       fs.renameSync(staging,target)
       return { id, directory: target }

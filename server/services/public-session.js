@@ -4,7 +4,7 @@ import os from 'node:os'
 import http from 'node:http'
 import { fork, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { buildPublicSnapshot } from './public-snapshot.js'
+import { buildPublicSnapshot, publicScope } from './public-snapshot.js'
 
 export function publicSession(repo, share) {
   let proxy, child, tunnel, port, current, url = '', updated = 0, busy = false, details = {}
@@ -14,7 +14,7 @@ export function publicSession(repo, share) {
     const candidates=[process.env.READER_CLOUDFLARED,...String(process.env.PATH||'').split(path.delimiter).map(dir=>path.join(dir,process.platform==='win32'?'cloudflared.exe':'cloudflared')),'/opt/homebrew/bin/cloudflared','/usr/local/bin/cloudflared']
     return candidates.find(value=>value&&fs.existsSync(value)&&fs.statSync(value).isFile())
   }
-  function status() { return { active: !!url, url, updated, busy, available:!!executablePath(), ...details } }
+  function status() { return { active: !!url, url, updated, busy, available:!!executablePath(), ...details, scope:publicScope(repo,share) } }
   function stop() {
     tunnel?.kill(); child?.kill(); proxy?.closeAllConnections(); proxy?.close()
     tunnel = child = proxy = undefined; url = ''; port = undefined

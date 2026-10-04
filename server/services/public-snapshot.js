@@ -3,6 +3,27 @@ import path from 'node:path'
 import { workspace } from '../storage/workspace.js'
 import { resources } from './resources.js'
 
+/** Read-only inventory using the same visibility and directory rules as snapshots. */
+export function publicScope(source, share) {
+  const libraries = new Map()
+  function walk(dir = '') {
+    for (const item of fs.readdirSync(path.join(source.root, dir), {withFileTypes:true})) {
+      if (item.name.startsWith('.') || item.isSymbolicLink() || item.name === 'node_modules') continue
+      const rel = path.posix.join(dir, item.name)
+      if (!share.isShared(rel)) continue
+      if (item.isDirectory()) walk(rel)
+      else if (item.isFile() && /\.(md|markdown|pdf|html?)$/i.test(rel)) {
+        const name = dir ? rel.split('/')[0] : '根目录'
+        if (!libraries.has(name)) libraries.set(name, {name, documents:[]})
+        libraries.get(name).documents.push(rel)
+      }
+    }
+  }
+  walk()
+  const items = [...libraries.values()]
+  return {libraries:items,documents:items.reduce((total,item)=>total+item.documents.length,0)}
+}
+
 // Only public documents and assets owned by public documents enter this directory.
 // Credentials, sources, previews, revisions and operation logs are never copied.
 export function buildPublicSnapshot(source, share, destination) {
@@ -22,7 +43,7 @@ export function buildPublicSnapshot(source, share, destination) {
       if (item.isDirectory()) { fs.mkdirSync(path.join(destination, rel), { recursive: true }); walk(rel) }
       else if (item.isFile() && /\.(md|markdown|pdf|html?|png|jpe?g|webp|gif|svg|css|woff2?|ttf|otf)$/i.test(rel)) {
         copy(rel)
-        if (/\.(md|pdf|html?)$/i.test(rel)) {
+        if (/\.(md|markdown|pdf|html?)$/i.test(rel)) {
           assets.legacy(rel)
           const node = source.node(rel)
           if (node) { visible.add(node.id); target.db.prepare('INSERT OR REPLACE INTO nodes VALUES (?,?,?,?,?,?)').run(node.id, node.path, node.kind, JSON.stringify(node.meta), node.fingerprint, 0) }
