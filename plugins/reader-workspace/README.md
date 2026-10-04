@@ -4,7 +4,7 @@ Typocket 是 DSH 中的个人文档工具，方便你阅读 Agent 的工作成�
 
 ## 安装
 
-1. 从 [Preview 发布页](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.2.0-preview.3)下载 `dsh-reader-workspace-0.2.0-preview.3.tgz`，在 DSH NEXT 的「插件 → 添加插件」选择这个文件。
+1. 从 [Preview 发布页](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.2.0-preview.4)下载 `dsh-reader-workspace-0.2.0-preview.4.tgz`，在 DSH NEXT 的「插件 → 添加插件」选择这个文件。
 2. 在右侧栏「开始」页点击「Typocket」。首次使用会自动创建本机数据目录。
 3. 在 DSH 文件区打开 Markdown，可用 Typocket 预览；在 Typocket 顶栏点外部打开图标，可在浏览器打开当前页面。
 
@@ -26,10 +26,10 @@ macOS 默认抽屉目录是 `~/Library/Application Support/Reader/知识库`。�
 
 ## 支持范围与已知问题
 
-- 0.2.0-preview.3 面向 macOS 本机 DSH NEXT。已用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）的官方安装链 验证安装包自动启动和阅读器入口。Windows/Linux 安装与路径支持仍待真实 DSH 桌面验收；iOS 不作为 DSH 插件平台。
+- 0.2.0-preview.4 面向 macOS 本机 DSH NEXT。此前版本已用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）的官方安装链验证安装包自动启动和阅读器入口。Windows/Linux 安装与路径支持仍待真实 DSH 桌面验收；iOS 不作为 DSH 插件平台。
 - Agent 工具仍需单独授权；客户端连接地址不会自动配置 Agent 令牌。
 - 临时访客链接依赖 `cloudflared` 与网络；真实外部设备的端到端连通性尚未完成验收。
 - 工作区预览是快照，收录后为独立副本，不提供双向同步或多人协作。
 - 同库双消费者与重启已通过实际服务测试；两个原生 DSH 桌面窗口的人工验收仍未完成。
 
-MIT License，详见 [LICENSE](LICENSE)。
+源代码采用 [MIT License](LICENSE)。随包鸿蒙黑体由 Huawei Device Co., Ltd. 授权，使用与再分发须遵守独立字体许可。许可原文在安装包的 `runtime/dist/fonts/HarmonyOS-Sans-LICENSE.txt`，也可在[源码仓库](https://github.com/bigricedumpling/deepseek-reader/blob/main/public/fonts/HarmonyOS-Sans-LICENSE.txt)查看。其他第三方资产见[许可清单](https://github.com/bigricedumpling/deepseek-reader/blob/main/docs/THIRD-PARTY-ASSETS.md)。

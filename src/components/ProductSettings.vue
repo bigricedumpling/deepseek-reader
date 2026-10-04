@@ -26,6 +26,7 @@
               @click="setUiFont(option.id)"
             >{{ option.label }}</button>
           </div>
+          <a class="font-license" :href="fontLicenseUrl" target="_blank" rel="noopener noreferrer">鸿蒙黑体 © Huawei Device Co., Ltd. 查看字体许可</a>
         </fieldset>
         <footer class="product-name">{{ BRAND_NAME }}</footer>
       </section>
@@ -44,6 +45,7 @@ const emit = defineEmits(['close'])
 const dialog = ref(null)
 const { accent, setAccent } = useAccent()
 const { uiFont, setUiFont } = useUiFont()
+const fontLicenseUrl = `${import.meta.env.BASE_URL}fonts/HarmonyOS-Sans-LICENSE.txt`
 useDialogFocus(() => true, dialog, () => emit('close'))
 </script>
 
@@ -63,5 +65,7 @@ legend{font-size:12px;color:var(--c-sub);padding:0;margin-bottom:12px}
 .font-choice{min-height:34px;padding:6px 4px;border-radius:9px;background:var(--c-field);color:var(--c-sub);font-size:12px;white-space:nowrap}
 .font-choice:hover{background:var(--c-chip-hover);color:var(--c-ink)}
 .font-choice.selected{background:var(--c-active);color:var(--c-accent);font-weight:600}
+.font-license{display:block;margin-top:10px;color:var(--c-faint);font-size:11px;line-height:1.5}
+.font-license:hover{color:var(--c-sub)}
 .product-settings .product-name{margin:24px 0 0;font-size:12px;color:var(--c-faint)}
 </style>

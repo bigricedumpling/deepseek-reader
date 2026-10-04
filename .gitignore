@@ -13,3 +13,4 @@ plugins/reader-workspace/runtime/
 # Generated previews and deployment-specific assets
 dist-demo/
 public/shots/
+public/lib-*.svg

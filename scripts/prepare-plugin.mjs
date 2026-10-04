@@ -16,4 +16,7 @@ fs.cpSync(path.join(root, 'server'), path.join(runtime, 'server'), { recursive: 
 // installations store their own libraries under DOCS_ROOT.
 fs.rmSync(path.join(runtime, 'dist', 'kb.json'), { force: true })
 fs.rmSync(path.join(runtime, 'dist', 'shots'), { recursive: true, force: true })
+for (const file of fs.readdirSync(path.join(runtime, 'dist'))) {
+  if (/^lib-.*\.svg$/u.test(file)) fs.rmSync(path.join(runtime, 'dist', file), { force: true })
+}
 console.log(`${BRAND_NAME} runtime staged for the DSH plugin`)

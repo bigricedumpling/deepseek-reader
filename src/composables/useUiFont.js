@@ -10,11 +10,14 @@ export const UI_FONT_OPTIONS = Object.freeze([
 ])
 
 const KEY = 'typocket.uiFont'
-const current = ref('default')
+const FALLBACK_FONT = 'default'
+const current = ref(FALLBACK_FONT)
 let installed = false
 
 function apply(id) {
-  const next = UI_FONT_OPTIONS.some(item => item.id === id) ? id : 'default'
+  const siteDefault = window.__typocketUiFontDefault
+  const fallback = UI_FONT_OPTIONS.some(item => item.id === siteDefault) ? siteDefault : FALLBACK_FONT
+  const next = UI_FONT_OPTIONS.some(item => item.id === id) ? id : fallback
   current.value = next
   document.body.dataset.uiFont = next
 }

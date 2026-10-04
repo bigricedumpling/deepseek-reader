@@ -36,6 +36,8 @@ const SITE_ICON = process.env.KB_ICON || ''
 const SITE_BRAND = process.env.KB_BRAND || ''
 const SITE_ACCENT_DEFAULT = ['blue', 'graphite', 'green', 'violet', 'clay'].includes(process.env.KB_ACCENT_DEFAULT)
   ? process.env.KB_ACCENT_DEFAULT : ''
+const SITE_UI_FONT_DEFAULT = ['default', 'serif', 'sans', 'harmony', 'kai', 'ping'].includes(process.env.KB_UI_FONT_DEFAULT)
+  ? process.env.KB_UI_FONT_DEFAULT : ''
 /*
  * 品牌存 localStorage 的键名。
  *
@@ -194,7 +196,7 @@ const server = http.createServer(async (req, res) => {
      * 不在构建时改，是因为同一个 dist 要服务两个站点 —— 各构建一份的话，
      * 以后每次改前端都得记得构建两次，迟早会漏。
      */
-    if (path.basename(file) === "index.html" && (SITE_TITLE || SITE_BRAND || SITE_ICON || SITE_ACCENT_DEFAULT)) {
+    if (path.basename(file) === "index.html" && (SITE_TITLE || SITE_BRAND || SITE_ICON || SITE_ACCENT_DEFAULT || SITE_UI_FONT_DEFAULT)) {
       let html = String(body)
       if (SITE_TITLE) html = html.replace(/<title>[^<]*<\/title>/, "<title>" + SITE_TITLE + "</title>")
       /*
@@ -214,6 +216,7 @@ const server = http.createServer(async (req, res) => {
           : "",
         SITE_ICON ? "localStorage.setItem(" + JSON.stringify(LOGO_KEY) + "," + JSON.stringify(SITE_ICON) + ");" : "",
         SITE_ACCENT_DEFAULT ? "window.__typocketAccentDefault=" + JSON.stringify(SITE_ACCENT_DEFAULT) + ";" : "",
+        SITE_UI_FONT_DEFAULT ? "window.__typocketUiFontDefault=" + JSON.stringify(SITE_UI_FONT_DEFAULT) + ";" : "",
         "}catch(e){}})()",
       ].join("")
       html = html.replace("</head>", "<script>" + script + "<\/script></head>")

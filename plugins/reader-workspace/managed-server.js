@@ -82,7 +82,7 @@ export function startManagedServer(onChange = () => {}, options = {}) {
       publish('starting')
       child = spawn(process.execPath, [path.join(runtime, 'server', 'serve.js')], {
         cwd: runtime,
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(port), DIST_DIR: path.join(runtime, 'dist'), DOCS_ROOT: data, READER_RUNTIME_DIR: runtimeData },
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(port), DIST_DIR: path.join(runtime, 'dist'), DOCS_ROOT: data, READER_RUNTIME_DIR: runtimeData, KB_UI_FONT_DEFAULT: 'harmony' },
         stdio: ['ignore', 'ignore', 'pipe', 'ipc']
       })
       let errors = '', ready = false
