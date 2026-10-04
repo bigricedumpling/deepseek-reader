@@ -9,7 +9,7 @@ const manifest=JSON.parse(fs.readFileSync(path.join(root,'plugins/reader-workspa
 const archive=process.argv[2]||path.join(root,`${manifest.name}-${manifest.version}.tgz`)
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'reader-package-'))
 try{
- const entries=execFileSync('tar',['-tf',archive],{encoding:'utf8'}).trim().split('\n')
+ const entries=execFileSync('tar',['-tf',archive],{encoding:'utf8'}).trim().split(/\r?\n/)
  assert(entries.includes('package/runtime/dist/index.html'))
  assert(entries.includes('package/runtime/server/serve.js'))
  assert(entries.includes('package/platform.js'))
