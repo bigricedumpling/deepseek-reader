@@ -16,7 +16,7 @@ export const preservedSchema = $nodeSchema('reader_raw', () => ({
   toDOM(node) {
     const dom=document.createElement('div');dom.className='reader-raw-block';dom.dataset.readerRaw=node.attrs.value
     dom.setAttribute('aria-label','HTML 或文档属性');dom.setAttribute('tabindex','0')
-    if (/^(---|\+\+\+)\r?\n/.test(node.attrs.value)) {dom.textContent='文档属性';dom.classList.add('reader-frontmatter')}
+    if (/^(---|\+\+\+)\r?\n/.test(node.attrs.value)) {dom.classList.add('reader-frontmatter');dom.setAttribute('aria-hidden','true');dom.removeAttribute('tabindex')}
     else dom.innerHTML=DOMPurify.sanitize(renderMarkdown(node.attrs.value),{FORBID_ATTR:['style'],FORBID_TAGS:['style','iframe','object','embed','form','input','button','textarea']})
     const edit=document.createElement('button');edit.type='button';edit.className='raw-edit-button';edit.textContent='编辑';edit.setAttribute('aria-label','编辑内容块');dom.append(edit)
     return dom

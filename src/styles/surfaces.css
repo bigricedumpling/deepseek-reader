@@ -32,6 +32,6 @@ aside.is-reader-rail{z-index:var(--layer-navigation)!important}
 :is(.pop-leave-active,.overlay-leave-active){pointer-events:none}
 /* On narrow screens a compact insertion sheet stays within the viewport. */
 @media(max-width:600px){
-.crepe-host .milkdown .milkdown-slash-menu{position:fixed!important;left:12px!important;right:auto!important;top:auto!important;bottom:44px!important;transform:none!important;width:min(288px,calc(100vw - 24px))!important;max-height:calc(100dvh - 100px)}
+.crepe-host .milkdown .milkdown-slash-menu{position:fixed!important;left:12px!important;right:auto!important;top:auto!important;bottom:44px!important;transform:none!important;width:min(240px,calc(100vw - 24px))!important;max-height:calc(100dvh - 100px)}
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups{max-height:min(320px,calc(100dvh - 160px))}
 }

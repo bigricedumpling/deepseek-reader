@@ -338,6 +338,7 @@ onMounted(async () => {
    */
   host.value?.addEventListener('pointerdown', openFormula, true)
   host.value?.addEventListener('keydown', openFormula, true)
+  host.value?.addEventListener('keydown', onHeadingBoundary, true)
   host.value?.addEventListener('pointerdown', onHandleDown, true)
   host.value?.addEventListener('click', onHandleClick, true)
   host.value?.addEventListener('click', onHeadingClick, true)
@@ -424,6 +425,23 @@ function viewOf() {
 function restoreVersion(e){if(!props.readonly&&e.detail.path===props.docFile)emit('restore',e.detail.content)}
 function openRichDoc(e){emit('open-doc',e.detail)}
 const calloutPicker=shallowRef(null),rawBlock=shallowRef(null),formula=shallowRef(null)
+function onHeadingBoundary(event){
+ if(props.readonly||event.isComposing||event.shiftKey||event.metaKey||event.ctrlKey||event.altKey||!['Backspace','Enter'].includes(event.key))return
+ const view=viewOf();if(!view)return
+ const {$from,empty}=view.state.selection
+ if(!empty||$from.depth!==1||$from.parent.type.name!=='heading'||$from.parentOffset!==0)return
+ const index=$from.index(0),doc=view.state.doc
+ let start=index
+ while(start>0&&doc.child(start-1).type.name==='paragraph'&&doc.child(start-1).content.size===0)start--
+ const title=$from.parent.attrs.level===1&&Array.from({length:start},(_,i)=>doc.child(i)).every(n=>n.type.name==='reader_raw'&&/^(---|\+\+\+)\r?\n/.test(n.attrs.value))
+ if(event.key==='Backspace'){
+  if(start<index){event.preventDefault();event.stopImmediatePropagation();const from=$from.before()-Array.from({length:index-start},(_,i)=>doc.child(start+i).nodeSize).reduce((a,b)=>a+b,0);userTyped=true;view.dispatch(view.state.tr.delete(from,$from.before()));return}
+  if(title){event.preventDefault();event.stopImmediatePropagation()}
+ }else if(title){
+  event.preventDefault();event.stopImmediatePropagation();const after=$from.after(),tr=view.state.tr.insert(after,view.state.schema.nodes.paragraph.create());tr.setSelection(TextSelection.create(tr.doc,after+1));userTyped=true;view.dispatch(tr);view.focus()
+ }
+}
+
 function decorateFormula(){if(props.readonly)return;for(const el of host.value?.querySelectorAll('[data-type="math_inline"]')||[]){el.setAttribute('tabindex','0');el.setAttribute('role','button');el.setAttribute('aria-label','编辑公式')}}
 function openFormula(e){
  if(props.readonly||(e.type==='keydown'&&e.key!=='Enter'))return
@@ -758,6 +776,7 @@ onBeforeUnmount(async () => {
   host.value?.removeEventListener('keydown', onCalloutIconKey, true)
   host.value?.removeEventListener('pointerdown', openFormula, true)
   host.value?.removeEventListener('keydown', openFormula, true)
+  host.value?.removeEventListener('keydown', onHeadingBoundary, true)
   host.value?.removeEventListener('pointerdown', onHandleDown, true)
   host.value?.removeEventListener('click', onHandleClick, true)
   host.value?.removeEventListener('click', onHeadingClick, true)
