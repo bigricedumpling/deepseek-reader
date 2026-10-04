@@ -9,3 +9,7 @@ plugins/reader-workspace/runtime/
 .dist-*/
 
 .runtime/
+
+# Generated previews and deployment-specific assets
+dist-demo/
+public/shots/

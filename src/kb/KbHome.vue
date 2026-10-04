@@ -51,10 +51,10 @@ import { API_BASE } from '../utils/api'
 
 const FALLBACK = [
   {
-    name: '笔试调研',
-    desc: '网页数据 / 评测基准 / 训练数据构造与筛选的调研与结论。',
+    name: '打开阅读器',
+    desc: '阅读、编辑和整理文档。',
     href: '/',
-    meta: '调研，笔试，存档'
+    meta: ''
   }
 ]
 

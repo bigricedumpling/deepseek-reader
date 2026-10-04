@@ -1,6 +1,6 @@
 {
   "name": "dsh-reader-workspace",
-  "version": "0.2.0-preview.1",
+  "version": "0.2.0-preview.2",
   "description": "Open Reader in the DSH sidebar to read and organize local knowledge bases and preview workspace Markdown",
   "license": "MIT",
   "repository": {

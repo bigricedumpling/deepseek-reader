@@ -1,83 +1,66 @@
 # Reader
 
-**为人与 Agent 一起阅读、撰写和整理资料准备的本地文档工作台。**
+**在 DSH 中阅读、编辑和整理你与 Agent 共同积累的资料。**
 
-Agent 可以在工作区生成文档、收集网页和处理资料，但产出的文件常常散落在不同目录里。Reader 把阅读、修改和归档接起来：在 DSH 中查看成果，把需要长期保留的内容收录进知识库，下次继续找回、引用和修改。
+一次调研往往会留下笔记、草稿、参考文献和网页。Agent 很擅长处理这些文件，人却需要一个适合阅读、修改和整理它们的地方。Reader 把这个界面带到 DSH 中，让工作区里的成果逐渐成为可以反复使用的个人知识库。
 
-正文保留为普通文件，数据留在本机。Markdown 是主要写作格式，同时支持 PDF 和 H5 预览。它适合个人调研、学习、项目记录和交付整理；目前不提供多人实时协作。
+正文以普通文件保存在本机。你可以在 Reader 中继续写，也可以交给 Agent 或其他工具处理。Markdown 是主要写作格式，PDF 和 HTML 页面也能放在一起查看。
 
-![Reader 阅读界面](docs/screenshots/workspace.png)
+## 可以用它做什么
 
-## 从一次工作到长期积累
+- **阅读工作区成果**：直接预览 Agent 生成的 Markdown，查看相对图片和链接，从工作区浏览记录中找回读过的文件。
+- **整理自己的知识库**：将有用的资料收录为独立副本，用文件夹组织内容，通过搜索和多标签继续工作。
+- **专注阅读与写作**：调整字体、正文宽度、行距和主题，使用目录导航，编辑 Markdown、表格、公式与脚注。
+- **一起查看不同资料**：在同一处阅读 Markdown、PDF 和 HTML 页面，适合调研、学习、项目记录与个人笔记。
+- **按需连接 Agent 和分享**：授权 Agent 访问指定知识库，或为选定内容创建只读分享快照。
 
-1. **在工作区查看**：从 DSH 打开 Agent 生成的 Markdown，阅读正文与相对图片，原文件仍在项目目录。
-2. **保留有用的内容**：收录到知识库时创建独立副本，之后可整理文件夹、修改正文和设置页面外观。
-3. **继续工作**：同时打开多篇文档，搜索已有资料；可单独授权 Agent 访问指定知识库。
-4. **需要时给别人看**：临时分享生成只读快照，主动更新后访客才看到新内容。
+Reader 面向以本地文件为中心的个人工作。当前不提供多人实时协作、云同步或工作区原文件与收录副本的双向同步。
 
-阅读体验包括长文目录、正文宽度、字体、行距、主题、代码高亮和公式。Markdown 支持富文本编辑；遇到编辑器不能完整还原的结构时保留源码编辑保护，不静默改写原文。
+## 安装
 
-完整操作见 [使用指南](docs/USER-GUIDE.md)，本轮逐项记录见 [18 项验收台账](docs/IMPLEMENTATION-REVIEW.md)。
+1. 从 [发布页](https://github.com/bigricedumpling/deepseek-reader/releases)下载最新 Preview 的 `.tgz` 安装包。
+2. 在 DSH NEXT 中打开「插件 → 添加插件」，选择安装包。
+3. 从右侧栏「开始 → 阅读器」进入。
 
-## 安装与版本
+**插件自带 Reader 页面和本机服务，无需另外部署 Reader、安装 Node.js 或运行终端命令。**首次使用会创建「草稿」知识库，你可以改名或删除它。
 
-Preview 安装包：[v0.2.0-preview.1](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.2.0-preview.1)。在 DSH NEXT 的「插件 → 添加插件」选择发布页的 `.tgz`，再从右侧栏「开始 → 阅读器」进入。**安装包自带 Reader 页面和本机服务，不需要用户另装 Reader 或 Node.js。**
+社区市场收录仍在审核中，当前请使用发布页安装包。macOS 已验证安装与本机使用；Windows 和 Linux 已包含平台适配并通过自动检查，但原生 DSH 桌面体验仍待验证。具体边界见 [支持范围与已知问题](docs/RELEASE-READINESS.md)。
 
-市场审核与安装包发布是两个独立步骤；市场是否可搜索以实际收录为准。旧版 [v0.1.0-preview.2](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.1.0-preview.2) 保留供需要回退的用户下载。
+## 文件始终在本机
 
-公开 Preview 已验证 macOS DSH NEXT。新分支已补 Windows/Linux 的数据路径与安装声明，但仍需真实宿主安装验收。Web 技术栈不意味着宿主、进程和文件管理器行为自动跨平台一致。见 [平台与发布验收](docs/RELEASE-READINESS.md)。
+工作区预览不会移动原文件。「收录副本」会将内容复制到知识库，之后可以独立编辑和整理。正文与附件保留为文件，页面设置、文档标识和历史索引保存在知识库的 `.reader` 目录。
 
-## 内容存在哪里
-
-| 内容 | 所在位置与关系 |
+| 平台 | 默认知识库目录 |
 | --- | --- |
-| 工作区原文件 | 原项目目录；预览不会移动它 |
-| 工作区浏览记录 | 本机保存的预览记录；不是知识库阅读历史 |
-| 收录的文档 | 知识库中的独立副本，默认私有；与原文件不双向同步 |
-| 页面设置、稳定标识、版本索引 | 知识库的 `.reader/state.sqlite` |
-| 分享快照 | 主动生成的公开副本；原文后续修改不会自动发布 |
+| macOS | `~/Library/Application Support/Reader/知识库` |
+| Windows | `%APPDATA%\Reader\知识库` |
+| Linux | `$XDG_DATA_HOME/Reader/知识库`，未设置时使用 `~/.local/share/Reader/知识库` |
 
-默认插件数据目录：macOS 为 `~/Library/Application Support/Reader/知识库`；新分支 Windows 为 `%APPDATA%\Reader\知识库`，Linux 为 `$XDG_DATA_HOME/Reader/知识库`（未设置时使用 `~/.local/share`）。更新或移除插件不会主动删除该目录。正文和元数据需要一起备份，详见 [数据与恢复](docs/DATA-AND-RECOVERY.md)。
+更新或卸载插件不会主动删除知识库。备份时请连同正文、附件和元数据一起保存，见 [数据与恢复](docs/DATA-AND-RECOVERY.md)。
 
-## 权限与分享
+Agent 访问需要另行授权。分享快照只包含主动选择发布的内容，原文后续修改不会自动更新到快照。临时外网分享依赖隧道服务、网络以及本机持续运行。
 
-本机管理无需账号。Agent 访问是可选功能，需要明确授权范围；安装阅读器不等于授权 Agent 读取所有资料。
+## 使用与帮助
 
-临时分享是只读快照。服务器上的公开示例库则可被部署者设为可编辑，两者不是相同的分享机制。Reader 不承诺本机地址可以直接让其他人访问；临时外网分享还依赖隧道服务和网络。
+- [使用指南](docs/USER-GUIDE.md)：从打开文档到整理、恢复和分享。
+- [插件说明](plugins/reader-workspace/README.md)：安装、连接设置与 Agent 授权。
+- [支持范围与已知问题](docs/RELEASE-READINESS.md)：平台、格式和分享限制。
+- [版本变化](CHANGELOG.md)：每个版本带来的变化。
+- [反馈问题](https://github.com/bigricedumpling/deepseek-reader/issues)：请附版本、系统和复现步骤，示例内容请先脱敏。
 
-服务器部署、认证和历史交付链接见 [部署与兼容约束](docs/DEPLOYMENT.md)。个人交付资料不属于插件安装包。
+## 从源码开发
 
-## 开发
-
-需要 Node.js 24 或更新版本。源码开发者自行安装 Node.js；插件用户无需安装。
+开发环境需要 Node.js 24 或更新版本。在仓库根目录执行：
 
 ```bash
 npm ci
 npm run dev
 ```
 
-开发服务默认使用仓库旁的 `知识库`。建议设置 `DOCS_ROOT` 指向专用开发目录，避免拿日常资料做实验。生产构建 `npm run build` 不再初始化知识库。
+开发时可设置 `DOCS_ROOT` 指向独立数据目录。构建使用 `npm run build`；基础检查使用 `npm run check` 和 `npm run typecheck`。
 
-```bash
-npm run check
-npm run typecheck
-npm run test:access
-npm run test:routes
-npm run test:plugin
-npm run test:lifecycle
-npm run test:transfer
-npm run build
-```
+项目使用 Vue 3、Vite、Milkdown、Node.js 和 SQLite。参与开发可阅读 [工程说明](docs/ENGINEERING.md) 与 [存储架构](docs/数据与扩展架构.md)；独立网站维护者可阅读 [服务器部署](docs/DEPLOYMENT.md)。
 
-主要技术：Vue 3、Pinia、Vite、Milkdown、Markdown-it、Shiki、Mermaid、PDF.js；Node.js 文件服务与 SQLite 元数据。TypeScript 从接口契约渐进引入，现有代码并未完成全面迁移。见 [工程原则](docs/ENGINEERING.md)。
+## 许可
 
-## 项目资料
-
-- [产品定位与边界](docs/PRODUCT.md)
-- [插件安装和连接](plugins/reader-workspace/README.md)
-- [数据、备份与恢复](docs/DATA-AND-RECOVERY.md)
-- [版本变化](CHANGELOG.md)
-- [已知问题与正式版门槛](docs/RELEASE-READINESS.md)
-- [既有存储架构](docs/数据与扩展架构.md)
-
-MIT License。字体等第三方资产保留各自许可；HarmonyOS Sans 授权见 [字体许可](public/fonts/HarmonyOS-Sans-LICENSE.txt)。
+[MIT License](LICENSE)。第三方字体与阅读组件遵循各自许可，见 [第三方资产](docs/THIRD-PARTY-ASSETS.md)。
