@@ -54,7 +54,7 @@
             <button class="lib-icon-edit" :disabled="isGuest" title="更换知识库图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon class="lib-row-icon" :value="lib.icon || siteIcon" /></button>
 
 
-            <button class="lib-row-name" :title="isGuest ? lib.name + '（' + (store.canEdit(lib) ? '可编辑' : '只读') + '）' : lib.name" @click="goLib(lib)">
+            <button class="lib-row-name" @contextmenu="libContext($event,lib)" :title="isGuest ? lib.name + '（' + (store.canEdit(lib) ? '可编辑' : '只读') + '）' : lib.name" @click="goLib(lib)">
               <input
                 v-if="!isGuest && renaming === lib.name"
                 ref="renameInput"
@@ -111,7 +111,7 @@
             </div>
           </div>
           <div v-if="managerSection === 'libs'" class="lib-manager-grid">
-            <div v-for="lib in managerLibs" :key="lib.path" class="lib-manager-card" :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }">
+            <div v-for="lib in managerLibs" :key="lib.path" class="lib-manager-card" @contextmenu="libContext($event,lib)" :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }">
               <button class="lib-manager-card-main" @click="goLib(lib); managerOpen=false"><ContentIcon :value="lib.icon || siteIcon" class="lib-manager-icon" /><strong>{{ lib.name }}</strong><span class="lib-card-meta"><span>{{ lib.docs }} 篇</span><span class="lib-card-status"><component :is="isGuest ? store.canEdit(lib) ? PhPencilSimple : PhLock : lib.shared ? lib.locked ? PhLock : PhPencilSimple : PhEyeSlash" :size="13" weight="regular" />{{ isGuest ? store.canEdit(lib) ? '可编辑' : '只读' : lib.shared ? lib.locked ? '访客只读' : '访客可编辑' : '仅自己' }}</span></span></button>
               <button v-if="!isGuest" class="lib-manager-card-more icon-btn xs" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" weight="bold" /></button>
             </div>
@@ -838,6 +838,7 @@ async function goLib(lib) {
  * 知识库的…菜单：复用侧边栏那一套浮层（tree.menu），
  * 所以位置、样式、点别处关掉的行为都一样，不用另造一个。
  */
+function libContext(e,lib){if(isGuest.value||e.target.closest('input,textarea'))return;e.preventDefault();e.stopPropagation();openLibMenu(lib,e)}
 function openLibMenu(lib, ev) {
   tree.openMenu('lib', { name: lib.name, path: lib.path, docs: lib.docs, shared: lib.shared, locked: lib.locked, lockedAt: lib.lockedAt }, ev)
 }
@@ -1278,6 +1279,7 @@ const tree = reactive({
   /* ---------- …菜单 ---------- */
 
   openMenu(kind, node, ev) {
+    this.closeMenu()
     const r = ev.currentTarget.getBoundingClientRect()
     const w = 148
     this.menu = {
@@ -1286,8 +1288,8 @@ const tree = reactive({
       node,
       style: {
         width: w + 'px',
-        left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)) + 'px',
-        top: r.bottom + 4 + 'px'
+        left: Math.max(8, Math.min(ev.type === 'contextmenu' ? ev.clientX : r.right - w, window.innerWidth - w - 8)) + 'px',
+        top: Math.max(8,Math.min(ev.type === 'contextmenu' ? ev.clientY : r.bottom + 4,window.innerHeight - 320)) + 'px'
       }
     }
     /*

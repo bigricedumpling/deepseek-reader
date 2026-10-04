@@ -3,7 +3,7 @@
     <!-- 顶部工具条：左侧是打开的文档，右侧是各功能入口 -->
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
-      <DocTabs v-if="tabItems.length" class="mr-auto" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" />
+      <DocTabs v-if="tabItems.length" class="mr-auto" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" />
       <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原知识库"><PhClockCounterClockwise :size="12" />恢复副本</span>
       <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
@@ -348,7 +348,7 @@ const browserUrl = computed(() => {
   if (lib) url.searchParams.set('lib', lib)
   return url.toString()
 })
-const emit = defineEmits(['update:keyword', 'jump', 'input', 'reload', 'select', 'canonize', 'close-tab', 'create-doc'])
+const emit = defineEmits(['update:keyword', 'jump', 'input', 'reload', 'select', 'canonize', 'close-tab', 'close-tabs', 'create-doc'])
 
 /** 当前这篇是不是 pdf：是就不挂编辑器，改挂浏览器自带的 pdf 阅读器 */
 /* 成品文件：pdf 与 h5。两者都交给浏览器整页渲染，工具栏与页脚信息按类型分开。 */

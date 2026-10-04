@@ -17,6 +17,8 @@
       <div
         v-for="t in items"
         :key="t.file"
+        @contextmenu.prevent.stop="openContext($event,t.file)"
+        @keydown.shift.f10.prevent="openContext($event,t.file)"
         class="doc-tab"
         :class="{ 'is-active': t.file === active }"
       >
@@ -41,6 +43,11 @@
       </div>
     </TransitionGroup>
   </div>
+  <Teleport to="body"><div v-if="context" ref="contextPanel" class="tab-context side-menu" role="menu" aria-label="标签页操作" :style="{left:context.x+'px',top:context.y+'px'}" @keydown="menuKey">
+    <button role="menuitem" @click="closeGroup('current')">关闭标签页</button>
+    <button role="menuitem" :disabled="items.length<2" @click="closeGroup('others')">关闭其他标签页</button>
+    <button role="menuitem" :disabled="items.findIndex(t=>t.file===context.file)===items.length-1" @click="closeGroup('right')">关闭右侧标签页</button>
+  </div></Teleport>
 </template>
 
 <script setup>
@@ -54,7 +61,21 @@ const props = defineProps({
   active: { type: String, default: '' }
 })
 
-const emit = defineEmits(['select', 'close'])
+const emit = defineEmits(['select', 'close', 'close-many'])
+
+const context=ref(null),contextPanel=ref(null)
+let contextTrigger=null
+async function openContext(event,file){
+ const rect=event.currentTarget.getBoundingClientRect();contextTrigger=event.currentTarget.querySelector('button')
+ context.value={file,x:Math.max(8,Math.min(event.type==='contextmenu'?event.clientX:rect.left,innerWidth-196)),y:Math.max(8,Math.min(event.type==='contextmenu'?event.clientY:rect.bottom,innerHeight-120))}
+ await nextTick();contextPanel.value?.querySelector('button:not(:disabled)')?.focus()
+}
+function dismissContext(focus=false){context.value=null;if(focus)contextTrigger?.focus()}
+function contextOutside(e){if(!contextPanel.value?.contains(e.target))dismissContext()}
+function menuKey(e){if(e.key==='Escape'){e.preventDefault();dismissContext(true)}else if(e.key==='Tab')dismissContext();else if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const buttons=[...contextPanel.value.querySelectorAll('button:not(:disabled)')],i=buttons.indexOf(document.activeElement);buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus()}}
+function closeGroup(kind){const file=context.value.file,index=props.items.findIndex(t=>t.file===file);const files=props.items.filter((t,i)=>kind==='current'?t.file===file:kind==='others'?t.file!==file:i>index).map(t=>t.file);dismissContext(true);emit('close-many',files)}
+onMounted(()=>{document.addEventListener('pointerdown',contextOutside);window.addEventListener('resize',contextOutside)})
+onBeforeUnmount(()=>{document.removeEventListener('pointerdown',contextOutside);window.removeEventListener('resize',contextOutside)})
 
 const strip = ref(null)
 
@@ -253,3 +274,5 @@ function onAux(e, file) {
 .doc-tabs{min-height:36px}.doc-tab.tab-move{transition:transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:opacity 180ms ease,transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-from,.doc-tab.tab-leave-to{opacity:0;transform:translateY(5px) scale(.94)}.single-document .doc-tab{--smooth-fill:transparent!important;max-width:100%}.single-document .doc-tab-main{padding-left:0}.single-document .doc-tab-main .content-icon{display:none}.single-document .doc-tab-name{color:var(--c-sub)}
 @media(prefers-reduced-motion:reduce){.doc-tab.tab-move,.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:none!important}}
 </style>
+
+<style scoped>.tab-context{position:fixed;z-index:180;width:188px;padding:5px;border-radius:12px}.tab-context button{display:block;width:100%;text-align:left;padding:8px 10px;font:12px var(--font-sans);color:var(--c-ink);border-radius:7px}.tab-context button:hover,.tab-context button:focus-visible{background:var(--c-hover);outline:0}.tab-context button:disabled{opacity:.35;background:none;cursor:default}</style>

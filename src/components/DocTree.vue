@@ -6,6 +6,7 @@
         <div v-if="showLineBefore(node)" class="drop-line" />
         <div
           class="cat-row group/cat"
+          @contextmenu="contextRow($event,'folder',node)"
           :class="{ 'is-drop': tree.dropInto === node.path, 'is-on': containsCurrent(node), 'is-dragging': isDragging(node) }"
           :data-level="depth"
           :style="{ paddingLeft: 8 + depth * 11 + 'px' }"
@@ -77,6 +78,7 @@
       <div v-if="showLineBefore(node)" class="drop-line" />
       <div
         class="doc-row group/doc"
+        @contextmenu="contextRow($event,'file',node)"
         :class="{ 'is-on': node.file === currentPath, 'is-dragging': isDragging(node), 'is-pdf': node.type === 'pdf' }"
         :data-level="depth"
         :style="{ paddingLeft: 26 + depth * 11 + 'px' }"
@@ -125,6 +127,8 @@
 </template>
 
 <script setup>
+function contextRow(e,kind,node){if(store.isGuest||e.target.closest('input,textarea,[contenteditable=true]'))return;e.preventDefault();e.stopPropagation();tree.openMenu(kind,node,e)}
+
 import ContentIcon from './ContentIcon.vue'
 import { ref, computed, inject, nextTick, watch } from 'vue'
 import { PhFolderSimple, PhCaretRight, PhCaretDown, PhFilePdf, PhFileHtml, PhDotsThree } from '@phosphor-icons/vue'

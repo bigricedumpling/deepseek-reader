@@ -41,6 +41,7 @@
         :epoch="docEpoch"
         @canonize="onCanonize"
         @close-tab="onCloseTab"
+        @close-tabs="onCloseTabs"
         :dirty="store.isDirty"
         :saving="store.saving"
         :saved-at="store.savedAt"
@@ -311,6 +312,14 @@ async function onSelect(file) {
  * 关的是当前这篇时，**先确认能安全离开（该存先存），再删标签、再切到邻居** ——
  * 顺序反过来的话，保存失败或被取消时标签已经没了，界面会自相矛盾。
  */
+async function onCloseTabs(files) {
+  const targets = files.filter(file => store.tabs.includes(file))
+  if (!targets.length) return
+  if (targets.includes(store.currentPath) && !(await ensureSafe())) return
+  for (const file of targets.filter(file => file !== store.currentPath)) store.closeTab(file)
+  if (targets.includes(store.currentPath)) await onCloseTab(store.currentPath)
+}
+
 async function onCloseTab(file) {
   clearTimeout(saveTimer)
   if (file === store.currentPath && !(await ensureSafe())) return
