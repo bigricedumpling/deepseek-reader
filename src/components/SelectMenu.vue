@@ -4,7 +4,7 @@
   </button>
   <Teleport to="body">
     <Transition name="pop">
-    <div v-if="open" ref="panel" class="select-menu-panel" :style="position" role="listbox" :aria-label="label" @keydown="onKey">
+    <div v-if="open" ref="panel" class="select-menu-panel" :class="{'in-dialog':inDialog}" :style="position" role="listbox" :aria-label="label" @keydown="onKey">
       <button v-for="(item, index) in options" :key="item.value" type="button" role="option" :aria-selected="item.value === modelValue" :tabindex="index === active ? 0 : -1" @click="choose(item.value)"><span>{{ item.label }}</span><PhCheck v-if="item.value === modelValue" :size="14" /></button>
     </div>
     </Transition>
@@ -15,9 +15,11 @@ import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { PhCaretDown, PhCheck } from '@phosphor-icons/vue'
 const props = defineProps({ modelValue: String, options: { type: Array, default: () => [] }, label: String })
 const emit = defineEmits(['update:modelValue'])
+const inDialog=ref(false)
 const trigger = ref(null), panel = ref(null), open = ref(false), active = ref(0), position = ref({})
 function close(focus = false) { open.value = false; if (focus) trigger.value?.focus() }
 async function show() {
+  inDialog.value=!!trigger.value.closest('[role=dialog]')
   const rect = trigger.value.getBoundingClientRect(), width = Math.min(innerWidth - 16, Math.max(128, rect.width))
   position.value = { width: width + 'px', left: Math.max(8, Math.min(rect.left, innerWidth - width - 8)) + 'px', top: Math.max(8, Math.min(rect.bottom + 6, innerHeight - props.options.length * 36 - 16)) + 'px' }
   active.value = Math.max(0, props.options.findIndex(item => item.value === props.modelValue)); open.value = true
@@ -26,8 +28,8 @@ async function show() {
 function toggle() { open.value ? close() : show() }
 function choose(value) { emit('update:modelValue', value); close(true) }
 function onKey(event) {
-  if (event.key === 'Escape') { event.preventDefault(); close(true) }
-  else if (event.key === 'Tab') close()
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true) }
+  else if (event.key === 'Tab') close(true)
   else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
     event.preventDefault()
     active.value = event.key === 'Home' ? 0 : event.key === 'End' ? props.options.length - 1 : (active.value + (event.key === 'ArrowDown' ? 1 : -1) + props.options.length) % props.options.length

@@ -321,8 +321,10 @@ async function onCloseTabs(files) {
 }
 
 async function onCloseTab(file) {
-  clearTimeout(saveTimer)
-  if (file === store.currentPath && !(await ensureSafe())) return
+  if (file === store.currentPath) {
+    clearTimeout(saveTimer)
+    if (!(await ensureSafe())) return
+  }
   const next = store.closeTab(file)
   if (next && next !== store.currentPath) await store.select(next)
 }

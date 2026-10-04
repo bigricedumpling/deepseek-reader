@@ -95,14 +95,15 @@
     <Teleport to="body">
       <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false" /></transition>
       <transition name="lib-manager">
-        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览知识库' : '管理知识库'">
-          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? previewArchived ? '已归档' : '工作区浏览记录' : '知识库' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection==='libs' && !isGuest" class="icon-btn" aria-label="新建知识库" @click="createLib"><PhPlus :size="18" /></button><button v-if="managerSection === 'previews' && !selectedPreview" @click="togglePreviewArchive">{{ previewArchived ? '浏览记录' : '已归档' }}</button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
+        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" :class="{'history-panel':managerSection==='previews'}" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览知识库' : '管理知识库'">
+          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? '工作区浏览记录' : '知识库' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection==='libs' && !isGuest" class="icon-btn" aria-label="新建知识库" @click="createLib"><PhPlus :size="18" /></button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
           <p v-if="managerSection === 'libs' && !isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收录到知识库，也可以直接新建文档。</p>
           <div v-if="managerSection === 'libs' || managerSection === 'previews' && !selectedPreview" class="lib-manager-tools">
             <div class="lib-manager-search-row">
               <input v-if="managerSection === 'libs'" v-model.trim="libQuery" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus />
               <input v-else v-model.trim="previewQuery" type="search" placeholder="搜索浏览记录" aria-label="搜索工作区浏览记录" />
               <SelectMenu v-if="managerSection === 'libs'" v-model="libSort" :options="libSortOptions" label="知识库排序" />
+              <SelectMenu v-else :model-value="previewArchived ? 'hidden' : 'recent'" :options="[{value:'recent',label:'最近浏览'},{value:'hidden',label:'已隐藏'}]" label="浏览记录筛选" @update:model-value="setPreviewFilter" />
             </div>
             <div v-if="managerSection === 'libs' && !isGuest" class="lib-manager-filter-row">
               <div class="lib-manager-filters" role="group" aria-label="筛选知识库">
@@ -120,8 +121,9 @@
           <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="regular" />分享只读副本</button><button title="允许 Agent 访问指定知识库" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="regular" />Agent 访问</button></footer>
           <div v-if="managerSection === 'previews'" class="lib-manager-previews">
             <div v-if="!selectedPreview" class="preview-list">
+              <p v-if="previewLoading" class="lib-empty" role="status">正在读取…</p>
               <div v-for="item in filteredPreviews" :key="item.id" class="preview-list-row">
-                <button class="preview-list-main" @click="selectPreview(item.id)"><PhFileText :size="18" weight="regular" /><span><strong>{{ item.title }}</strong><small>{{ item.sourceState === 'missing' ? '来源已失效' : item.sourceState === 'changed' ? '源文件已更新' : new Date(item.updated).toLocaleString('zh-CN') }}</small></span></button>
+                <button class="preview-list-main" :data-preview-id="item.id" @click="selectPreview(item.id)"><PhFileText :size="18" weight="regular" /><span><strong>{{ item.title }}</strong><small>{{ item.sourceState === 'missing' ? '来源已失效' : item.sourceState === 'changed' ? '源文件已更新' : new Date(item.updated).toLocaleString('zh-CN') }}</small></span></button>
                 <div class="preview-list-actions">
                   <button v-if="fileManagerAvailable()" :disabled="!canRevealItem(item)" :title="canRevealItem(item) ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager(item)"><PhFolderSimple :size="15" />{{ fileManagerLabel() }}</button>
                   <button v-else-if="canResolvePreviewInDsh(item)" @click="openPreviewInDsh(item)"><PhFolderSimple :size="15" />在 DSH 打开</button>
@@ -129,9 +131,9 @@
                 </div>
               </div>
               <p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p>
-              <p v-if="!filteredPreviews.length" class="lib-empty">{{ previewQuery ? '没有匹配的记录' : previewArchived ? '没有归档记录' : '还没有浏览记录' }}</p>
+              <p v-if="!previewLoading && !previewActionError && !filteredPreviews.length" class="lib-empty">{{ previewQuery ? '没有匹配的记录' : previewArchived ? '没有隐藏的记录' : '还没有浏览记录' }}</p>
             </div>
-            <div v-if="selectedPreview" class="lib-preview-detail"><div class="lib-preview-detail-head"><span>{{ selectedPreview.incomplete ? '部分图片未加载' : selectedPreview.sourceState === 'missing' ? '来源已失效' : selectedPreview.sourceState === 'changed' ? '源文件已更新' : '来自工作区' }}</span></div><p class="lib-preview-source" :title="selectedPreview.reference">{{ previewSourceLabel(selectedPreview.reference) }}</p><div class="lib-preview-body" v-html="selectedPreviewHtml" @click="onPreviewLink" /><p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p><div class="lib-preview-actions"><button v-if="fileManagerAvailable()" :disabled="!canRevealPreview" :title="canRevealPreview ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager()"><PhFolderSimple :size="14" />{{ fileManagerLabel() }}</button><button v-else-if="canOpenPreviewInDsh" @click="openPreviewInDsh()"><PhFolderSimple :size="14" />在 DSH 打开原文件</button><button @click="archivePreview(selectedPreview.id, !previewArchived)">{{ previewArchived ? '移回记录' : '归档' }}</button><button :disabled="selectedPreview.incomplete" @click="openTransfer('collect','preview',selectedPreview.id)">收录副本</button></div></div>
+            <div v-if="selectedPreview" class="lib-preview-detail"><div class="lib-preview-detail-head"><span>{{ selectedPreview.incomplete ? '部分图片未加载' : selectedPreview.sourceState === 'missing' ? '来源已失效' : selectedPreview.sourceState === 'changed' ? '源文件已更新' : '来自工作区' }}</span></div><p class="lib-preview-source" :title="selectedPreview.reference">{{ previewSourceLabel(selectedPreview.reference) }}</p><div class="lib-preview-body" v-html="selectedPreviewHtml" @click="onPreviewLink" /><p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p><div class="lib-preview-actions"><button v-if="fileManagerAvailable()" :disabled="!canRevealPreview" :title="canRevealPreview ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager()"><PhFolderSimple :size="14" />{{ fileManagerLabel() }}</button><button v-else-if="canOpenPreviewInDsh" @click="openPreviewInDsh()"><PhFolderSimple :size="14" />在 DSH 打开原文件</button><button @click="archivePreview(selectedPreview.id, !previewArchived)">{{ previewArchived ? '恢复显示' : '隐藏记录' }}</button><button :disabled="selectedPreview.incomplete" @click="openTransfer('collect','preview',selectedPreview.id)">收录副本</button></div></div>
           </div>
         </section>
       </transition>
@@ -309,11 +311,11 @@
     <!-- 树里那个…的菜单：teleport 出去，免得被侧栏的滚动裁掉 -->
     <Teleport to="body">
       <Transition name="pop">
-      <div v-if="tree.menu.open" class="tree-menu" :style="tree.menu.style">
+      <div v-if="tree.menu.open" class="tree-menu" role="menu" aria-label="条目操作" :style="tree.menu.style" @keydown.esc.stop.prevent="tree.closeMenu()" @keydown.tab="tree.closeMenu()">
         <button
           v-for="it in menuItems"
           :key="it.id"
-          class="tree-menu-item"
+          class="tree-menu-item" role="menuitem"
           :disabled="it.disabled"
           :title="it.hint || it.label"
           :class="{ danger: it.danger }"
@@ -495,12 +497,23 @@ const libIconInput = ref(null)
 const libPanel = reactive({ open: false, libs: [], busy: '' })
 const managerOpen = ref(false)
 const managerSection = ref('libs')
-const {tempPreviews,previewQuery,filteredPreviews,selectedPreview,previewActionError,previewArchived,canResolvePreviewInDsh,canRevealItem,canRevealPreview,canOpenPreviewInDsh,selectedPreviewHtml,previewSourceLabel,onPreviewLink,loadPreviews,openPreviews,togglePreviewArchive,selectPreview,collectPreviewFromList,showPreviewInFileManager,openPreviewInDsh,archivePreview}=useWorkspaceHistory({store,libPanel,managerOpen,managerSection,openTransfer})
+const {tempPreviews,previewQuery,filteredPreviews,selectedPreview,previewActionError,previewArchived,canResolvePreviewInDsh,canRevealItem,canRevealPreview,canOpenPreviewInDsh,selectedPreviewHtml,previewSourceLabel,onPreviewLink,loadPreviews,openPreviews,setPreviewFilter,previewLoading,selectPreview,collectPreviewFromList,showPreviewInFileManager,openPreviewInDsh,archivePreview}=useWorkspaceHistory({store,libPanel,managerOpen,managerSection,openTransfer})
 const libQuery = ref('')
 const managerFilter = ref('all')
 const transferSearch = ref('')
 const transfer = reactive({ open: false, mode: 'copy', kind: 'doc', path: '', name: '', lib: '', dir: '', folders: [], busy: false, error: '' })
 const managerDialog = ref(null), transferDialog = ref(null)
+watch(selectedPreview, async (preview, previous) => {
+  if (!managerOpen.value || managerSection.value !== 'previews') return
+  await nextTick()
+  const panel = managerDialog.value
+  if (preview) panel?.querySelector('.lib-manager-back')?.focus()
+  else if (previous) {
+    const row = [...(panel?.querySelectorAll('[data-preview-id]') || [])]
+      .find(el => el.dataset.previewId === String(previous.id))
+    ;(row || panel?.querySelector('input[type="search"]'))?.focus()
+  }
+})
 useDialogFocus(managerOpen, managerDialog, () => { if(selectedPreview.value) selectedPreview.value=null; else managerOpen.value=false })
 useDialogFocus(() => transfer.open, transferDialog, () => { if(!transfer.busy) transfer.open=false })
 const transferToast = reactive({ message: '', lib: '', file: '' })
@@ -1280,6 +1293,8 @@ const tree = reactive({
 
   openMenu(kind, node, ev) {
     this.closeMenu()
+    this.menuTrigger = ev.currentTarget.matches('button, [tabindex]')
+      ? ev.currentTarget : ev.currentTarget.querySelector('button, [tabindex]')
     const r = ev.currentTarget.getBoundingClientRect()
     const w = 148
     this.menu = {
@@ -1299,6 +1314,7 @@ const tree = reactive({
      * 甚至点右侧的目录栏、顶栏，菜单都会被收掉，像是被别处的操作打断。
      * 现在只在点到菜单范围之外时才关；点到菜单自己是走菜单项的动作。
      */
+    nextTick(()=>{const panel=document.querySelector('.tree-menu');if(!panel)return;const rect=panel.getBoundingClientRect();this.menu.style.top=Math.max(8,Math.min(rect.top,innerHeight-rect.height-8))+'px';panel.querySelector('button:not(:disabled)')?.focus()})
     const close = () => this.closeMenu()
     this.onKey = (e) => { if (e.key === 'Escape') close() }
     this.onClick = (e) => {
@@ -1312,6 +1328,7 @@ const tree = reactive({
   closeMenu() {
     if (!this.menu.open) return
     this.menu.open = false
+    this.menuTrigger?.focus?.()
     document.removeEventListener('keydown', this.onKey)
     if (this.onClick) {
       document.removeEventListener('click', this.onClick)
@@ -1671,7 +1688,7 @@ function onDocClick(e) {
   if (!e.target.closest('.side-menu, .icon-btn')) menuOpen.value = false
 }
 function onLibEscape(e) {
-  if (e.key !== 'Escape') return
+  if (e.key !== 'Escape' || e.defaultPrevented) return
   if(footerTools.value){footerTools.value=false;toolsTrigger.value?.focus();return}
   if (transfer.open) { transfer.open = false; return }
   if (managerOpen.value) { managerOpen.value = false; return }
@@ -2067,4 +2084,9 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 
 <style scoped>
 .workspace-history-footer{display:flex;align-items:center;gap:8px;padding:16px 12px 12px;border:0}.workspace-history-link{flex:1;min-width:0;padding:8px 6px;font-size:12px;color:var(--c-sub)}.workspace-history-link svg{display:none}.workspace-tools{position:relative}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}
+</style>
+
+<style scoped>
+.history-panel{width:min(660px,calc(100vw - 32px))}.history-panel .lib-manager-head{padding:24px 24px 18px}.history-panel .lib-manager-tools{padding:0 24px 16px}.history-panel .lib-manager-search-row{gap:10px}.history-panel .lib-manager-search-row input{min-width:0;flex:1}.history-panel .lib-manager-search-row :deep(.select-menu-trigger){width:112px;flex:none}.history-panel .preview-list{padding:0 16px 20px;gap:2px}.history-panel .preview-list-row{background:transparent;min-height:60px;border-radius:8px;gap:10px}.history-panel .preview-list-row:hover{background:var(--c-field)}.history-panel .preview-list-actions button{background:transparent}.history-panel .preview-list-main small{font-variant-numeric:tabular-nums}.history-panel .lib-preview-detail{background:transparent;margin:0 20px 20px;padding:0;box-shadow:none}.history-panel .lib-preview-actions{gap:8px;padding-top:16px}
+@media(max-width:520px){.history-panel{width:calc(100vw - 16px)}.history-panel .lib-manager-head{padding:20px 18px 16px}.history-panel .lib-manager-tools{padding-inline:18px}.history-panel .preview-list{padding-inline:10px}.history-panel .preview-list-row{gap:3px}.history-panel .preview-list-actions{padding-left:30px;justify-content:flex-start}.history-panel .lib-preview-actions button{flex:initial}}
 </style>

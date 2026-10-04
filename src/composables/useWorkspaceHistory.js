@@ -9,6 +9,8 @@ const filteredPreviews = computed(() => tempPreviews.value.filter(item => !previ
 const selectedPreview = ref(null)
 const previewActionError = ref('')
 const previewArchived = ref(false)
+const previewLoading = ref(false)
+let listRequest=0
 function canResolvePreviewInDsh(item) { return window.parent !== window && /^dsh-resource:\/\/file\/session\//.test(item?.reference || '') }
 function canRevealItem(item) { return fileManagerAvailable() && !!item && (/^(?:\/|[A-Za-z]:[\\/])/.test(item.sourcePath || item.reference || '') || canResolvePreviewInDsh(item)) }
 const canRevealPreview = computed(() => canRevealItem(selectedPreview.value))
@@ -33,12 +35,15 @@ function previewSourceLabel(reference) {
 }
 function onPreviewLink(event) { if (event.target.closest?.('a[href="#"]')) event.preventDefault() }
 async function loadPreviews() {
+  const request=++listRequest
+  previewLoading.value=true;previewActionError.value='';tempPreviews.value=[]
   try {
     const response = await fetch(API_BASE + '/api/workspace-previews?archived=' + (previewArchived.value ? '1' : '0'), { cache: 'no-store' })
     const json = await response.json()
     if (!json.ok) throw Error(json.error || '读取工作区浏览记录失败')
-    tempPreviews.value = json.data || []
-  } catch (error) { store.error = String(error.message || error) }
+    if(request===listRequest)tempPreviews.value = json.data || []
+  } catch (error) { if(request===listRequest)previewActionError.value = String(error.message || error) }
+  finally{if(request===listRequest)previewLoading.value=false}
 }
 async function openPreviews() {
   window.dispatchEvent(new Event('reader-overlay-open'))
@@ -50,7 +55,7 @@ async function openPreviews() {
   managerOpen.value = true
   await loadPreviews()
 }
-async function togglePreviewArchive() { previewArchived.value = !previewArchived.value; selectedPreview.value = null; await loadPreviews() }
+async function setPreviewFilter(value) { previewArchived.value = value==='hidden'; previewQuery.value='';selectedPreview.value = null; await loadPreviews() }
 async function selectPreview(id) {
   try {
     previewActionError.value = ''
@@ -59,7 +64,7 @@ async function selectPreview(id) {
     if (!json.ok) throw Error(json.error || '预览读取失败')
     selectedPreview.value = json.data
     return json.data
-  } catch (error) { store.error = String(error.message || error); return null }
+  } catch (error) { previewActionError.value = String(error.message || error); return null }
 }
 async function collectPreviewFromList(item) {
   const record = await selectPreview(item.id)
@@ -96,11 +101,11 @@ async function archivePreview(id, archived) {
   try {
     const response = await fetch(API_BASE + '/api/workspace-preview/archive', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, archived }) })
     const json = await response.json()
-    if (!json.ok) throw Error(json.error || '归档失败')
+    if (!json.ok) throw Error(json.error || '更新浏览记录失败')
     selectedPreview.value = null
     await loadPreviews()
-  } catch (error) { store.error = String(error.message || error) }
+  } catch (error) { previewActionError.value = String(error.message || error) }
 }
 
-return {tempPreviews,previewQuery,filteredPreviews,selectedPreview,previewActionError,previewArchived,canResolvePreviewInDsh,canRevealItem,canRevealPreview,canOpenPreviewInDsh,selectedPreviewHtml,previewSourceLabel,onPreviewLink,loadPreviews,openPreviews,togglePreviewArchive,selectPreview,collectPreviewFromList,showPreviewInFileManager,openPreviewInDsh,archivePreview}
+return {tempPreviews,previewQuery,filteredPreviews,selectedPreview,previewActionError,previewArchived,canResolvePreviewInDsh,canRevealItem,canRevealPreview,canOpenPreviewInDsh,selectedPreviewHtml,previewSourceLabel,onPreviewLink,loadPreviews,openPreviews,setPreviewFilter,previewLoading,selectPreview,collectPreviewFromList,showPreviewInFileManager,openPreviewInDsh,archivePreview}
 }

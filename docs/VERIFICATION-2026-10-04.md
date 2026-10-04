@@ -30,13 +30,13 @@
 
 三平台 Node 24 矩阵已在 GitHub 实际执行。首次运行发现 DOMPurify 直接依赖范围与 override 精确版本不一致，导致干净 `npm ci` 失败；已经统一为 `3.4.16`，临时干净目录复验安装解析通过。第二轮 macOS/Linux 功能测试通过，CI 打包参数误写为 workspace 选择器；Windows 权限检查通过后因测试数据库句柄未关闭而清理失败。两处已修复，Windows 目录逃逸测试改用系统支持的 junction。第三轮 macOS/Linux 全部通过；Windows 检出改名时把系统反斜杠写入内部路径键的问题，已统一为 `/`，继续用原有稳定标识、权限和附件测试验证。随后修复 Windows tar 清单的 CRLF 解析。最终提交 `52ff76e67f489fd56b5970e55c471b47b6c91c9f` 在 macOS、Windows、Ubuntu 三个平台全部通过，包括干净安装、构建、全部功能测试、打包和解包后的真实服务启动。
 
-[最终 CI：三平台全部通过](https://github.com/bigricedumpling/deepseek-reader/actions/runs/37179466583)。后续仅补文档和截图，运行代码与该次验收一致。
+[基础版本 CI：三平台全部通过](https://github.com/bigricedumpling/deepseek-reader/actions/runs/37179466583)。该记录对应 `52ff76e`。随后还修复了编辑体验、菜单、标签与浏览记录界面，运行代码已变化，最新本机证据另见 [最终审查](RELEASE-AUDIT-2026-10-04.md)，不能把旧 CI 当作最新提交的远程验收。
 
 ## 界面复查
 
-使用真实浏览器操作，不只读取源码：
+以下记录属于当时的基础版本验收，后续界面改动以最终审查为准：
 
-- 复杂 Markdown 的脚注、公式、HTML、表格与 Mermaid 阅读；切换源码并保存；版本对比出现相应新增行。
+- 复杂 Markdown 的脚注、公式、HTML、表格与 Mermaid 阅读；当时通过源码编辑保存，并检查版本差异。随后已补直接编辑能力并移除顶部模式切换。
 - PDF 画布和可选择文字实际显示；H5 演示页面按钮可交互。
 - 完整备份创建、恢复、打开独立阅读器；原库保留。
 - 420px 同源测试框中搜索不被侧栏遮挡；收录弹层可操作；Escape 只关闭最上层并返回上一层入口。

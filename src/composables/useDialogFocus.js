@@ -5,6 +5,8 @@ export function useDialogFocus(open, element, cancel) {
   const token = {}; let previous
   function keydown(event) {
     if (stack.at(-1) !== token || !element.value) return
+    const nestedMenu=event.target.closest?.('[role=listbox],[role=menu]')
+    if(nestedMenu&&!element.value.contains(nestedMenu))return
     if (event.key === 'Escape' && cancel) { event.preventDefault(); event.stopImmediatePropagation(); cancel(); return }
     if (event.key !== 'Tab') return
     const controls = [...element.value.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')].filter(el => el.getClientRects().length)

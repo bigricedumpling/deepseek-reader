@@ -8,6 +8,7 @@
   -->
   <div
     ref="strip"
+    v-bind="$attrs"
     class="doc-tabs"
     :class="{ 'has-left': fadeLeft, 'has-right': fadeRight, 'single-document': items.length === 1 }"
     @wheel="onWheel"
@@ -44,7 +45,7 @@
     </TransitionGroup>
   </div>
   <Teleport to="body"><div v-if="context" ref="contextPanel" class="tab-context side-menu" role="menu" aria-label="标签页操作" :style="{left:context.x+'px',top:context.y+'px'}" @keydown="menuKey">
-    <button role="menuitem" @click="closeGroup('current')">关闭标签页</button>
+    <button role="menuitem" :disabled="items.length<2" @click="closeGroup('current')">关闭标签页</button>
     <button role="menuitem" :disabled="items.length<2" @click="closeGroup('others')">关闭其他标签页</button>
     <button role="menuitem" :disabled="items.findIndex(t=>t.file===context.file)===items.length-1" @click="closeGroup('right')">关闭右侧标签页</button>
   </div></Teleport>
@@ -55,6 +56,7 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import ContentIcon from './ContentIcon.vue'
 import { PhX } from '@phosphor-icons/vue'
 
+defineOptions({inheritAttrs:false})
 const props = defineProps({
   /** [{ file, name, dirty }] */
   items: { type: Array, default: () => [] },

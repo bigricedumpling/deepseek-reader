@@ -29,6 +29,8 @@ jobs:
       - run: npm run test:transfer
       - run: node scripts/test-workspace.mjs
       - run: node scripts/test-recovery.mjs
+      - run: node scripts/test-draft-lifecycle.mjs
+      - run: node scripts/test-preserved-markdown.mjs
       - run: npm run test:user-recovery
       - run: npm run test:workflow
       - run: npm pack --pack-destination ../../

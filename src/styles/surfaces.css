@@ -35,3 +35,6 @@ aside.is-reader-rail{z-index:var(--layer-navigation)!important}
 .crepe-host .milkdown .milkdown-slash-menu{position:fixed!important;left:12px!important;right:auto!important;top:auto!important;bottom:44px!important;transform:none!important;width:min(240px,calc(100vw - 24px))!important;max-height:calc(100dvh - 100px)}
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups{max-height:min(320px,calc(100dvh - 160px))}
 }
+
+:root{--layer-dialog-menu:140}
+.select-menu-panel.in-dialog,.tree-menu{z-index:var(--layer-dialog-menu)!important}
