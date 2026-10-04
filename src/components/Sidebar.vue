@@ -38,7 +38,7 @@
 
         <div class="lib-panel-sort">
           <SelectMenu v-model="libSort" :options="libSortOptions" label="知识库排序" />
-          <button class="lib-browse-entry" :title="isGuest ? '浏览知识库' : '管理知识库'" @click="openManager"><PhSquaresFour :size="16" weight="fill" /><span>浏览全部</span></button>
+          <button class="lib-browse-entry" :title="isGuest ? '浏览知识库' : '管理知识库'" @click="openManager"><PhSquaresFour :size="16" weight="regular" /><span>浏览全部</span></button>
         </div>
 
         <div class="lib-panel-resize" title="拖动调整知识库栏宽度" @pointerdown.stop="startLibResize" />
@@ -86,7 +86,7 @@
           </div>
         </div>
         <div class="lib-panel-footer">
-          <button v-if="!isGuest" class="lib-manager-entry" @click="openPublicPreview"><PhEye :size="17" weight="fill" />查看访客视角</button>
+          <button v-if="!isGuest" class="lib-manager-entry" @click="openPublicPreview"><PhEye :size="17" weight="regular" />查看访客视角</button>
         </div>
       </aside>
     </transition>
@@ -117,11 +117,11 @@
             </div>
             <p v-if="!managerLibs.length" class="lib-empty">没有匹配的知识库</p>
           </div>
-          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="fill" />分享只读副本</button><button title="允许 Agent 访问指定知识库" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="fill" />Agent 访问</button></footer>
+          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="regular" />分享只读副本</button><button title="允许 Agent 访问指定知识库" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="regular" />Agent 访问</button></footer>
           <div v-if="managerSection === 'previews'" class="lib-manager-previews">
             <div v-if="!selectedPreview" class="preview-list">
               <div v-for="item in filteredPreviews" :key="item.id" class="preview-list-row">
-                <button class="preview-list-main" @click="selectPreview(item.id)"><PhFileText :size="19" weight="fill" /><span><strong>{{ item.title }}</strong><small>{{ item.sourceState === 'missing' ? '来源已失效' : item.sourceState === 'changed' ? '源文件已更新' : new Date(item.updated).toLocaleString('zh-CN') }}</small></span></button>
+                <button class="preview-list-main" @click="selectPreview(item.id)"><PhFileText :size="18" weight="regular" /><span><strong>{{ item.title }}</strong><small>{{ item.sourceState === 'missing' ? '来源已失效' : item.sourceState === 'changed' ? '源文件已更新' : new Date(item.updated).toLocaleString('zh-CN') }}</small></span></button>
                 <div class="preview-list-actions">
                   <button v-if="fileManagerAvailable()" :disabled="!canRevealItem(item)" :title="canRevealItem(item) ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager(item)"><PhFolderSimple :size="15" />{{ fileManagerLabel() }}</button>
                   <button v-else-if="canResolvePreviewInDsh(item)" @click="openPreviewInDsh(item)"><PhFolderSimple :size="15" />在 DSH 打开</button>

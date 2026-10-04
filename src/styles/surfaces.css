@@ -21,3 +21,17 @@ aside.is-reader-rail{z-index:var(--layer-navigation)!important}
 :is(.reader-modal-shade,.app-backdrop,.access-backdrop,.public-sharing-backdrop,.transfer-backdrop,.lib-manager-backdrop){z-index:var(--layer-modal-backdrop)!important}
 .lib-manager{z-index:var(--layer-modal)!important}
 :is(.reader-tooltip,.rail-toc-hint){z-index:var(--layer-hint)!important}
+
+/* Compact utility surfaces share row rhythm and quiet, aligned action icons. */
+:is(.side-menu,.tree-menu,.select-menu-panel,.bt-menu,.text-style-menu,.document-actions,.milkdown-slash-menu){border-radius:12px!important}
+:is(.side-menu,.tree-menu,.document-actions) button{min-height:32px}
+:is(.side-menu,.tree-menu,.document-actions,.bt-menu) button>svg{width:16px;height:16px;flex-shrink:0;color:var(--c-sub)}
+.crepe-host .milkdown .milkdown-slash-menu .tab-group{border:0!important;margin-bottom:4px}
+.crepe-host .milkdown .milkdown-slash-menu .menu-group+.menu-group{padding-top:10px}
+.crepe-host .milkdown .milkdown-slash-menu .menu-group::before{display:none!important;content:none!important}
+:is(.pop-leave-active,.overlay-leave-active){pointer-events:none}
+/* On narrow screens a compact insertion sheet stays within the viewport. */
+@media(max-width:600px){
+.crepe-host .milkdown .milkdown-slash-menu{position:fixed!important;left:12px!important;right:auto!important;top:auto!important;bottom:44px!important;transform:none!important;width:min(288px,calc(100vw - 24px))!important;max-height:calc(100dvh - 100px)}
+.crepe-host .milkdown .milkdown-slash-menu .menu-groups{max-height:min(320px,calc(100dvh - 160px))}
+}

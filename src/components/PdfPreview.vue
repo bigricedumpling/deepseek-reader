@@ -4,8 +4,8 @@
     <button title="上一页" aria-label="上一页" :disabled="current<=1||loading" @click="go(current-1)"><PhCaretLeft :size="16"/></button>
     <label><input type="number" aria-label="PDF 页码" :value="current" :min="1" :max="total||1" :disabled="!total" @change="go(Number($event.target.value))"/> / {{ total || '—' }}</label>
     <button title="下一页" aria-label="下一页" :disabled="current>=total||loading" @click="go(current+1)"><PhCaretRight :size="16"/></button>
-    <select v-model="zoom" aria-label="PDF 缩放" @change="draw"><option value="fit">适合宽度</option><option value="0.75">75%</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select>
-    <a :href="url.split('#')[0]" target="_blank" rel="noopener" title="在浏览器打开 PDF">打开原文件</a>
+    <SelectMenu v-model="zoom" label="PDF 缩放" :options="zoomOptions" @update:model-value="draw" />
+    <a :href="url.split('#')[0]" target="_blank" rel="noopener" title="在浏览器打开 PDF"><PhArrowSquareOut :size="16"/><span class="sr-only">打开原文件</span></a>
   </nav>
   <p v-if="error" role="alert" class="pdf-message">{{ error }} <button @click="load">重试</button></p>
   <p v-else-if="loading" role="status" class="pdf-message">正在加载 PDF…</p>
@@ -16,11 +16,13 @@
 </template>
 <script setup>
 import {ref,watch,onMounted,onBeforeUnmount,nextTick} from 'vue'
-import {PhCaretLeft,PhCaretRight} from '@phosphor-icons/vue'
+import SelectMenu from './SelectMenu.vue'
+import {PhCaretLeft,PhCaretRight,PhArrowSquareOut} from '@phosphor-icons/vue'
 import 'pdfjs-dist/web/pdf_viewer.css'
 import {readPdfOutline} from '../../server/services/pdf-outline.js'
 const props=defineProps({url:String,page:{type:Number,default:1}}),emit=defineEmits(['page','loaded','outline'])
 const zoom=ref('fit')
+const zoomOptions=[{value:'fit',label:'适合宽度'},...['0.75','1','1.5','2'].map(value=>({value,label:Number(value)*100+'%'}))]
 const current=ref(1),total=ref(0),loading=ref(true),error=ref(''),canvas=ref(null),container=ref(null),paper=ref(null),textLayer=ref(null)
 let pdf,task,renderTask,textTask,observer,timer,generation=0,paint=0,engine
 async function draw(){
@@ -70,4 +72,8 @@ onBeforeUnmount(()=>{++generation;++paint;clearTimeout(timer);observer?.disconne
 </script>
 <style scoped>
 .pdf-preview{min-height:100%;background:var(--c-field);padding-bottom:24px}.pdf-controls{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px;background:var(--c-pop);font:12px var(--font-sans)}.pdf-controls button{display:grid;place-items:center;width:28px;height:28px;border-radius:8px}.pdf-controls button:hover{background:var(--c-field)}.pdf-controls button:disabled{opacity:.35}.pdf-controls input{width:42px;text-align:center;background:var(--c-field);padding:4px;border-radius:5px;font:inherit}.pdf-controls select{font:inherit;color:var(--c-ink);background:var(--c-field);padding:6px 8px;border-radius:8px;max-width:110px}.pdf-controls a{color:var(--c-sub);margin-left:12px}.pdf-page-area{padding-top:16px;overflow:auto}.pdf-paper{position:relative;margin:0 auto;background:#fff;box-shadow:0 2px 12px #0001}.pdf-paper.pending{visibility:hidden}.pdf-message{text-align:center;font-size:13px;color:var(--c-sub);padding:12px}.pdf-message button{color:var(--color-ds)}canvas{display:block}.textLayer{position:absolute;inset:0}
+</style>
+
+<style scoped>
+.pdf-controls :deep(.select-menu-trigger){width:104px;min-height:30px;padding:6px 9px;gap:8px;border:0;border-radius:7px}.pdf-controls a{display:grid;place-items:center;width:30px;height:30px;margin-left:0;border-radius:7px}.pdf-controls a:hover{background:var(--c-hover)}
 </style>

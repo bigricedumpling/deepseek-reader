@@ -8,3 +8,5 @@
 - Verify nested controls with real editing, save, reopen and narrow-viewport flows. A component existing or a build passing does not establish usability.
 - Library switching and full library management have distinct jobs; keep both. Drafts are an initial default library, not a reserved or undeletable system object.
 - Floating surfaces follow docs/design/SURFACES.md. Reuse its levels rather than inventing per-component borders and shadows.
+
+- Current design phase adds no feature proposals. Reduce visual and interaction complexity across existing screens. Keep low-frequency recovery tools behind More, with no cross-task tabs. Use the user’s Notion references for restrained density and consistent functional icons, without replacing the approved Reader brand icon.

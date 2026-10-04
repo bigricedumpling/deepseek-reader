@@ -474,7 +474,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 .crepe-host .milkdown .ProseMirror table:has(tr) td {
   border: 0;
   border-right: 1px solid var(--c-line);
-  border-bottom: 1px solid var(--c-line);
+  border-bottom: 0;
 }
 .crepe-host .milkdown .ProseMirror table:has(tr) th:last-child,
 .crepe-host .milkdown .ProseMirror table:has(tr) td:last-child {
@@ -708,7 +708,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 /* Crepe 默认条目最小宽 220、内边距 14、图标 24，又大又长，整体收紧 */
 .crepe-host .milkdown .milkdown-slash-menu {
   box-sizing: border-box;
-  width: min(380px, calc(100vw - 24px));
+  width: min(288px, calc(100vw - 24px));
   border-radius: 20px;
   corner-shape: superellipse(2);
   border: 1px solid var(--c-line);
@@ -721,7 +721,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 }
 .crepe-host .milkdown .milkdown-slash-menu .tab-group {
   padding: 4px 4px 5px;
-  border-bottom: 1px solid var(--c-line);
+  border-bottom: 0;
 }
 .crepe-host .milkdown .milkdown-slash-menu .tab-group ul {
   padding: 2px;
@@ -741,7 +741,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups {
   padding: 3px 4px 4px;
-  max-height: min(350px, calc(100dvh - 110px));
+  max-height: min(320px, calc(100dvh - 110px));
   scrollbar-width: thin;
   scrollbar-color: var(--c-line) transparent;
 }
@@ -772,7 +772,8 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   line-height: 18px;
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
-  margin: 3px 8px;
+  content: none;
+  display: none;
 }
 
 /*
