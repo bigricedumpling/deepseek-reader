@@ -12,22 +12,17 @@
       </details>
       <input ref="replacementInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="replaceImage" />
     </div>
-    <div v-if="lossy" class="lossy-note ui-font">
-      <p>
-        这篇里有编辑器逐字还原不了的结构，所以改成了源码编辑：内容照常编辑和自动保存，
-        只是看到的是 markdown 原文（不这么做会静默改写你的正文）。
-      </p>
-      <p class="lossy-actions">
-        <button class="lossy-btn" @click="showDiff = !showDiff">
-          {{ showDiff ? '收起差异' : '差在哪' }}
-        </button>
-        <button v-if="!readonly" class="lossy-btn" @click="chooseNewImage">插入图片</button>
-        <input ref="newImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="insertNewImage" />
-        <button v-if="!readonly && !hasTransientImages" class="lossy-btn is-primary" @click="emit('canonize', roundTripText)">
-          按编辑器规范重排这篇
-        </button>
-        <span v-if="!readonly && !hasTransientImages" class="lossy-hint">重排 = 接受上面列出的差异（会改写磁盘上的这份文件），之后这篇就能富文本编辑</span>
-      </p>
+    <div v-if="lossy && !readonly" class="source-mode-note ui-font">
+      <div class="source-mode-bar">
+        <span title="此文档包含需要保留原格式的结构，可阅读或主动编辑 Markdown 源码">原格式阅读</span>
+        <button class="lossy-btn" :aria-pressed="sourceEditing" @click="sourceEditing=!sourceEditing">{{ sourceEditing ? '返回阅读' : '编辑源码' }}</button>
+        <button v-if="diff.length" class="lossy-btn" @click="showDiff=!showDiff">{{ showDiff ? '收起格式差异' : '格式差异' }}</button>
+      </div>
+      <div v-if="showDiff" class="lossy-actions">
+        <span>转换为富文本会采用下面的变化。</span>
+        <button v-if="!hasTransientImages" class="lossy-btn" @click="emit('canonize', roundTripText)">按这些变化转换</button>
+      </div>
+      <div v-if="sourceEditing" class="lossy-actions"><button class="lossy-btn" @click="chooseNewImage">插入图片</button><input ref="newImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="insertNewImage" /></div>
       <ul v-if="showDiff" class="lossy-diff">
         <li v-for="d in diff" :key="d.line">
           <span class="lossy-line">第 {{ d.line }} 行</span>
@@ -37,7 +32,7 @@
       </ul>
     </div>
     <textarea
-      v-if="lossy"
+      v-if="lossy && sourceEditing && !readonly"
       ref="srcEl"
       class="src-editor"
       :value="value"
@@ -45,6 +40,7 @@
       spellcheck="false"
       @input="onSourceInput"
     />
+    <MarkdownReading v-if="lossy && (!sourceEditing || readonly)" :value="value" />
     <div v-show="!lossy" ref="host" class="crepe-host"></div>
 
     <!-- 块左侧那个六点手柄，点一下弹出来的转为菜单 -->
@@ -73,6 +69,7 @@ import { foldKey, isFolded, isFoldable, setFoldable, toggleFold, foldState, fold
 import BlockTypeMenu from './BlockTypeMenu.vue'
 import TextStyleMenu from './TextStyleMenu.vue'
 import IconPicker from './IconPicker.vue'
+import MarkdownReading from './MarkdownReading.vue'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
@@ -117,6 +114,7 @@ const colw = useTableColumnWidths({
 })
 /** 这篇有没有编辑器表达不了的结构，有就走源码编辑 */
 const lossy = ref(false)
+const sourceEditing = ref(false)
 /** 有损时：还原后的文本（用户点"按编辑器规范重排"就写它）与差异行 */
 const roundTripText = ref('')
 const diff = ref([])
@@ -390,7 +388,8 @@ onMounted(async () => {
   const differs = roundTrip.replace(/\s+$/, '') !== String(baseline).replace(/\s+$/, '')
   // 只有格式写法不同才让富文本继续工作；真正有内容差异时保留源码编辑。
   // 打开文档本身绝不自动改写磁盘内容。
-  lossy.value = !props.readonly && differs && !isCosmeticOnly(baseline, roundTrip)
+  const sourceOnly = /^(---|\+\+\+)\r?\n[\s\S]*?\r?\n\1(?:\r?\n|$)/.test(baseline) || /^\[\^[^\]]+\]:/m.test(baseline) || /^\s*<(?:div|details|summary|table|figure|section)(?:\s|>)/mi.test(baseline)
+  lossy.value = sourceOnly || (differs && !isCosmeticOnly(baseline, roundTrip))
   emit('lossy', lossy.value)
   if (lossy.value) {
     roundTripText.value = roundTrip
@@ -763,3 +762,7 @@ onBeforeUnmount(async () => {
   crepe = null
 })
 </script>
+
+<style scoped>.source-mode-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.source-mode-bar>span{flex:1;min-width:0;font-size:12px}.source-mode-bar button{white-space:nowrap}</style>
+
+<style scoped>.source-mode-note{max-width:var(--measure,960px);margin:12px auto 0;padding:8px 14px;color:var(--c-sub);font-size:12px}.source-mode-note .lossy-btn{background:var(--c-field);border:0;color:var(--c-sub)}.source-mode-note .lossy-btn:hover{background:var(--c-hover)}.source-mode-note .source-mode-bar{gap:8px;justify-content:flex-end}.source-mode-note .source-mode-bar>span{margin-right:auto}</style>

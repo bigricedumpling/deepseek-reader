@@ -10,7 +10,11 @@ export function publicSession(repo, share) {
   let proxy, child, tunnel, port, current, url = '', updated = 0, busy = false, details = {}
   // 快照不能放在应用代码目录内，内容接口会正确拒绝读取那里的文件。
   const runtime = fs.mkdtempSync(path.join(os.tmpdir(), 'reader-public-snapshots-'))
-  function status() { return { active: !!url, url, updated, busy, ...details } }
+  function executablePath(){
+    const candidates=[process.env.READER_CLOUDFLARED,...String(process.env.PATH||'').split(path.delimiter).map(dir=>path.join(dir,process.platform==='win32'?'cloudflared.exe':'cloudflared')),'/opt/homebrew/bin/cloudflared','/usr/local/bin/cloudflared']
+    return candidates.find(value=>value&&fs.existsSync(value)&&fs.statSync(value).isFile())
+  }
+  function status() { return { active: !!url, url, updated, busy, available:!!executablePath(), ...details } }
   function stop() {
     tunnel?.kill(); child?.kill(); proxy?.closeAllConnections(); proxy?.close()
     tunnel = child = proxy = undefined; url = ''; port = undefined
@@ -48,7 +52,7 @@ export function publicSession(repo, share) {
       if (action === 'update') { if (!url) throw Error('请先开启分享'); await replace(); return status() }
       if (action !== 'start') throw Error('无效的分享操作')
       if (url) return status()
-      const executable = [process.env.READER_CLOUDFLARED, '/opt/homebrew/bin/cloudflared', '/usr/local/bin/cloudflared'].find(value => value && fs.existsSync(value))
+      const executable = executablePath()
       if (!executable) throw Error('尚未安装 cloudflared，安装后即可开启临时分享')
       await replace()
       proxy = http.createServer((req, res) => {

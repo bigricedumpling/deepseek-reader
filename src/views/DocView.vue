@@ -4,7 +4,8 @@
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
       <DocTabs v-if="tabItems.length" class="mr-auto" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" />
-      <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'">{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
+      <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原知识库"><PhClockCounterClockwise :size="12" />恢复副本</span>
+      <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
       <div ref="searchWrap" class="doc-search-wrap" :style="{ '--search-available': searchPanelWidth + 'px' }">
         <button class="btn-icon" title="查找当前文档" aria-label="查找当前文档" :aria-expanded="searchOpen" @click="toggleDocSearch"><PhMagnifyingGlass :size="15" /></button>
@@ -261,6 +262,7 @@
           <p v-if="!store.isGuest && meta.lockedAt && meta.lockedAt !== docId" class="search-scope">由上级设为只读</p>
           <div v-if="!store.isGuest" class="doc-options-divider" />
           <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="14" /> {{ fileManagerLabel() }}</button>
+          <button v-if="!store.isGuest" class="pop-item" @click="open='';infoOpen=true"><PhInfo :size="14" /> 文档信息</button>
           <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open=''; historyOpen=true"><PhClockCounterClockwise :size="14" /> 历史版本</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="14" /> 导出 Markdown</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="14" /> 导出网页（含图片）</button>
@@ -271,7 +273,7 @@
 
       <!-- pdf 翻译：没翻过就起任务，翻好了就是看译文 / 看原文的开关 -->
       <button
-        v-if="isPdf && !store.isGuest"
+        v-if="isPdf && !store.isGuest && (store.pdfTranslationAvailable || store.pdfTranslate.status==='done')"
         class="btn-icon"
         :class="{ 'is-active': store.pdfView === 'translated' }"
         :title="translateTip"
@@ -322,8 +324,9 @@
         H5：整页渲染，保留它自己的布局，不套阅读器的行宽限制。
         两者都是成品文件，不经过 markdown 解析。
       -->
+      <PdfPreview v-if="isPdf" :url="pdfSrc" :page="pdfPage" @page="store.pdfPage=$event" @loaded="store.pdfPages=$event" @outline="store.pdfToc=$event.toc;store.pdfTocSource=$event.source" />
       <iframe
-        v-if="isPreview"
+        v-if="isH5"
         ref="frameRef"
         :sandbox="isH5 ? 'allow-scripts' : undefined"
         class="pdf-frame"
@@ -393,7 +396,8 @@
 
 
   </div>
-  <VersionHistory :open="historyOpen" :path="docId" :preserve-current="() => store.save()" @close="closeHistory" @restore="restoreContent" />
+  <DocumentInfo :open="infoOpen" :path="docId" @close="infoOpen=false" />
+  <VersionHistory :open="historyOpen" :path="docId" :current-content="raw" :preserve-current="() => store.save()" @close="closeHistory" @restore="restoreContent" />
 </template>
 
 <script setup>
@@ -403,19 +407,21 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   PhMagnifyingGlass, PhTextAa, PhTextT, PhArrowsOutLineHorizontal,
   PhExport, PhListDashes, PhArrowSquareOut, PhX, PhArrowUp, PhSpinnerGap, PhWarningCircle,
-  PhCircleHalf, PhPrinter, PhClockCounterClockwise,
+  PhCircleHalf, PhPrinter, PhInfo, PhClockCounterClockwise,
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
   PhArrowsOutSimple, PhArrowsInSimple, PhSun, PhCoffee, PhMoon,
-  PhFileText, PhTranslate, PhLock, PhEye, PhEyeSlash, PhDotsThree, PhFolderSimple
+  PhFileText, PhTranslate, PhPencilSimple, PhLock, PhEye, PhEyeSlash, PhDotsThree, PhFolderSimple
 } from '@phosphor-icons/vue'
 import { highlight } from '../utils/markdown'
+import PdfPreview from '../components/PdfPreview.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
 import ConflictDialog from '../components/ConflictDialog.vue'
 import VersionHistory from '../components/VersionHistory.vue'
+import DocumentInfo from '../components/DocumentInfo.vue'
 import PageHeader from '../components/PageHeader.vue'
 import DocPicker from '../components/DocPicker.vue'
 import { insertDocLink } from '../utils/editor-shortcuts'
@@ -426,6 +432,7 @@ import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../
 
 const reader = useReaderStore()
 // pdf 翻译任务的状态住在 docs store 里，不必再经 App 转一手
+const infoOpen=ref(false)
 const historyOpen=ref(false),exportButton=ref(null)
 async function closeHistory(){historyOpen.value=false;await nextTick();exportButton.value?.focus()}
 const restoredEpoch=ref(0)
@@ -1030,6 +1037,6 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
 </style>
 
-<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}.guest-access-note{flex-shrink:0;display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);color:var(--c-sub);font:11px var(--font-sans)}@media(max-width:640px){.guest-access-note{padding-inline:6px}}</style>
+<style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}.guest-access-note{gap:4px;flex-shrink:0;display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);color:var(--c-sub);font:11px var(--font-sans)}@media(max-width:640px){.guest-access-note{padding-inline:6px}}</style>
 
 <style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}</style>

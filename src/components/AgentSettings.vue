@@ -2,9 +2,9 @@
   <Teleport to="body">
     <Transition name="overlay" appear @after-leave="$emit('close')">
       <div v-if="visible" class="reader-modal-shade" @click.self="visible = false">
-        <section class="reader-dialog" role="dialog" aria-modal="true" aria-label="插件连接">
-          <header><span>插件连接</span><button aria-label="关闭" @click="visible = false">×</button></header>
-          <template v-if="!token">
+        <section ref="dialog" tabindex="-1" class="reader-dialog" role="dialog" aria-modal="true" aria-label="Agent 访问">
+          <header><span>Agent 访问</span><button aria-label="关闭" @click="visible = false">×</button></header>
+          <template v-if="!token"><p class="agent-purpose">选择允许 Agent 读取或修改的知识库。阅读器本身无需此授权。</p>
             <label>连接名称<input v-model="name" placeholder="例如：DSH" /></label>
             <div class="agent-scope-heading"><span>可访问的知识库</span><button type="button" @click="toggleAll">{{ allSelected ? '取消全选' : '选择全部' }}</button></div>
             <div class="agent-scopes" role="group" aria-label="可访问的知识库">
@@ -38,11 +38,14 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import {useDialogFocus} from '../composables/useDialogFocus'
 import { API_BASE } from '../utils/api'
 
 const props = defineProps({ library: String })
 defineEmits(['close'])
 const visible = ref(true)
+const dialog = ref(null)
+useDialogFocus(visible, dialog, () => { visible.value = false })
 const name = ref('DSH')
 const scopes = ref(props.library ? [props.library] : [])
 const write = ref(false)

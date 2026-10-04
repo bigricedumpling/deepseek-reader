@@ -47,7 +47,7 @@ code, pre, kbd { font-family: var(--font-mono); }
 /* 微信字体（仅用于品牌与少量标签）*/
 @font-face {
   font-family: 'Weixin';
-  src: url('/fonts/Weixin.otf') format('opentype');
+  src: local('Weixin'); /* Optional installed font; not redistributed in the product package. */
   font-display: swap;
 }
 /* 界面字体：微信体，用于正文以外的所有地方 */

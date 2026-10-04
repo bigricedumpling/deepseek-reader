@@ -40,7 +40,8 @@ function configure(mermaid) {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'base',
-    securityLevel: 'loose',
+    securityLevel: 'strict',
+    htmlLabels: false,
     fontFamily: '"Weixin", "PingFang SC", -apple-system, sans-serif',
     themeVariables: {
       primaryColor: t.primaryColor,
@@ -52,7 +53,7 @@ function configure(mermaid) {
       textColor: t.textColor,
       fontSize: '14px'
     },
-    flowchart: { curve: 'basis', padding: 12 },
+    flowchart: { curve: 'basis', padding: 12, htmlLabels: false },
     sequence: { actorMargin: 40 },
     gantt: { fontSize: 13 }
   })

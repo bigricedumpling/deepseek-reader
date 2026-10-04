@@ -2,12 +2,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { workspace, fault, digest } from '../storage/workspace.js'
+import {openRestoredReader} from './restore-viewer.js'
 import { resources } from './resources.js'
 const tables = ['nodes','aliases','assets','asset_aliases','settings','versions','sources','workspace_previews','workspace_preview_assets']
-const excluded = new Set(['state.sqlite','state.sqlite-wal','state.sqlite-shm','.admin-password','.分享.json'])
+const excluded = new Set(['state.sqlite','state.sqlite-wal','state.sqlite-shm','.admin-password','.分享.json','restore-viewer.json'])
 export function backupCopyFilter(file) {
   if (fs.lstatSync(file).isSymbolicLink()) throw fault('SYMLINK', '备份中存在符号链接，请先处理后重试')
-  return !excluded.has(path.basename(file)) && !file.includes(path.sep+'.reader'+path.sep+'operations'+path.sep) && !(path.basename(file) === 'operations' && path.basename(path.dirname(file)) === '.reader')
+  return !excluded.has(path.basename(file)) && !file.includes(path.sep+'.reader'+path.sep+'operations'+path.sep) && !(['operations','runtime'].includes(path.basename(file)) && path.basename(path.dirname(file)) === '.reader')
 }
 export function backupService(repo) {
   const realRoot = fs.realpathSync(repo.root)
@@ -23,7 +24,7 @@ export function backupService(repo) {
   }
   function list() {
     safeHome()
-    return { directory: home, items: fs.readdirSync(home).filter(id => /^[a-f0-9-]{36}$/.test(id)).flatMap(id => {
+    return { directory: home, restored: fs.readdirSync(home).filter(name => /^恢复副本-[\d-]+-[a-f0-9]{8}$/.test(name) && fs.lstatSync(path.join(home,name)).isDirectory()).map(id=>({id,at:fs.statSync(path.join(home,id)).birthtimeMs})), items: fs.readdirSync(home).filter(id => /^[a-f0-9-]{36}$/.test(id)).flatMap(id => {
       try {
         const file = path.join(home,id,'metadata.json')
         if(fs.lstatSync(path.dirname(file)).isSymbolicLink() || fs.lstatSync(file).isSymbolicLink()) return []
@@ -65,9 +66,13 @@ export function backupService(repo) {
           }
         }
       })
-      return { directory:target }
+      return { directory:target, restoredId:path.basename(target) }
     } catch(error) { restored?.db.close(); restored = undefined; fs.rmSync(target,{recursive:true,force:true}); throw error }
     finally { restored?.db.close() }
   }
-  return { list,create,restore, directory:home }
+  async function open(id) {
+    if (!list().restored.some(item=>item.id===id)) throw fault('NOT_FOUND','恢复副本不存在',404)
+    return openRestoredReader(path.join(home,id))
+  }
+  return { list,create,restore,open, directory:home }
 }

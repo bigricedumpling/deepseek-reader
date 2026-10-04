@@ -18,6 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run typecheck
+      - run: npm run build
       - run: npm run test:access
       - run: npm run test:readonly
       - run: npm run test:block
@@ -29,6 +30,7 @@ jobs:
       - run: node scripts/test-workspace.mjs
       - run: node scripts/test-recovery.mjs
       - run: npm run test:user-recovery
-      - run: npm run build
+      - run: npm run test:workflow
       - run: npm pack --workspace=false --pack-destination ../../
         working-directory: plugins/reader-workspace
+      - run: node scripts/test-package.mjs

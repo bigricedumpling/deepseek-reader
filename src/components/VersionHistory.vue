@@ -9,7 +9,7 @@
         <p v-else-if="!items.length">这篇文档还没有历史版本。</p>
         <div v-else class="version-content">
           <nav aria-label="版本列表"><button v-for="item in items" :key="item.id" :aria-pressed="selected === item.id" @click="select(item.id)">{{ new Date(item.at).toLocaleString() }}</button></nav>
-          <textarea readonly aria-label="历史版本正文" :value="content" placeholder="选择一个版本" />
+          <TextComparison v-if="content!==null" :before="content" :after="currentContent" /><p v-else class="version-hint">选择一个版本查看差异</p>
         </div>
         <footer><span>恢复会先保留当前修改。</span><button :disabled="content === null || fetching || busy" class="reader-button" @click="restore">{{ busy ? '正在保存当前修改…' : '恢复此版本' }}</button></footer>
       </section>
@@ -18,10 +18,11 @@
 </template>
 <script setup>
 import { ref, watch } from 'vue'
+import TextComparison from './TextComparison.vue'
 import { PhX } from '@phosphor-icons/vue'
-import { readerRequest } from '../contracts/reader'
+import { getHistory } from '../services/history'
 import { useDialogFocus } from '../composables/useDialogFocus'
-const props = defineProps({ open: Boolean, path: String, preserveCurrent: Function })
+const props = defineProps({ open: Boolean, path: String, currentContent: String, preserveCurrent: Function })
 const emit = defineEmits(['close', 'restore'])
 const dialog = ref(null), items = ref([]), selected = ref(''), content = ref(null), loading = ref(false), fetching = ref(false), busy = ref(false), error = ref('')
 let generation = 0, selection = 0
@@ -32,7 +33,7 @@ watch(() => [props.open, props.path], async () => {
   items.value = []; content.value = null; selected.value = ''; error.value = ''; fetching.value = false
   if (!props.open) return
   loading.value = true
-  try { const result = await readerRequest('/history?path=' + encodeURIComponent(props.path)); if (current === generation) items.value = result.items }
+  try { const result = await getHistory(props.path); if (current === generation) items.value = result.items }
   catch (e) { if (current === generation) error.value = e.message }
   finally { if (current === generation) loading.value = false }
 })
@@ -40,7 +41,7 @@ async function select(id) {
   const current = ++selection, document = generation
   selected.value = id; content.value = null; fetching.value = true; error.value = ''
   try {
-    const result = await readerRequest('/history?path=' + encodeURIComponent(props.path) + '&version=' + encodeURIComponent(id))
+    const result = await getHistory(props.path,id)
     if (document === generation && current === selection) content.value = result.content
   } catch (e) { if (document === generation && current === selection) error.value = e.message }
   finally { if (document === generation && current === selection) fetching.value = false }

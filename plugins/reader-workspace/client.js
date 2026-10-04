@@ -43,7 +43,7 @@ window.__ModuleLoader__.load({
       const address = new URL(value.trim())
       const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname)
       if (address.username || address.password || address.protocol !== 'https:' && (address.protocol !== 'http:' || !local || mobileDevice())) throw Error(mobileDevice() ? '请输入可从此设备访问的 HTTPS 地址' : '远程地址需使用 HTTPS，本机可用 HTTP')
-      address.pathname = '/'; address.search = ''; address.hash = ''
+      address.pathname = address.pathname.replace(/\/+$/, '') + '/'; address.search = ''; address.hash = ''
       return address.toString()
     }
 

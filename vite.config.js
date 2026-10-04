@@ -41,7 +41,7 @@ function inlineIcon() {
 
 export default defineConfig(async ({ command }) => ({
   base: process.env.VITE_BASE || '/',
-  plugins: [inlineIcon(), ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
+  plugins: [inlineIcon(), { name: 'pdf-runtime-assets', apply: 'build', closeBundle() { for (const dir of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.resolve('node_modules/pdfjs-dist', dir), path.resolve('dist/pdfjs', dir), {recursive:true}); fs.copyFileSync(path.resolve('node_modules/pdfjs-dist/LICENSE'), path.resolve('dist/pdfjs/LICENSE')); fs.rmSync(path.resolve('dist/fonts/Weixin.otf'), {force:true}) } }, ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')

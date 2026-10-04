@@ -129,7 +129,8 @@ function cjkGap(html) {
 }
 
 function addGapsInText(html) {
-  return html.replace(/([^<>]+)/g, (chunk) => {
+  return html.split(/(<(?:[^>"']|"[^"]*"|'[^']*')*>)/g).map((chunk, index) => {
+    if (index % 2) return chunk
     let out = ''
     for (let i = 0; i < chunk.length; i++) {
       const prev = chunk[i - 1]
@@ -139,7 +140,7 @@ function addGapsInText(html) {
       out += cur
     }
     return out
-  })
+  }).join('')
 }
 
 export function renderMarkdown(src, { gaps = true } = {}) {

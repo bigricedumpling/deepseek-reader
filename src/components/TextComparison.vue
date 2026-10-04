@@ -1,0 +1,10 @@
+<template><div class="text-comparison"><div class="compare-mode" role="group" aria-label="比较视图"><button :aria-pressed="mode==='changes'" @click="mode='changes'">差异</button><button :aria-pressed="mode==='full'" @click="mode='full'">完整正文</button></div><template v-if="mode==='changes'"><p v-if="before===after" class="compare-empty">与当前内容相同</p><ol v-else><li v-for="row in changes" :key="row.line"><small>旧版本第 {{ row.line }} 行</small><pre v-if="row.original!==null" class="removed"><span>−</span>{{ row.original }}</pre><pre v-if="row.out!==null" class="added"><span>+</span>{{ row.out }}</pre></li></ol><p v-if="changes.length===60" class="compare-empty">显示前 60 处变化，完整内容见「完整正文」。</p></template><div v-else class="compare-full"><label>历史版本<textarea readonly :value="before" /></label><label>当前内容<textarea readonly :value="after" /></label></div></div></template>
+<script setup>
+import {computed,ref} from 'vue'
+import {diffLines} from '../utils/markdown-normalize'
+const props=defineProps({before:{type:String,default:''},after:{type:String,default:''}})
+const mode=ref('changes'),changes=computed(()=>diffLines(props.before,props.after,60))
+</script>
+<style scoped>
+.text-comparison{min-height:0;overflow:auto;background:var(--c-field);border-radius:10px;padding:12px}.compare-mode{display:flex;gap:8px;margin-bottom:12px}.compare-mode button{font-size:12px;padding:5px 8px;border-radius:6px}.compare-mode button[aria-pressed=true]{background:var(--c-surface);color:var(--color-ds)}ol{list-style:none;padding:0;margin:0}li{margin-bottom:12px}small,.compare-empty{font-size:11px;color:var(--c-sub)}pre{margin:3px 0;padding:6px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 monospace}pre span{margin-right:8px}.removed{background:color-mix(in srgb,#c33 9%,transparent)}.added{background:color-mix(in srgb,#29844d 10%,transparent)}.compare-full{display:grid;gap:12px}label{font-size:12px}textarea{display:block;width:100%;height:180px;resize:vertical;padding:8px;font:12px/1.6 monospace;background:var(--c-surface);color:var(--c-ink);border-radius:6px}
+</style>

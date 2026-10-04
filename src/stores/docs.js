@@ -1,3 +1,4 @@
+import {readerApi as api} from '../services/readerClient'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { renderMarkdown, extractToc, searchDocs } from '../utils/markdown'
@@ -22,23 +23,6 @@ const PREVIEW_TYPES = new Set(['pdf', 'h5'])
  *   所以不存在"侧栏名和正文标题谁同步谁"的问题。
  *   在 app 外面改名、换目录、新增、删除，下一次 loadTree 就一致。
  */
-async function api(method, endpoint, payload) {
-  const opt = { method }
-  if (method !== 'GET') {
-    opt.headers = { 'Content-Type': 'application/json' }
-    opt.body = JSON.stringify(payload || {})
-  }
-  const res = await fetch(API_BASE + '/api' + endpoint, opt)
-  let json
-  try {
-    json = await res.json()
-  } catch {
-    throw new Error(`接口返回异常 HTTP ${res.status}`)
-  }
-  if (!json.ok) throw Object.assign(new Error(json.error || '接口出错'), {code:json.code,details:json.details,status:res.status})
-  return json
-}
-
 /** 把嵌套的目录树摊平成文档列表：搜索、导出、找当前这篇都用它。 */
 function flatten(nodes, dir, out) {
   for (const n of nodes || []) {
@@ -189,6 +173,7 @@ export const useDocsStore = defineStore('docs', () => {
   const libEpoch = ref(0)
 
   const role = ref(window.__readerMode === 'owner' ? 'owner' : 'guest')
+  const restoredCopy = ref(false), pdfTranslationAvailable=ref(false)
   const isGuest = computed(() => role.value !== 'owner')
   const accessRequest = ref(null)
   const currentReadonly = computed(() => !canEdit(currentNode.value))
@@ -199,7 +184,7 @@ export const useDocsStore = defineStore('docs', () => {
       await api('PUT', '/access', { path, ...change })
       await loadAll()
       window.dispatchEvent(new Event('reader-access-updated'))
-    } catch (error) { error.value = String(error.message || error) }
+    } catch (reason) { error.value = String(reason.message || reason) }
   }
   function canEdit(node) { return !!node && (!isGuest.value || (node.locked === false && node.shared === true)) }
 
@@ -210,7 +195,7 @@ export const useDocsStore = defineStore('docs', () => {
     try {
       const res = await fetch(API_BASE + '/api/me')
       const json = await res.json()
-      if (json.ok) role.value = json.data.role
+      if (json.ok) { role.value = json.data.role; restoredCopy.value = json.data.restoredCopy === true; pdfTranslationAvailable.value=json.data.pdfTranslationAvailable===true }
     } catch {
       /* 问不到就按"我"处理（本机 dev 一直是这个分支） */
     }
@@ -643,25 +628,9 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   /** 问接口要这篇 pdf 的书签目录 */
-  async function loadPdfToc(file) {
-    pdfToc.value = []
-    pdfPage.value = 1
-    pdfTocSource.value = ''
-    pdfPages.value = 0
-    pdfTocError.value = ''
-    try {
-      const res = await fetch(API_BASE + '/api/pdf-toc?path=' + encodeURIComponent(file))
-      const json = await res.json()
-      // 等接口回来的路上可能已经切走了
-      if (json.ok && currentPath.value === file) {
-        pdfToc.value = json.data.toc || []
-        pdfTocSource.value = json.data.source || ''
-        pdfPages.value = json.data.pages || 0
-        pdfTocError.value = json.data.error || ''
-      }
-    } catch {
-      /* 抽不出目录不影响看 pdf */
-    }
+  function loadPdfToc() {
+    pdfToc.value=[]; pdfPage.value=1; pdfTocSource.value=''; pdfPages.value=0; pdfTocError.value=''
+    // PdfPreview extracts bookmarks after drawing the first page, without blocking navigation.
   }
 
   /** 重新从磁盘读当前这篇，放弃内存里的改动 */
@@ -976,7 +945,7 @@ export const useDocsStore = defineStore('docs', () => {
     createCategory,
     renameCategory,
     deleteCategory,
-    role,
+    role, restoredCopy, pdfTranslationAvailable,
     isGuest, currentReadonly, canEdit, accessRequest, requestAccess,
     shareInfo,
     loadShare,

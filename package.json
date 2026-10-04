@@ -29,7 +29,9 @@
     "typecheck": "tsc --project tsconfig.json",
     "test:lifecycle": "node scripts/test-managed-server.mjs",
     "test:user-recovery": "node scripts/test-user-recovery.mjs",
-    "test:upgrade": "node scripts/test-upgrade.mjs"
+    "test:upgrade": "node scripts/test-upgrade.mjs",
+    "test:workflow": "node scripts/test-workflow.mjs",
+    "measure:performance": "node scripts/measure-performance.mjs"
   },
   "dependencies": {
     "@codemirror/language-data": "^6.5.2",
@@ -39,6 +41,7 @@
     "@milkdown/crepe": "^7.22.1",
     "@milkdown/kit": "^7.22.1",
     "@phosphor-icons/vue": "^2.2.1",
+    "dompurify": "^3.4.16",
     "markdown-it": "^14.1.0",
     "markdown-it-footnote": "^4.0.0",
     "markdown-it-sub": "^2.0.0",

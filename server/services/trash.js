@@ -28,8 +28,9 @@ export function trashService(repo, { safeResolve, assets, share, registry, saveR
   function list() {
     const all = records(), known = new Set(all.map(item => item.trashed))
     const dir = safeResolve('.回收站')
-    const legacyCount = fs.existsSync(dir) ? fs.readdirSync(dir).filter(name => !known.has(relative(path.join(dir, name)))).length : 0
-    return { items: all.filter(item => fs.existsSync(safeResolve(item.trashed))).sort((a,b) => b.at-a.at).map(({ settings, library, trashed, ...item }) => item), legacyCount }
+    const legacyItems = fs.existsSync(dir) ? fs.readdirSync(dir).filter(name => !name.startsWith('.') && !known.has(relative(path.join(dir, name))) && !fs.lstatSync(path.join(dir,name)).isSymbolicLink()).map(name=>({id:name,name:name.split('__').at(-1)})) : []
+    const legacyCount=legacyItems.length
+    return { items: all.filter(item => fs.existsSync(safeResolve(item.trashed))).sort((a,b) => b.at-a.at).map(({ settings, library, trashed, ...item }) => item), legacyCount, legacyItems }
   }
   function restore(id) {
     const all = records(), item = all.find(entry => entry.id === id)
@@ -54,5 +55,12 @@ export function trashService(repo, { safeResolve, assets, share, registry, saveR
     repo.setJSON('trashEntries', all.filter(entry => entry.id !== id))
     return { path: item.original }
   }
-  return { move, list, restore }
+  function restoreLegacy(legacyId, destination) {
+    if(!list().legacyItems.some(item=>item.id===legacyId))throw fault('NOT_FOUND','旧回收记录不存在',404)
+    if(typeof destination!=='string'||!destination.includes('/')||destination.split('/').some(part=>!part||part.startsWith('.')||part.includes('\\')||/[<>:"|?*]/.test(part)))throw fault('INVALID_PATH','请选择知识库和有效名称')
+    const id=randomUUID()
+    repo.setJSON('trashEntries',[...records(),{id,original:destination,trashed:'.回收站/'+legacyId,at:Date.now(),settings:{columns:{},foldables:{},order:{}}}])
+    return restore(id)
+  }
+  return { move, list, restore, restoreLegacy }
 }

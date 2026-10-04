@@ -95,8 +95,9 @@
     <Teleport to="body">
       <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false" /></transition>
       <transition name="lib-manager">
-        <section v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览知识库' : '管理知识库'">
-          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? previewArchived ? '已归档' : '工作区浏览记录' : '知识库' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection === 'previews' && !selectedPreview" @click="togglePreviewArchive">{{ previewArchived ? '浏览记录' : '已归档' }}</button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
+        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览知识库' : '管理知识库'">
+          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? previewArchived ? '已归档' : '工作区浏览记录' : '知识库' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection==='libs' && !isGuest" class="icon-btn" aria-label="新建知识库" @click="createLib"><PhPlus :size="18" /></button><button v-if="managerSection === 'previews' && !selectedPreview" @click="togglePreviewArchive">{{ previewArchived ? '浏览记录' : '已归档' }}</button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
+          <p v-if="managerSection === 'libs' && !isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收录到知识库，也可以直接新建文档。</p>
           <div v-if="managerSection === 'libs' || managerSection === 'previews' && !selectedPreview" class="lib-manager-tools">
             <div class="lib-manager-search-row">
               <input v-if="managerSection === 'libs'" v-model.trim="libQuery" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus />
@@ -116,7 +117,7 @@
             </div>
             <p v-if="!managerLibs.length" class="lib-empty">没有匹配的知识库</p>
           </div>
-          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="fill" />分享访客链接</button><button title="为 DSH 插件生成连接令牌" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="fill" />插件连接</button></footer>
+          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="fill" />分享只读副本</button><button title="允许 Agent 访问指定知识库" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="fill" />Agent 访问</button></footer>
           <div v-if="managerSection === 'previews'" class="lib-manager-previews">
             <div v-if="!selectedPreview" class="preview-list">
               <div v-for="item in filteredPreviews" :key="item.id" class="preview-list-row">
@@ -124,13 +125,13 @@
                 <div class="preview-list-actions">
                   <button v-if="fileManagerAvailable()" :disabled="!canRevealItem(item)" :title="canRevealItem(item) ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager(item)"><PhFolderSimple :size="15" />{{ fileManagerLabel() }}</button>
                   <button v-else-if="canResolvePreviewInDsh(item)" @click="openPreviewInDsh(item)"><PhFolderSimple :size="15" />在 DSH 打开</button>
-                  <button :disabled="item.incomplete" :title="item.incomplete ? '部分图片未加载，请在 DSH 中重新打开' : '收录到知识库'" @click="collectPreviewFromList(item)">收录到知识库</button>
+                  <button :disabled="item.incomplete" :title="item.incomplete ? '部分图片未加载，请在 DSH 中重新打开' : '收录副本'" @click="collectPreviewFromList(item)">收录副本</button>
                 </div>
               </div>
               <p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p>
               <p v-if="!filteredPreviews.length" class="lib-empty">{{ previewQuery ? '没有匹配的记录' : previewArchived ? '没有归档记录' : '还没有浏览记录' }}</p>
             </div>
-            <div v-if="selectedPreview" class="lib-preview-detail"><div class="lib-preview-detail-head"><span>{{ selectedPreview.incomplete ? '部分图片未加载' : selectedPreview.sourceState === 'missing' ? '来源已失效' : selectedPreview.sourceState === 'changed' ? '源文件已更新' : '来自工作区' }}</span></div><p class="lib-preview-source" :title="selectedPreview.reference">{{ previewSourceLabel(selectedPreview.reference) }}</p><div class="lib-preview-body" v-html="selectedPreviewHtml" @click="onPreviewLink" /><p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p><div class="lib-preview-actions"><button v-if="fileManagerAvailable()" :disabled="!canRevealPreview" :title="canRevealPreview ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager()"><PhFolderSimple :size="14" />{{ fileManagerLabel() }}</button><button v-else-if="canOpenPreviewInDsh" @click="openPreviewInDsh()"><PhFolderSimple :size="14" />在 DSH 打开原文件</button><button @click="archivePreview(selectedPreview.id, !previewArchived)">{{ previewArchived ? '移回记录' : '归档' }}</button><button :disabled="selectedPreview.incomplete" @click="openTransfer('collect','preview',selectedPreview.id)">收录到知识库</button></div></div>
+            <div v-if="selectedPreview" class="lib-preview-detail"><div class="lib-preview-detail-head"><span>{{ selectedPreview.incomplete ? '部分图片未加载' : selectedPreview.sourceState === 'missing' ? '来源已失效' : selectedPreview.sourceState === 'changed' ? '源文件已更新' : '来自工作区' }}</span></div><p class="lib-preview-source" :title="selectedPreview.reference">{{ previewSourceLabel(selectedPreview.reference) }}</p><div class="lib-preview-body" v-html="selectedPreviewHtml" @click="onPreviewLink" /><p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p><div class="lib-preview-actions"><button v-if="fileManagerAvailable()" :disabled="!canRevealPreview" :title="canRevealPreview ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager()"><PhFolderSimple :size="14" />{{ fileManagerLabel() }}</button><button v-else-if="canOpenPreviewInDsh" @click="openPreviewInDsh()"><PhFolderSimple :size="14" />在 DSH 打开原文件</button><button @click="archivePreview(selectedPreview.id, !previewArchived)">{{ previewArchived ? '移回记录' : '归档' }}</button><button :disabled="selectedPreview.incomplete" @click="openTransfer('collect','preview',selectedPreview.id)">收录副本</button></div></div>
           </div>
         </section>
       </transition>
@@ -138,8 +139,8 @@
 
     <Teleport to="body">
       <Transition name="overlay" appear><div v-if="transfer.open" class="transfer-backdrop" @click.self="transfer.open=false">
-        <section class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'collect' ? '收录到知识库' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库'">
-          <h2>{{ transfer.mode === 'collect' ? '收录到知识库' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库' }}</h2>
+        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库'">
+          <h2>{{ transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库' }}</h2>
           <p class="transfer-source">{{ transfer.mode === 'collect' ? selectedPreview?.title : transfer.path }}</p>
           <label v-if="transfer.mode === 'collect'">文档名称<input v-model="transfer.name" maxlength="160" /></label>
           <div class="transfer-library-head"><span>目标知识库</span><input v-model.trim="transferSearch" type="search" placeholder="搜索知识库" aria-label="搜索目标知识库" /></div>
@@ -432,7 +433,8 @@ import {
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
   PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight, PhArrowLeft, PhFileText
 } from '@phosphor-icons/vue'
-import MarkdownIt from 'markdown-it'
+import {useDialogFocus} from '../composables/useDialogFocus'
+import {useWorkspaceHistory} from '../composables/useWorkspaceHistory'
 import RailToc from './RailToc.vue'
 import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
@@ -493,108 +495,14 @@ const libIconInput = ref(null)
 const libPanel = reactive({ open: false, libs: [], busy: '' })
 const managerOpen = ref(false)
 const managerSection = ref('libs')
-const tempPreviews = ref([])
-const previewQuery = ref('')
-const filteredPreviews = computed(() => tempPreviews.value.filter(item => !previewQuery.value || String(item.title || '').toLocaleLowerCase().includes(previewQuery.value.toLocaleLowerCase())))
-const selectedPreview = ref(null)
-const previewActionError = ref('')
-const previewArchived = ref(false)
-function canResolvePreviewInDsh(item) { return window.parent !== window && /^dsh-resource:\/\/file\/session\//.test(item?.reference || '') }
-function canRevealItem(item) { return fileManagerAvailable() && !!item && (/^(?:\/|[A-Za-z]:[\\/])/.test(item.sourcePath || item.reference || '') || canResolvePreviewInDsh(item)) }
-const canRevealPreview = computed(() => canRevealItem(selectedPreview.value))
-const canOpenPreviewInDsh = computed(() => canResolvePreviewInDsh(selectedPreview.value))
-const safeMarkdown = new MarkdownIt({ html: false, linkify: true })
-const safeLinkRule = safeMarkdown.renderer.rules.link_open || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options))
-safeMarkdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
-  const href = tokens[index].attrGet('href') || ''
-  if (href && !/^(?:https?:\/\/|#)/i.test(href)) {
-    tokens[index].attrSet('href', '#')
-    tokens[index].attrSet('title', '请在 DSH 打开源文件中的链接')
-  }
-  return safeLinkRule(tokens, index, options, env, self)
-}
-const selectedPreviewHtml = computed(() => safeMarkdown.render(selectedPreview.value?.content || ''))
-function previewSourceLabel(reference) {
-  try {
-    const uri = new URL(reference)
-    if (uri.protocol === 'dsh-resource:') return decodeURIComponent(uri.pathname.split('/').slice(3).join('/')) || '工作区文件'
-  } catch { /* 旧记录可能只有路径 */ }
-  return String(reference || '').split('/').pop() || '工作区文件'
-}
-function onPreviewLink(event) { if (event.target.closest?.('a[href="#"]')) event.preventDefault() }
-async function loadPreviews() {
-  try {
-    const response = await fetch(API_BASE + '/api/workspace-previews?archived=' + (previewArchived.value ? '1' : '0'), { cache: 'no-store' })
-    const json = await response.json()
-    if (!json.ok) throw Error(json.error || '读取工作区浏览记录失败')
-    tempPreviews.value = json.data || []
-  } catch (error) { store.error = String(error.message || error) }
-}
-async function openPreviews() {
-  window.dispatchEvent(new Event('reader-overlay-open'))
-  libPanel.open = false
-  managerSection.value = 'previews'
-  previewArchived.value = false
-  previewQuery.value = ''
-  selectedPreview.value = null
-  managerOpen.value = true
-  await loadPreviews()
-}
-async function togglePreviewArchive() { previewArchived.value = !previewArchived.value; selectedPreview.value = null; await loadPreviews() }
-async function selectPreview(id) {
-  try {
-    previewActionError.value = ''
-    const response = await fetch(API_BASE + '/api/workspace-preview?id=' + encodeURIComponent(id), { cache: 'no-store' })
-    const json = await response.json()
-    if (!json.ok) throw Error(json.error || '预览读取失败')
-    selectedPreview.value = json.data
-    return json.data
-  } catch (error) { store.error = String(error.message || error); return null }
-}
-async function collectPreviewFromList(item) {
-  const record = await selectPreview(item.id)
-  if (record) await openTransfer('collect', 'preview', record.id)
-}
-async function showPreviewInFileManager(item = selectedPreview.value) {
-  if (!item) return
-  try {
-    previewActionError.value = ''
-    let sourcePath = ''
-    if (!/^(?:\/|[A-Za-z]:[\\/])/.test(item.sourcePath || item.reference || '') && canResolvePreviewInDsh(item)) {
-      const requestId = crypto.randomUUID()
-      sourcePath = await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => { window.removeEventListener('message', onMessage); reject(Error('无法取得原文件位置，请在 DSH 中重新打开文件后再试')) }, 5000)
-        function onMessage(event) {
-          if (event.source !== window.parent || event.data?.type !== 'dsh-reader:resolved-source' || event.data.requestId !== requestId) return
-          clearTimeout(timeout); window.removeEventListener('message', onMessage)
-          resolve(String(event.data.sourcePath || ''))
-        }
-        window.addEventListener('message', onMessage)
-        window.parent.postMessage({ type: 'dsh-reader:resolve-source', requestId, reference: item.reference }, '*')
-      })
-      if (!sourcePath) throw Error('无法取得原文件位置')
-    }
-    await revealInFileManager('', item.id, sourcePath)
-    if (sourcePath) item.sourcePath = sourcePath
-  }
-  catch (error) { previewActionError.value = String(error.message || error) }
-}
-function openPreviewInDsh(item = selectedPreview.value) {
-  window.parent.postMessage({ type: 'dsh-reader:open-source', reference: item.reference }, '*')
-}
-async function archivePreview(id, archived) {
-  try {
-    const response = await fetch(API_BASE + '/api/workspace-preview/archive', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, archived }) })
-    const json = await response.json()
-    if (!json.ok) throw Error(json.error || '归档失败')
-    selectedPreview.value = null
-    await loadPreviews()
-  } catch (error) { store.error = String(error.message || error) }
-}
+const {tempPreviews,previewQuery,filteredPreviews,selectedPreview,previewActionError,previewArchived,canResolvePreviewInDsh,canRevealItem,canRevealPreview,canOpenPreviewInDsh,selectedPreviewHtml,previewSourceLabel,onPreviewLink,loadPreviews,openPreviews,togglePreviewArchive,selectPreview,collectPreviewFromList,showPreviewInFileManager,openPreviewInDsh,archivePreview}=useWorkspaceHistory({store,libPanel,managerOpen,managerSection,openTransfer})
 const libQuery = ref('')
 const managerFilter = ref('all')
 const transferSearch = ref('')
 const transfer = reactive({ open: false, mode: 'copy', kind: 'doc', path: '', name: '', lib: '', dir: '', folders: [], busy: false, error: '' })
+const managerDialog = ref(null), transferDialog = ref(null)
+useDialogFocus(managerOpen, managerDialog, () => { if(selectedPreview.value) selectedPreview.value=null; else managerOpen.value=false })
+useDialogFocus(() => transfer.open, transferDialog, () => { if(!transfer.busy) transfer.open=false })
 const transferToast = reactive({ message: '', lib: '', file: '' })
 async function viewTransferResult() {
   const lib = transferToast.lib, file = transferToast.file
@@ -660,10 +568,14 @@ async function confirmTransfer() {
     if (mode === 'collect') {
       managerOpen.value = false
       await goLib({ name: targetLib, path: targetLib })
+      await store.loadTree()
       if (result?.file) await store.select(result.file)
+      if (isMobileLibView() && !props.collapsed) emit('toggle-collapse')
     } else if (mode === 'move' && targetLib !== currentLib.value) {
       await goLib({ name: targetLib, path: targetLib })
+      await store.loadTree()
       if (result?.file) await store.select(result.file)
+      if (isMobileLibView() && !props.collapsed) emit('toggle-collapse')
     } else {
       transferToast.message = mode === 'collect' ? '已收录到 ' + dir : mode === 'copy' ? '已复制到 ' + dir : '已移动到 ' + dir
       transferToast.lib = targetLib
@@ -828,7 +740,7 @@ async function doCreateLib(value) {
     if (!data.ok) throw new Error(data.error || '新建失败')
     libPanel.libs = data.data.libs || []
     const made = libPanel.libs.find((l) => l.name === to)
-    if (made) await goLib(made)
+    if (made) { await goLib(made); managerOpen.value=false }
   } catch (e) {
     window.alert(String(e.message || e))
   } finally {
@@ -1772,6 +1684,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 </script>
 
 <style scoped>
+.library-welcome{margin:0;padding:0 24px 18px;font-size:13px;line-height:1.65;color:var(--c-sub)}
 /* 侧边列表和管理弹窗各有明确职责。 */
 .lib-modal-backdrop { display: none; }
 .lib-backdrop-enter-active, .lib-backdrop-leave-active { transition: opacity 0.2s ease; }
