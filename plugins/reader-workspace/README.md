@@ -26,7 +26,7 @@ macOS 默认抽屉目录是 `~/Library/Application Support/Reader/知识库`。�
 
 ## 支持范围与已知问题
 
-- 0.2.0-preview.4 面向 macOS 本机 DSH NEXT。此前版本已用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）的官方安装链验证安装包自动启动和阅读器入口。Windows/Linux 安装与路径支持仍待真实 DSH 桌面验收；iOS 不作为 DSH 插件平台。
+- 0.2.0-preview.4 是 DSH 桌面端的 Preview 版本，安装包已在 macOS、Windows 和 Linux 的自动检查中完成构建与运行测试。macOS 另使用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）的官方安装链验收了自动启动和阅读器入口；Windows 和 Linux 的原生 DSH 桌面安装与交互仍待验收。iOS 不作为 DSH 插件平台。
 - Agent 工具仍需单独授权；客户端连接地址不会自动配置 Agent 令牌。
 - 临时访客链接依赖 `cloudflared` 与网络；真实外部设备的端到端连通性尚未完成验收。
 - 工作区预览是快照，收录后为独立副本，不提供双向同步或多人协作。

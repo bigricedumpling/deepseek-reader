@@ -1,6 +1,6 @@
 # Typocket 0.2.0 Preview 4
 
-Typocket 是 DSH 中的个人文档工具，用于阅读、编辑和整理本机文件，以及预览工作区 Markdown。插件安装包包含网页和本机服务，macOS 用户安装后即可使用。
+Typocket 是 DSH 中的个人文档工具，用于阅读、编辑和整理本机文件，以及预览工作区 Markdown。插件安装包包含网页和本机服务。当前 Preview 已通过 macOS、Windows 和 Linux 的自动检查；macOS 另完成了原生 DSH 安装验收，其他桌面系统仍待原生验收。
 
 ## 这一版
 
