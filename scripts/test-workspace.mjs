@@ -21,7 +21,7 @@ function request(method,url,body,role='owner',headers={}){
   handleApi(req,res,{role}).catch(reject)
  })
 }
-async function get(file){return (await request('GET','/api/doc?path='+encodeURIComponent(file))).json.data}
+async function get(file){const result=await request('GET','/api/doc?path='+encodeURIComponent(file));assert.equal(result.json.ok,true,result.json.error);return result.json.data}
 try{
  const legacyRoot=fs.mkdtempSync(path.join(os.tmpdir(),'reader-v1-'))
  try{

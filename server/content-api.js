@@ -105,6 +105,9 @@ function revealInFileManager(abs, directory) {
   })
 }
 
+// Persist portable knowledge-base keys, never native Windows separators.
+function relativeKey(abs) { return path.relative(DOCS_ROOT, abs).split(path.sep).join('/') }
+
 function relJoin(dir, name) {
   return dir ? dir + '/' + name : name
 }
@@ -1028,7 +1031,7 @@ const routes = {
     if (!fs.existsSync(absOld)) throw new Error('知识库不存在: ' + from)
     if (fs.existsSync(absNew)) throw new Error('已有同名知识库: ' + to)
     const reg = syncRegistry()
-    assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
+    assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
     /* 分享与可编辑的键跟着搬，否则改名就等于把不公开的东西放出去了 */
     share.rename(from, to)
     remapOrderUnder(from, to)
@@ -1380,7 +1383,7 @@ const routes = {
         assets.beforeMove(body.path); repo.move(absOld, tmp)
         repo.move(tmp, absNew); repo.remap(body.path, next)
       } else {
-        assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
+        assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
       }
     }
     share.rename(body.path, next)
@@ -1425,7 +1428,7 @@ const routes = {
     const absNew = safeResolve(next)
     if (!fs.existsSync(absOld)) throw new Error('目录不存在: ' + rel)
     if (fs.existsSync(absNew)) throw new Error('同位置已有同名目录: ' + name)
-    assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
+    assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
     share.rename(rel, next)
     remapColWidthsUnder(rel + '/', next + '/')
     remapFoldables(rel, next, true)
@@ -1496,7 +1499,7 @@ const routes = {
     const absNew = safeResolve(next)
     if (fs.existsSync(absNew)) throw new Error('目标位置已有同名目录: ' + name)
     repo.mkdir(safeResolve(toParent))
-    assets.beforeMove(path.relative(DOCS_ROOT, absOld)); repo.move(absOld, absNew); repo.remap(path.relative(DOCS_ROOT, absOld), path.relative(DOCS_ROOT, absNew))
+    assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
     remapColWidthsUnder(rel + '/', next + '/')
     remapFoldables(rel, next, true)
     remapOrderUnder(rel, next)
