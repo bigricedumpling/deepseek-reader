@@ -33,12 +33,12 @@
 
 ## 发布与市场状态
 
-- 市场 [PR #6431](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6431) 仍打开，安装包地址已更新至 `0.2.0-preview.1`。此前 PR 检查成功；新提交正在重新检查，尚无维护者审批或合并。自动检查成功不代表收录完成。
+- 市场 [PR #6431](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6431) 仍打开，安装包地址已更新至 `0.2.0-preview.1`。检查与 Submission gate 均通过，尚无维护者审批或合并。自动检查成功不代表收录完成。
 - [公开 Preview Release](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.2.0-preview.1) 已发布并核对安装包名称、大小、摘要与源提交；尚不能在社区市场搜索安装。
-- Gitea 远端仍返回证书过期，不能通过正常 TLS 连接同步；本轮没有关闭证书校验。
+- Gitea 证书与域名恢复后，经正常 TLS 连接将 `main` 快进同步，并创建指向发布源码 `e69e0d1` 的 `v0.2.0-preview.1` 标签；远端引用已复核。
 - GitHub 隔离分支已同步。现有交付站点保持原样。
 - [已知限制](RELEASE-READINESS.md) 已同步：Windows/Linux 原生 DSH 真机、外网分享外部设备、低配超大库及未覆盖 Markdown 扩展语法仍有明确边界。
 
 ## 后续发布顺序
 
-等待市场新检查和维护者审批。Gitea 证书恢复后补齐镜像同步。现有笔试题交付站点继续独立保留。
+等待市场维护者审批与合并。现有笔试题交付站点继续独立保留。
