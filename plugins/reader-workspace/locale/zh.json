@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Reader 阅读器",
-    "description": "安装后即可在 DSH 侧边栏阅读、整理本机知识库，并预览工作区 Markdown。macOS 版自动启动 Reader。"
+    "title": "Typocket",
+    "description": "在本机阅读、编辑和整理你与 Agent 共同积累的资料。"
   }
 }

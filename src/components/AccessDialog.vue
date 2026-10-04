@@ -32,7 +32,7 @@ async function submit() {
     const json = await res.json()
     if (!json.ok) throw new Error(json.error)
     store.accessRequest = null
-    // 重新获取文档树和知识库权限，销毁可能持有旧只读状态的编辑器。
+    // 重新获取文档树和抽屉权限，销毁可能持有旧只读状态的编辑器。
     location.reload()
   } catch (e) { error.value = e.message }
   finally { busy.value = false }

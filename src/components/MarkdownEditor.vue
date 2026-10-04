@@ -254,12 +254,12 @@ onMounted(async () => {
           }
         },
         /*
-         * 斜杠菜单里多一组：插入本知识库的其他文档。
+         * 斜杠菜单里多一组：插入当前抽屉的其他文档。
          * 插进去的是一条普通的 markdown 链接，点击时由 editor-shortcuts 的
          * "内部链接"分支接住 —— 开成工具内部的标签页，不是浏览器标签页。
          */
         buildMenu: (builder) => {
-          builder.addGroup('reader', '本知识库').addItem('doc-link', {
+          builder.addGroup('reader', '当前抽屉').addItem('doc-link', {
             label: '插入文档',
             icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10.75 6a.75.75 0 0 0-1.5 0v4.25H5a.75.75 0 0 0 0 1.5h4.25V16a.75.75 0 0 0 1.5 0v-4.25H15a.75.75 0 0 0 0-1.5h-4.25V6Z"/><path d="M6.75 3h10.5A2.75 2.75 0 0 1 20 5.75v12.5A2.75 2.75 0 0 1 17.25 21H6.75A2.75 2.75 0 0 1 4 18.25V5.75A2.75 2.75 0 0 1 6.75 3Zm0 1.5c-.69 0-1.25.56-1.25 1.25v12.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25V5.75c0-.69-.56-1.25-1.25-1.25H6.75Z"/></svg>',
             onRun: () => emit('pick-doc')

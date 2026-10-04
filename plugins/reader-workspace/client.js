@@ -3,6 +3,7 @@ window.__ModuleLoader__.load({
   id: 'dsh-reader-workspace',
   factory: (require) => {
     const React = require('react')
+    const BRAND_NAME = "Typocket" // @generated-brand
     const DEFAULT_URL = 'http://127.0.0.1:8090/'
     const URL_KEY = 'dsh-reader-workspace:url'
     const URL_EVENT = 'dsh-reader-workspace:url-change'
@@ -34,7 +35,7 @@ window.__ModuleLoader__.load({
 
     function waitingForManagedReader() { return !configuredUrl() && !managedUrl && managedState === 'starting' && !mobileDevice() }
     function ReaderStarting() { return React.createElement('div', { className: 'dsh-reader-connect', role: 'status' },
-      React.createElement(ReaderIcon, { size: 24 }), React.createElement('strong', null, '正在打开阅读器'),
+      React.createElement(ReaderIcon, { size: 24 }), React.createElement('strong', null, `正在打开 ${BRAND_NAME}`),
       React.createElement('p', null, '首次启动可能需要几秒钟。')) }
 
     function needsReaderConnection() { return mobileDevice() && readerUrl() === DEFAULT_URL }
@@ -61,9 +62,9 @@ window.__ModuleLoader__.load({
         try { const address = parseReaderUrl(value); saveReaderUrl(address); onConnect(address) }
         catch (reason) { setError(reason.message || '地址无效') }
       } }, React.createElement(ReaderIcon, { size: 24 }),
-      React.createElement('strong', null, firstUse ? '连接阅读器' : '无法连接阅读器'),
-      React.createElement('p', null, firstUse ? '填写此设备可访问的 Reader 地址。' : managedError || '请重试，或连接已有的 Reader。'),
-      editing ? React.createElement('label', null, '阅读器地址',
+      React.createElement('strong', null, firstUse ? `连接 ${BRAND_NAME}` : `无法连接 ${BRAND_NAME}`),
+      React.createElement('p', null, firstUse ? `填写此设备可访问的 ${BRAND_NAME} 地址。` : managedError || `请重试，或连接已有的 ${BRAND_NAME}。`),
+      editing ? React.createElement('label', null, `${BRAND_NAME} 地址`,
         React.createElement('input', { type: 'url', value, placeholder: mobileDevice() ? 'https://…' : DEFAULT_URL, onChange: event => { setValue(event.target.value); setError('') }, autoComplete: 'url', required: true })) : null,
       React.createElement('div', { className: 'dsh-reader-connect-actions' },
         !firstUse && React.createElement('button', { type: 'button', className: 'dsh-reader-connect-cancel', onClick: () => { setError(''); if (editing) setEditing(false); else onRetry() } }, editing ? '取消' : '重试'),
@@ -83,8 +84,8 @@ window.__ModuleLoader__.load({
         return () => window.removeEventListener(URL_EVENT, sync)
       }, [editing])
       return React.createElement('section', { className: 'dsh-reader-config' },
-        React.createElement('h3', null, '阅读器连接'),
-        React.createElement('p', null, '插件会自动启动本机 Reader。只有连接已有服务时才需要填写地址。'),
+        React.createElement('h3', null, `${BRAND_NAME} 连接`),
+        React.createElement('p', null, `插件会自动启动本机 ${BRAND_NAME}。只有连接已有服务时才需要填写地址。`),
         editing ? React.createElement('form', { onSubmit: event => {
           event.preventDefault()
           try { const address = parseReaderUrl(value); saveReaderUrl(address); setUrl(address); setEditing(false); setError('') }
@@ -103,7 +104,7 @@ window.__ModuleLoader__.load({
     function ReaderIcon({ size = 24, className, tone = 'brand' }) {
       const isTab = tone === 'neutral'
       const iconSize = Math.min(Number(size) || (isTab ? 16 : 24), isTab ? 16 : 24)
-      const front = isTab ? '#9aa1ab' : '#5b9cff'
+      const front = isTab ? 'currentColor' : '#555555'
       const page = 'M5.9 5.25C4.85 4.95 4 5.7 4 6.85v7.8c0 .8.5 1.45 1.22 1.75l6.08 2.43c.45.18.95.18 1.4 0l6.08-2.43c.72-.3 1.22-.95 1.22-1.75v-7.8c0-1.15-.85-1.9-1.9-1.6L12 7.35 5.9 5.25Z'
       const tabPage = 'M5.95 5.4C4.65 4.97 3.85 5.8 3.85 7.08v7.25c0 1.18.64 1.95 1.7 2.36l5.33 2.09c.73.29 1.51.29 2.24 0l5.33-2.09c1.06-.41 1.7-1.18 1.7-2.36V7.08c0-1.28-.8-2.11-2.1-1.68L12 7.37 5.95 5.4Z'
       return React.createElement('svg', {
@@ -111,7 +112,7 @@ window.__ModuleLoader__.load({
         viewBox: isTab ? '2.5 2.5 19 19' : '0 0 24 24', fill: 'none',
         className, 'aria-hidden': 'true'
       }, !isTab && React.createElement('rect', {
-        x: 2.4, y: 7.35, width: 19.2, height: 13.05, rx: 3.25, fill: '#a9d1f0'
+        x: 2.4, y: 7.35, width: 19.2, height: 13.05, rx: 3.25, fill: '#bcbcbc'
       }), React.createElement('path', {
         d: isTab ? tabPage : page, fill: front,
         stroke: isTab ? undefined : '#fff', strokeWidth: isTab ? undefined : 2.2,
@@ -165,7 +166,7 @@ window.__ModuleLoader__.load({
       return React.createElement('div', { className: 'dsh-reader-frame' },
         React.createElement('iframe', {
           ref: frame, key: attempt,
-          title: '阅读器', src: url, loading: 'eager', referrerPolicy: 'no-referrer',
+          title: BRAND_NAME, src: url, loading: 'eager', referrerPolicy: 'no-referrer',
           sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals',
           allow: 'clipboard-read; clipboard-write'
         }))
@@ -292,7 +293,7 @@ window.__ModuleLoader__.load({
       }, [origin, resourceAddress, tab, props.onReady])
       return React.createElement('div', { ref: props.scrollportRef, className: 'dsh-reader-frame dsh-reader-md' },
         React.createElement('iframe', {
-          ref: frame, title: collectedUrl ? '阅读器文档' : '阅读器 Markdown 预览', src: collectedUrl || url,
+          ref: frame, title: collectedUrl ? `${BRAND_NAME} 文档` : `${BRAND_NAME} Markdown 预览`, src: collectedUrl || url,
           style: { height: '100%' },
           loading: 'eager', referrerPolicy: 'no-referrer',
           sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals',
@@ -339,7 +340,7 @@ window.__ModuleLoader__.load({
         .dsh-reader-connect input { box-sizing:border-box;width:100%;height:40px;padding:0 12px;border:1px solid #e1e5ea;border-radius:12px;background:#f7f8fa;color:#303640;font:inherit;outline:none; }
         .dsh-reader-connect input:focus { border-color:#6a91f7; }
         .dsh-reader-connect-actions { display:flex;justify-content:flex-end;gap:8px;width:100%; }
-        .dsh-reader-connect button { padding:9px 17px;border:0;border-radius:12px;background:#526dff;color:#fff;font:inherit;cursor:pointer; }
+        .dsh-reader-connect button { padding:9px 17px;border:0;border-radius:12px;background:var(--dsw-alias-label-primary,#303030);color:var(--dsw-alias-bg-layer-1,#fff);font:inherit;cursor:pointer; }
         .dsh-reader-connect button.dsh-reader-connect-cancel { background:#f2f3f5;color:#5c626b; }
         .dsh-reader-connect a { color:#697589;text-decoration:none;font-size:12px; }
         .dsh-reader-connect a:hover { text-decoration:underline; }
@@ -349,17 +350,17 @@ window.__ModuleLoader__.load({
         .dsh-reader-config p { margin:0 0 18px;color:var(--dsw-alias-label-secondary,#777);line-height:1.55; }
         .dsh-reader-config-current { display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0; }
         .dsh-reader-config-current code { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit; }
-        .dsh-reader-config button { flex:none;padding:8px 12px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-2,#f1f2f4);color:var(--dsw-alias-label-primary,#333);font:inherit;cursor:pointer; }
+        .dsh-reader-config button { flex:none;padding:8px 12px;border:0;border-radius:10px;background:var(--dsw-alias-bg-layer-2,#f2f2f2);color:var(--dsw-alias-label-primary,#333);font:inherit;cursor:pointer; }
         .dsh-reader-config form { display:flex;flex-direction:column;gap:10px; }
         .dsh-reader-config label { display:flex;flex-direction:column;gap:8px; }
         .dsh-reader-config input { box-sizing:border-box;width:100%;height:38px;padding:0 11px;border:1px solid var(--dsw-alias-border-l3,#ddd);border-radius:10px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit;font:inherit; }
         .dsh-reader-config-actions { display:flex;justify-content:flex-end;gap:8px; }
-        .dsh-reader-config-actions button[type=submit] { background:#526dff;color:#fff; }
+        .dsh-reader-config-actions button[type=submit] { background:var(--dsw-alias-label-primary,#303030);color:var(--dsw-alias-bg-layer-1,#fff); }
         .dsh-reader-config [role=alert] { color:#be4848;font-size:12px; }
         .dsh-reader-frame { position: relative; width: 100%; height: 100%; min-height: 0; background: #fff; }
         .dsh-reader-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
         .dsh-reader-md { min-height: 320px; height: 100%; overflow: hidden; }
-        .dsh-reader-collected { position:absolute;right:12px;bottom:12px;padding:8px 12px;border-radius:16px;background:#f0f1f6;color:#3f4659;font-size:12px;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        .dsh-reader-collected { position:absolute;right:12px;bottom:12px;padding:8px 12px;border-radius:16px;background:#f2f2f2;color:#454545;font-size:12px;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
         .dsh-reader-tab-title { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
         .dsh-reader-tab-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       `
@@ -381,7 +382,7 @@ window.__ModuleLoader__.load({
         async function refresh() {
           try {
             const response = await fetch('api/reader-workspace/status', { cache: 'no-store' })
-            if (!response.ok) throw Error(`Reader 服务状态不可用（HTTP ${response.status}）`)
+            if (!response.ok) throw Error(`${BRAND_NAME} 服务状态不可用（HTTP ${response.status}）`)
             const status = await response.json()
             if (stopped) return
             managedState = status.state
@@ -396,7 +397,7 @@ window.__ModuleLoader__.load({
               window.dispatchEvent(new CustomEvent(URL_EVENT, { detail: readerUrl() }))
             }
             window.dispatchEvent(new Event('dsh-reader-workspace:status'))
-          } catch (error) { if (!stopped) { managedState = 'error'; managedError = error.message || '无法启动阅读器'; window.dispatchEvent(new Event('dsh-reader-workspace:status')) } }
+          } catch (error) { if (!stopped) { managedState = 'error'; managedError = error.message || `无法启动 ${BRAND_NAME}`; window.dispatchEvent(new Event('dsh-reader-workspace:status')) } }
         }
         refresh()
         const timer = setInterval(refresh, 2000)
@@ -406,11 +407,11 @@ window.__ModuleLoader__.load({
       ctx.effect(() => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register(
         { name: 'plugins.bundle.config', key: 'dsh-reader-workspace' }, ReaderConnectionSettings
       )), 'reader connection settings')
-      // The Reader entry is the essential part of this plugin. Register it
+      // The Typocket entry is the essential part of this plugin. Register it
       // before optional Markdown integration so preview issues cannot hide it.
       ctx.effect(() => ctx.sidebarRightTabs.register({
-        id: 'dsh-reader-workspace', kind: 'reader', title: () => '阅读器',
-        guide: [{ id: 'reader', order: 35, title: () => '阅读器', description: () => '打开知识库', icon: ReaderIcon, commandId: 'reader.open' }]
+        id: 'dsh-reader-workspace', kind: 'reader', title: () => BRAND_NAME,
+        guide: [{ id: 'reader', order: 35, title: () => BRAND_NAME, description: () => '打开抽屉', icon: ReaderIcon, commandId: 'reader.open' }]
       }), 'reader guide entry')
       ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
         { name: 'sidebar.right.pane.tab', key: 'dsh-reader-workspace' }, createReaderView(ctx)
@@ -420,7 +421,7 @@ window.__ModuleLoader__.load({
         ({ useTabInfo }) => {
           const { tab } = useTabInfo()
           return React.createElement('span', { className: 'dsh-reader-tab-title' },
-            React.createElement(ReaderIcon, { size: 16, tone: 'neutral' }), React.createElement('span', null, tab.title || '阅读器'))
+            React.createElement(ReaderIcon, { size: 16, tone: 'neutral' }), React.createElement('span', null, tab.title || BRAND_NAME))
         }
       )), 'reader tab title')
       try {
@@ -448,7 +449,7 @@ window.__ModuleLoader__.load({
       }
       const TabTitle = ({ useTabInfo }) => {
         const { tab } = useTabInfo()
-        return React.createElement(React.Fragment, null, React.createElement(ReaderIcon, { size: 16, tone: 'neutral' }), tab.title || '阅读器')
+        return React.createElement(React.Fragment, null, React.createElement(ReaderIcon, { size: 16, tone: 'neutral' }), tab.title || BRAND_NAME)
       }
       ctx.effect(() => ctx.sidebarRightTabs.register({
         id: 'dsh-reader-markdown', kind: 'reader-markdown', patterns: ['*.md', '*.markdown'], priority: 'extension',
@@ -459,7 +460,7 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ctx.slots.inject(slot, () => ctx.slots.register({ name: slot, key: 'dsh-reader-markdown' }, component)), slot)
       }
       ctx.effect(() => ctx.shortcuts.register({
-        id: 'reader.open', label: () => '打开阅读器', aliases: ['reader'],
+        id: 'reader.open', label: () => `打开 ${BRAND_NAME}`, aliases: ['reader'],
         defaults: Object.fromEntries(['desktop:macos', 'desktop:windows', 'desktop:linux', 'web:macos', 'web:windows'].map(platform => [platform, { code: 'KeyR', modifiers: ['primary', 'shift'] }])),
         regions: ['page', 'editable', 'terminal'], modals: [],
         resolve: () => {
@@ -468,13 +469,13 @@ window.__ModuleLoader__.load({
         }
       }), 'reader shortcut')
       const preview = { id: 'dsh-reader-workspace-markdown', extensions: ['md', 'markdown'],
-        priority: 'extension', title: () => '阅读器', loading: 'text-pages' }
+        priority: 'extension', title: () => BRAND_NAME, loading: 'text-pages' }
       ctx.effect(() => ctx.documentPreviews.register(preview), 'reader markdown preview')
       ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register(
         { name: 'sidebar.right.tab.document', key: preview.id }, createReaderMarkdownPreview(ctx)
       )), 'reader markdown body')
       } catch (error) {
-        console.warn('Reader Markdown preview could not load:', error)
+        console.warn(`${BRAND_NAME} Markdown preview could not load:`, error)
       }
     }
     return { apply, inject }

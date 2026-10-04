@@ -58,7 +58,7 @@
         <div class="flex items-center gap-2">
           <div class="flex-1 h-px bg-[var(--c-line)] overflow-hidden">
             <div
-              class="h-full bg-ds/50 transition-[width] duration-150 ease-out"
+              class="h-full bg-accent/50 transition-[width] duration-150 ease-out"
               :style="{ width: progress + '%' }"
             />
           </div>
@@ -376,7 +376,7 @@ watch(
   background: var(--c-hover);
 }
 .toc-item.is-active {
-  color: var(--color-ds);
+  color: var(--c-accent);
 }
 .toc-item.is-active::before {
   content: '';
@@ -387,7 +387,7 @@ watch(
   width: 2px;
   height: 12px;
   border-radius: 1px;
-  background: var(--color-ds);
+  background: var(--c-accent);
 }
 </style>
 

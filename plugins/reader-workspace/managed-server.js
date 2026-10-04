@@ -1,3 +1,4 @@
+import { BRAND_NAME } from './brand.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
@@ -45,7 +46,7 @@ export function startManagedServer(onChange = () => {}, options = {}) {
     try {
       fs.mkdirSync(runtimeData, { recursive: true, mode: 0o700 })
       let binding = readJSON(bindingFile)
-      if (!binding && fs.existsSync(bindingFile)) throw Error('Reader 服务记录无法读取，已保留原文件；请修复记录后重试')
+      if (!binding && fs.existsSync(bindingFile)) throw Error(`${BRAND_NAME} 服务记录无法读取，已保留原文件；请修复记录后重试`)
       // Pin legacy connections. Disconnection must not open a different empty library.
       if (!binding && !options.forceManaged && process.env.DSH_READER_FORCE_MANAGED !== '1'
         && await probe('http://127.0.0.1:8090/', true)) {
@@ -56,12 +57,12 @@ export function startManagedServer(onChange = () => {}, options = {}) {
         status.dataDirectory = ''
         const connected = await probe(binding.url, true)
         publish(connected ? 'ready' : 'error', binding.url, connected ? ''
-          : '已连接的 Reader 暂不可用。请启动原服务，或在插件设置中更换连接；原知识库未迁移。')
+          : `已连接的 ${BRAND_NAME} 暂不可用。请启动原服务，或在插件设置中更换连接；原抽屉未迁移。`)
         later(10000); return
       }
-      if (binding && (binding.kind !== 'managed' || binding.identity !== identity)) throw Error('Reader 服务记录与当前知识库不匹配，已停止自动连接')
+      if (binding && (binding.kind !== 'managed' || binding.identity !== identity)) throw Error(`${BRAND_NAME} 服务记录与当前抽屉不匹配，已停止自动连接`)
       const port = Number(binding?.port || 0)
-      if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error('Reader 端口记录无效，请检查服务配置')
+      if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error(`${BRAND_NAME} 端口记录无效，请检查服务配置`)
       const url = port ? `http://127.0.0.1:${port}/` : ''
       if (url && await probe(url)) { publish('ready', url); later(4000); return }
       if (stopped) return
@@ -73,10 +74,10 @@ export function startManagedServer(onChange = () => {}, options = {}) {
         const owner = readJSON(lockFile)
         if (owner?.pid && !alive(owner.pid)) fs.rmSync(lockFile, { force: true })
         else if (!owner && Date.now() - fs.statSync(lockFile).mtimeMs > 15000) fs.rmSync(lockFile, { force: true })
-        publish('starting', '', '正在等待另一个 Reader 实例'); later(1000); return
+        publish('starting', '', `正在等待另一个 ${BRAND_NAME} 实例`); later(1000); return
       }
-      if (!fs.existsSync(path.join(runtime, 'dist', 'index.html'))) throw Error('安装包缺少 Reader 页面，请重新安装插件')
-      if (!fs.existsSync(path.join(runtime, 'server', 'serve.js'))) throw Error('安装包缺少 Reader 服务，请重新安装插件')
+      if (!fs.existsSync(path.join(runtime, 'dist', 'index.html'))) throw Error(`安装包缺少 ${BRAND_NAME} 页面，请重新安装插件`)
+      if (!fs.existsSync(path.join(runtime, 'server', 'serve.js'))) throw Error(`安装包缺少 ${BRAND_NAME} 服务，请重新安装插件`)
       fs.mkdirSync(data, { recursive: true })
       publish('starting')
       child = spawn(process.execPath, [path.join(runtime, 'server', 'serve.js')], {
@@ -85,7 +86,7 @@ export function startManagedServer(onChange = () => {}, options = {}) {
         stdio: ['ignore', 'ignore', 'pipe', 'ipc']
       })
       let errors = '', ready = false
-      startupTimer = setTimeout(() => { errors = 'Reader 启动超时，请重试或查看插件连接设置'; child?.kill() }, 15000)
+      startupTimer = setTimeout(() => { errors = `${BRAND_NAME} 启动超时，请重试或查看插件连接设置`; child?.kill() }, 15000)
       child.stderr.on('data', chunk => { errors = (errors + chunk.toString()).slice(-2000) })
       child.on('message', message => {
         const actualPort = Number(message?.port)
@@ -103,7 +104,7 @@ export function startManagedServer(onChange = () => {}, options = {}) {
         clearTimeout(startupTimer); child = undefined; unlock()
         if (stopped) return
         const occupied = errors.includes('EADDRINUSE')
-        publish('error', '', occupied ? 'Reader 原端口被其他程序占用。请关闭占用程序后重试；未切换数据目录或端口。' : errors.trim() || 'Reader 服务已停止，正在重试')
+        publish('error', '', occupied ? `${BRAND_NAME} 原端口被其他程序占用。请关闭占用程序后重试；未切换数据目录或端口。` : errors.trim() || `${BRAND_NAME} 服务已停止，正在重试`)
         failures++
         later(occupied || failures > 3 ? 30000 : ready ? 1000 : 2000 * failures)
       }

@@ -4,11 +4,11 @@ import { pathToFileURL } from 'node:url'
 const str={type:'string'},obj=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false})
 const source=obj({kind:{type:'string',enum:['conversation','workspace-file','import','manual']},workspace:str,reference:str,note:str},['kind'])
 export const definitions=[
- ['reader_libraries','列出此连接已经授权的知识库。跨工作区保存前先选目标知识库。','GET','agent-libs',obj({})],
- ['reader_tree','列出已授权知识库的文件。', 'GET','tree',obj({lib:str},['lib'])],
+ ['reader_libraries','列出此连接已经授权的抽屉。跨工作区保存前先选目标抽屉。','GET','agent-libs',obj({})],
+ ['reader_tree','列出已授权抽屉的文件。', 'GET','tree',obj({lib:str},['lib'])],
  ['reader_read','读取文档及 revision。更新前必须先读取。','GET','doc',obj({id:str,path:str})],
- ['reader_search','在指定知识库内检索正文。','GET','search',obj({lib:str,q:str},['lib','q'])],
- ['reader_create','直接在目标知识库新建文档，可附私人来源记录。重试必须使用相同 requestId。','POST','doc',obj({dir:str,name:str,content:str,source,requestId:str},['dir','name','content','requestId'])],
+ ['reader_search','在指定抽屉内检索正文。','GET','search',obj({lib:str,q:str},['lib','q'])],
+ ['reader_create','直接在目标抽屉新建文档，可附私人来源记录。重试必须使用相同 requestId。','POST','doc',obj({dir:str,name:str,content:str,source,requestId:str},['dir','name','content','requestId'])],
  ['reader_update','使用读取时的 revision 保存。冲突时重新读取并合并，不强制覆盖。','PUT','doc',obj({id:str,path:str,content:str,revision:str,requestId:str},['content','revision','requestId'])],
  ['reader_rename','重命名文档并保留稳定标识、资源归属、权限及旧路径别名。','PATCH','doc',obj({id:str,path:str,name:str,requestId:str},['name','requestId'])],
  ['reader_move','移动文档，只能在授权范围内移动。','PUT','move/doc',obj({file:str,dir:str,requestId:str},['file','dir','requestId'])],

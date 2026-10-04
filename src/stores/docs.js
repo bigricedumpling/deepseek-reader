@@ -169,7 +169,7 @@ export const useDocsStore = defineStore('docs', () => {
   /* ---------- 身份与分享 ---------- */
 
   /** owner 可管理全部内容；guest 只见公开内容，且只能编辑未锁定项。 */
-  /** 每换一次知识库 +1；侧边栏据此知道"折叠状态该重置了" */
+  /** 每换一次抽屉 +1；侧边栏据此知道"折叠状态该重置了" */
   const libEpoch = ref(0)
 
   const role = ref(window.__readerMode === 'owner' ? 'owner' : 'guest')
@@ -308,7 +308,7 @@ export const useDocsStore = defineStore('docs', () => {
    *
    * 对外发出去的链接长这样：/onlyread/笔试题/笔试题交付：题目一
    * 那时 笔试题 与 调研报告 是文档根下的两个顶层目录。
-   * 后来资料按知识库归拢：笔试题 成了Agent（设计方向）库，调研报告 挪进了它里面。
+   * 后来资料按抽屉归拢：笔试题 成了Agent（设计方向）库，调研报告 挪进了它里面。
    *
    * 规则：老路径的第一段（笔试题）在当前库里已经不存在，把它换成现在所属的库根，
    * /笔试题/调研报告/评测调研 → /Agent（设计方向）/调研报告/评测调研
@@ -325,7 +325,7 @@ export const useDocsStore = defineStore('docs', () => {
     const extension = /\.md$/i.test(raw) ? raw.slice(-3) : ''
     const relocated = interviewPaths[raw.replace(/\.md$/i, '')]
     if (relocated) return relocated + extension
-    /* 2026-09：散在面试准备根部的资料已归类，业务面也并回这个知识库。 */
+    /* 2026-09：散在面试准备根部的资料已归类，业务面也并回这个抽屉。 */
     if (raw.startsWith('业务面/')) return '面试准备/' + raw
     if (raw.startsWith('面试准备/')) {
       const leaf = raw.slice('面试准备/'.length)
@@ -426,7 +426,7 @@ export const useDocsStore = defineStore('docs', () => {
     const hit = want && allFiles.value.some((f) => f.file === want)
     currentPath.value = hit ? want : allFiles.value[0]?.file || ''
     openTab(currentPath.value)
-    // 空知识库也要清掉地址里上一库的文档路径。
+    // 空抽屉也要清掉地址里上一库的文档路径。
     syncUrl()
     if (currentPath.value && !PREVIEW_TYPES.has(currentNode.value?.type)) {
       try {
@@ -440,10 +440,10 @@ export const useDocsStore = defineStore('docs', () => {
   /* ---------- 读取 ---------- */
 
   /*
-   * 当前知识库：地址栏里的 ?lib=<库名>。
+   * 当前抽屉：地址栏里的 ?lib=<库名>。
    *
-   * 一个知识库就是文档根下的一个文件夹。不选时看整棵树（工作区总览），
-   * 选了就只看那一个 —— 切换知识库不换实例，只换这一个参数。
+   * 一个抽屉就是文档根下的一个文件夹。不选时看整棵树（工作区总览），
+   * 选了就只看那一个 —— 切换抽屉不换实例，只换这一个参数。
    */
   function routedLib() {
     try {
@@ -480,7 +480,7 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   /**
-   * 切换知识库之后重新加载。
+   * 切换抽屉之后重新加载。
    *
    * 关键一步：先把"当前这篇"清掉再拉树。
    *

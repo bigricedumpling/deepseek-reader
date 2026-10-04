@@ -244,7 +244,7 @@ function onAux(e, file) {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--color-ds);
+  background: var(--c-accent);
   flex-shrink: 0;
 }
 .doc-tab-x {

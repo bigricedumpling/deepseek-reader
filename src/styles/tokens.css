@@ -1,27 +1,13 @@
-/**
- * 设计令牌。
- *
- * 全站的颜色与排版变量都在这儿：DeepSeek 蓝、灰阶四层、中西文字体栈、
- * 中文加粗面与斜体面、深色主题覆盖。
- *
- * 跟 style.css 分开是因为这两类东西的改动频率完全不同：
- * 令牌是想调就调的，布局规则和打印样式是定下来就不动的。
- * 混在一个 650 行的文件里，改个颜色要在布局规则里翻半天。
- *
- * 这里只放自定义属性和 color-scheme，不放任何真实规则——
- * 真实规则留在 style.css，免得两边的加载顺序影响到层叠结果。
- */
-
-/* ============================================================
-   调研知识库 — 设计系统
-   原则：一个颜色 + 灰阶分层 + 留白节奏。无背景色，无装饰。
-   参考：Telari（排版优先的阅读器）、WeGen 平台的工程规范。
-   ============================================================ */
+/** Typocket semantic color tokens. Palette values are owned by useAccent.js. */
 
 @theme {
-  /* --- 唯一的彩色：DeepSeek 蓝 --- */
-  --color-ds: #4d6bfe;
-  --color-ds-dark: #3f5ae8;
+  /* Palette, interaction and contrast are distinct semantic roles. */
+  --color-accent: var(--c-accent);
+  --c-accent: var(--accent-light, #465fd1);
+  --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,var(--c-ink));
+  --c-on-accent: #ffffff;
+  --c-selection: rgb(var(--accent-rgb-light, 70 95 209) / .18);
+  --c-focus: var(--c-accent);
 
   /* --- 灰阶（正文层级全靠这个）--- */
   --c-ink: #1a1a1a;      /* 一级：标题 */
@@ -32,15 +18,15 @@
   --c-line-soft: #f2f2f2;
   --c-surface: #ffffff;  /* 页面底色 */
   --c-panel: #FAFAFA;    /* 侧栏底色 */
-  --c-code-bg: #f7f5f2;  /* 代码块底色，暖灰 */
+  --c-code-bg: #f5f5f5;  /* 代码块底色，暖灰 */
   --c-code-inline: #f5f5f5;
   --c-hover: rgba(0, 0, 0, 0.035);
-  --c-active: rgba(77, 107, 254, 0.09);
+  --c-active: rgb(var(--accent-rgb-light, 70 95 209) / .09);
   --c-field: #f5f5f5;      /* 输入框 */
   --c-chip: #f5f5f5;       /* 小按钮 */
   --c-chip-hover: #ededed;
   --c-pop: #ffffff;        /* 弹出层 */
-  --c-overlay: rgba(20, 24, 30, 0.08);
+  --c-overlay: rgba(0, 0, 0, 0.08);
   --c-pop-shadow: 0 2px 6px rgba(0, 0, 0, 0.025), 0 8px 24px rgba(0, 0, 0, 0.045);
 
   --font-sans: "Weixin", "PingFang SC", "Hiragino Sans GB", -apple-system,
@@ -133,7 +119,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 /*
  * 深色主题。
  *
- * 底色原先是 #131417，压得太黑，长时间读白字发闷。提到 #1c1d21 这一档，
+ * 底色原先是 #131417，压得太黑，长时间读白字发闷。提到 #202020 这一档，
  * 再靠 --c-panel / --c-pop 逐层加亮做层级，而不是一味往下压黑。
  */
 /*
@@ -155,7 +141,7 @@ body[data-theme="sepia"] {
   --c-code-bg: #ebe2cd;
   --c-code-inline: #e7ddc6;
   --c-hover: rgba(90, 74, 40, 0.06);
-  --c-active: rgba(77, 107, 254, 0.13);
+  --c-active: rgb(var(--accent-rgb-light, 70 95 209) / .10);
   --c-field: rgba(90, 74, 40, 0.07);
   --c-chip: rgba(90, 74, 40, 0.08);
   --c-chip-hover: rgba(90, 74, 40, 0.14);
@@ -165,25 +151,29 @@ body[data-theme="sepia"] {
 }
 
 body[data-theme="dark"] {
-  --c-ink: #e8e9ea;
-  --c-text: #c9cacd;
-  --c-sub: #94969b;
-  --c-faint: #6b6d73;
-  --c-line: #383a40;
-  --c-line-soft: #2b2d32;
-  --c-surface: #1c1d21;
-  --c-panel: #232428;
-  --c-code-bg: #25272c;
-  --c-code-inline: #2e3036;
+  --c-ink: #ededed;
+  --c-text: #cccccc;
+  --c-sub: #a0a0a0;
+  --c-faint: #858585;
+  --c-line: #3c3c3c;
+  --c-line-soft: #2d2d2d;
+  --c-surface: #202020;
+  --c-panel: #252525;
+  --c-code-bg: #292929;
+  --c-code-inline: #303030;
   --c-hover: rgba(255, 255, 255, 0.05);
-  --c-active: rgba(122, 146, 255, 0.16);
+  --c-active: rgb(var(--accent-rgb-dark, 167 184 255) / .12);
   --c-field: rgba(255, 255, 255, 0.07);
   --c-chip: rgba(255, 255, 255, 0.08);
   --c-chip-hover: rgba(255, 255, 255, 0.14);
-  --c-pop: #2b2c31;
+  --c-pop: #2d2d2d;
   --c-pop-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.18);
   --c-overlay: rgba(0, 0, 0, 0.20);
-  --color-ds: #7a92ff;
-  --color-ds-dark: #93a6ff;
+  --c-accent: var(--accent-dark, #a7b8ff);
+  --color-accent: var(--c-accent);
+  --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,white);
+  --c-on-accent: #202020;
+  --c-selection: rgb(var(--accent-rgb-dark, 167 184 255) / .23);
+  --c-focus: var(--c-accent);
   color-scheme: dark;
 }

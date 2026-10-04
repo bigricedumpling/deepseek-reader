@@ -14,8 +14,8 @@ function readTheme() {
   const dark = document.body.dataset.theme === 'dark'
   return {
     dark,
-    primaryColor: dark ? 'rgba(122, 146, 255, 0.16)' : '#eef1ff',
-    primaryBorderColor: v('--color-ds', '#4d6bfe'),
+    primaryColor: v('--c-field', '#f5f5f5'),
+    primaryBorderColor: v('--c-accent', '#303030'),
     primaryTextColor: v('--c-ink', '#1a1a1a'),
     lineColor: v('--c-faint', '#b8b8b8'),
     secondaryColor: v('--c-chip', '#f5f5f7'),

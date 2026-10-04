@@ -35,5 +35,5 @@ const emit = defineEmits(['pick'])
 .style-reset { height:25px; padding:0 6px; color:var(--c-sub); font-size:10px }
 .style-underline { display:flex; gap:8px; align-items:center; width:100%; padding:6px 8px; color:var(--c-text); font-size:12px }
 .style-underline u { font-size:15px }
-.text-style-menu button:hover { border-color:var(--color-ds) }
+.text-style-menu button:hover { border-color:var(--c-accent) }
 </style>

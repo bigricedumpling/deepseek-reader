@@ -38,7 +38,7 @@ export function trashService(repo, { safeResolve, assets, share, registry, saveR
     const source = safeResolve(item.trashed), target = safeResolve(item.original)
     if (!fs.existsSync(source)) throw fault('NOT_FOUND', '回收文件已被移走', 404)
     if (fs.existsSync(target)) throw fault('CONFLICT', '原位置已有同名内容。请先改名或移走现有内容，再恢复。', 409)
-    if (!fs.existsSync(path.dirname(target))) throw fault('MISSING_PARENT', '原文件夹不存在，请先恢复所属文件夹或知识库。', 409)
+    if (!fs.existsSync(path.dirname(target))) throw fault('MISSING_PARENT', '原文件夹不存在，请先恢复所属文件夹或抽屉。', 409)
     assets.beforeMove(item.trashed)
     repo.move(source, target); repo.remap(item.trashed, item.original)
     share.rename(item.trashed, item.original); share.setShared(item.original, false)
@@ -57,7 +57,7 @@ export function trashService(repo, { safeResolve, assets, share, registry, saveR
   }
   function restoreLegacy(legacyId, destination) {
     if(!list().legacyItems.some(item=>item.id===legacyId))throw fault('NOT_FOUND','旧回收记录不存在',404)
-    if(typeof destination!=='string'||!destination.includes('/')||destination.split('/').some(part=>!part||part.startsWith('.')||part.includes('\\')||/[<>:"|?*]/.test(part)))throw fault('INVALID_PATH','请选择知识库和有效名称')
+    if(typeof destination!=='string'||!destination.includes('/')||destination.split('/').some(part=>!part||part.startsWith('.')||part.includes('\\')||/[<>:"|?*]/.test(part)))throw fault('INVALID_PATH','请选择抽屉和有效名称')
     const id=randomUUID()
     repo.setJSON('trashEntries',[...records(),{id,original:destination,trashed:'.回收站/'+legacyId,at:Date.now(),settings:{columns:{},foldables:{},order:{}}}])
     return restore(id)

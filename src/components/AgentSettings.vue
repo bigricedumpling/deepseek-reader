@@ -4,10 +4,10 @@
       <div v-if="visible" class="reader-modal-shade" @click.self="visible = false">
         <section ref="dialog" tabindex="-1" class="reader-dialog" role="dialog" aria-modal="true" aria-label="Agent 访问">
           <header><span>Agent 访问</span><button aria-label="关闭" @click="visible = false">×</button></header>
-          <template v-if="!token"><p class="agent-purpose">选择允许 Agent 读取或修改的知识库。阅读器本身无需此授权。</p>
+          <template v-if="!token"><p class="agent-purpose">选择允许 Agent 读取或修改的抽屉。浏览和编辑无需此授权。</p>
             <label>连接名称<input v-model="name" placeholder="例如：DSH" /></label>
-            <div class="agent-scope-heading"><span>可访问的知识库</span><button type="button" @click="toggleAll">{{ allSelected ? '取消全选' : '选择全部' }}</button></div>
-            <div class="agent-scopes" role="group" aria-label="可访问的知识库">
+            <div class="agent-scope-heading"><span>可访问的抽屉</span><button type="button" @click="toggleAll">{{ allSelected ? '取消全选' : '选择全部' }}</button></div>
+            <div class="agent-scopes" role="group" aria-label="可访问的抽屉">
               <label v-for="library in libraries" :key="library.path">
                 <input v-model="scopes" type="checkbox" :value="library.path" />
                 <span>{{ library.name }}</span>
@@ -21,11 +21,11 @@
             <p>仅显示一次，请保存到 DSH 的本机配置。</p>
             <textarea readonly :value="token" aria-label="连接令牌" />
             <button class="reader-button" @click="copy">{{ copied ? '已复制' : '复制令牌' }}</button>
-            <details class="agent-setup"><summary>配置到 DSH</summary><p>READER_URL：当前阅读器地址<br />READER_TOKEN：此令牌</p></details>
+            <details class="agent-setup"><summary>配置到 DSH</summary><p>READER_URL：当前应用地址<br />READER_TOKEN：此令牌</p></details>
           </template>
           <div class="agent-list">
             <div v-for="key in keys.filter(x => !x.revoked)" :key="key.id">
-              <span>{{ key.name }}<small>{{ key.scopes.length }} 个知识库，{{ key.permissions.includes('write') ? '可读写' : '只读' }}，{{ new Date(key.expires).toLocaleDateString() }} 到期</small></span>
+              <span>{{ key.name }}<small>{{ key.scopes.length }} 个抽屉，{{ key.permissions.includes('write') ? '可读写' : '只读' }}，{{ new Date(key.expires).toLocaleDateString() }} 到期</small></span>
               <button :disabled="busy" @click="revoke(key.id)">撤销</button>
             </div>
           </div>

@@ -90,7 +90,7 @@ const emit = defineEmits(['pick'])
   background: var(--c-hover, #f4f4f4);
 }
 .bt-item.is-on {
-  color: var(--color-ds, #4d6bfe);
+  color: var(--c-accent, #303030);
   background: var(--c-active);
 }
 .bt-icon {

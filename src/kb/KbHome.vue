@@ -30,17 +30,18 @@
     </div>
 
     <footer class="kb-foot">
-      加一个知识库：编辑 <code>public/kb.json</code>，刷新即可，不用重新构建。
+      加一个抽屉：编辑 <code>public/kb.json</code>，刷新即可，不用重新构建。
     </footer>
   </div>
 </template>
 
 <script setup>
+import { BRAND_NAME } from '../../brand.mjs'
 import { computed, onMounted, ref } from 'vue'
 import { API_BASE } from '../utils/api'
 
 /*
- * 知识库首页。
+ * 抽屉首页。
  *
  * 跟阅读器是同一个工程里的第二个入口（kb/index.html），共用：
  *   - tokens.css 的配色（浅色 / 护眼 / 深色三套，跟阅读器同一份变量）
@@ -51,7 +52,7 @@ import { API_BASE } from '../utils/api'
 
 const FALLBACK = [
   {
-    name: '打开阅读器',
+    name: `打开 ${BRAND_NAME}`,
     desc: '阅读、编辑和整理文档。',
     href: '/',
     meta: ''
@@ -64,7 +65,7 @@ const THEMES = [
   { id: 'dark', label: '深色' }
 ]
 
-const title = ref('知识库')
+const title = ref(BRAND_NAME)
 const libs = ref(FALLBACK)
 const theme = ref(localStorage.getItem('reader.theme') || 'light')
 const logo = computed(() => localStorage.getItem('reader.brandLogo') || '__SITE_ICON__')

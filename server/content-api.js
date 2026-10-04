@@ -1024,15 +1024,15 @@ const routes = {
     return {ok:true,data:move}
   },
   'PUT /lib/name': async (body, _url, ctx) => {
-    if (ctx.role !== 'owner') throw new Error('只有你能改知识库名')
+    if (ctx.role !== 'owner') throw new Error('只有你能改抽屉名')
     const from = String(body.from || '').replace(/^\/+|\/+$/g, '')
     const to = String(body.to || '').replace(/^\/+|\/+$/g, '')
     if (!from || !to) throw new Error('缺 from / to')
-    if (from.includes('/') || to.includes('/')) throw new Error('知识库名不能带斜杠')
+    if (from.includes('/') || to.includes('/')) throw new Error('抽屉名不能带斜杠')
     const absOld = safeResolve(from)
     const absNew = safeResolve(to)
-    if (!fs.existsSync(absOld)) throw new Error('知识库不存在: ' + from)
-    if (fs.existsSync(absNew)) throw new Error('已有同名知识库: ' + to)
+    if (!fs.existsSync(absOld)) throw new Error('抽屉不存在: ' + from)
+    if (fs.existsSync(absNew)) throw new Error('已有同名抽屉: ' + to)
     const reg = syncRegistry()
     assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
     /* 分享与可编辑的键跟着搬，否则改名就等于把不公开的东西放出去了 */
@@ -1054,7 +1054,7 @@ const routes = {
     if (!name || name.includes('/')) throw new Error('缺 name')
     const reg = syncRegistry()
     const hit = reg.libs.find((l) => l.name === name)
-    if (!hit) throw new Error('知识库不存在: ' + name)
+    if (!hit) throw new Error('抽屉不存在: ' + name)
     if (body.icon !== undefined) {if(String(body.icon).length>200000)throw fault('INVALID_ICON','图标过大');hit.icon = String(body.icon)}
     if (body.desc !== undefined) hit.desc = String(body.desc)
     if (body.meta !== undefined) hit.meta = String(body.meta)
@@ -1065,12 +1065,12 @@ const routes = {
 
   /** 新建知识库：建目录 + 写进注册表，一步到位，不留"目录有了但没登记"的中间态 */
   'POST /lib': async (body, _url, ctx) => {
-    if (ctx.role !== 'owner') throw new Error('只有你能新建知识库')
+    if (ctx.role !== 'owner') throw new Error('只有你能新建抽屉')
     const name = String(body.name || '').trim()
-    if (!name) throw new Error('知识库名不能为空')
+    if (!name) throw new Error('抽屉名不能为空')
     if (name.includes('/') || name.startsWith('.')) throw new Error('名字里不能有斜杠，也不能以点开头')
     const abs = safeResolve(name)
-    if (fs.existsSync(abs)) throw new Error('已有同名知识库: ' + name)
+    if (fs.existsSync(abs)) throw new Error('已有同名抽屉: ' + name)
     // 先取注册表再建目录；建完才同步会先自动补一条，随后又追加一条。
     const reg = syncRegistry()
     repo.mkdir(abs)
@@ -1122,11 +1122,11 @@ const routes = {
    * 一次动几百个文件，误删代价大，所以只做移动 —— 回收站里还能捞回来。
    */
   'DELETE /lib': async (body, _url, ctx) => {
-    if (ctx.role !== 'owner') throw new Error('只有你能删知识库')
+    if (ctx.role !== 'owner') throw new Error('只有你能删抽屉')
     const name = String(body.name || '').replace(/^\/+|\/+$/g, '')
     if (!name || name.includes('/')) throw new Error('缺 name')
     const abs = safeResolve(name)
-    if (!fs.existsSync(abs)) throw new Error('知识库不存在: ' + name)
+    if (!fs.existsSync(abs)) throw new Error('抽屉不存在: ' + name)
     if (!fs.statSync(abs).isDirectory()) throw new Error('不是目录: ' + name)
     moveToTrash(name)
     const reg = syncRegistry()
@@ -1147,10 +1147,10 @@ const routes = {
     const lib = String(url.searchParams.get('lib') || '')
     if (lib) {
       if (lib === '.' || lib === '..' || lib.startsWith('.') || /[/\\]/.test(lib)) {
-        throw new Error('知识库名无效')
+        throw new Error('抽屉名无效')
       }
       const abs = safeResolve(lib)
-      if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new Error('知识库不存在: ' + lib)
+      if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new Error('抽屉不存在: ' + lib)
       const nodes = scanDir(abs, lib, 0, readOrder())
       return { ok: true, data: { nodes, lib } }
     }
@@ -1341,7 +1341,7 @@ const routes = {
     if (!row) throw fault('NOT_FOUND', '浏览记录不存在', 404)
     if (row.incomplete) throw fault('INCOMPLETE_PREVIEW', '部分图片未能读取，请回到 DSH 重新打开源文件后收录')
     const dir = assertDir(body.dir)
-    if (!dir || !fs.existsSync(safeResolve(dir))) throw fault('NOT_FOUND', '目标知识库或目录不存在', 404)
+    if (!dir || !fs.existsSync(safeResolve(dir))) throw fault('NOT_FOUND', '目标抽屉或目录不存在', 404)
     const name = safeName(body.name || row.title.replace(/\.(md|markdown)$/i, ''))
     if (!name) throw fault('INVALID_NAME', '文档名不能为空')
     const file = uniqueFile(dir, name)
@@ -1543,7 +1543,7 @@ const routes = {
     const abs = assertFile(from)
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) throw fault('NOT_FOUND', '文档不存在', 404)
     const dir = assertDir(body.dir)
-    if (!dir) throw fault('DESTINATION_REQUIRED', '请选择目标知识库')
+    if (!dir) throw fault('DESTINATION_REQUIRED', '请选择目标抽屉')
     if (!fs.existsSync(safeResolve(dir))) throw fault('NOT_FOUND', '目标目录不存在', 404)
     const ext = path.extname(from)
     const name = path.basename(from, ext)
@@ -1555,7 +1555,7 @@ const routes = {
   'POST /copy/category': async (body) => {
     const from = assertDir(body.path)
     const parent = assertDir(body.toParent)
-    if (!from || !parent) throw fault('INVALID_PATH', '请选择源目录和目标知识库')
+    if (!from || !parent) throw fault('INVALID_PATH', '请选择源目录和目标抽屉')
     if (parent === from || parent.startsWith(from + '/')) throw fault('INVALID_PATH', '不能复制到自身目录内')
     if (!fs.existsSync(safeResolve(from)) || !fs.statSync(safeResolve(from)).isDirectory()) throw fault('NOT_FOUND', '源目录不存在', 404)
     if (!fs.existsSync(safeResolve(parent))) throw fault('NOT_FOUND', '目标目录不存在', 404)
@@ -1660,7 +1660,7 @@ const routes = {
  */
 // 对文件及目录的所有修改在这里统一校验，包含改名、移动、排序、子树删除。
 function canWrite(rel, role, recursive = false) {
-  if (!rel) throw new Error('请选择一个知识库')
+  if (!rel) throw new Error('请选择一个抽屉')
   assertVisible(rel)
   safeResolve(rel)
   if (role !== 'owner' && (!share.isShared(rel) || share.isLocked(rel))) throw new Error('该内容已锁定或不可访问')
@@ -1778,7 +1778,7 @@ export async function handleApi(req, res, ctx = {}) {
       ctx.agentScopes=scopes
       const assetScope=assets.find(url.searchParams.get('path')||'',url.searchParams.get('asset'));
       const fields=[assetScope&&repo.byId(assetScope.owner)?.path,body.path,body.file,body.dir,url.searchParams.get('path'),url.searchParams.get('lib')].filter(Boolean)
-      if(!fields.length && !['GET /me','GET /agent-libs'].includes(key))throw fault('SCOPE_REQUIRED','请指定已授权知识库或文档',400)
+      if(!fields.length && !['GET /me','GET /agent-libs'].includes(key))throw fault('SCOPE_REQUIRED','请指定已授权抽屉或文档',400)
       for(const field of fields){const rel=repo.resolve(field);if(!scopes.some(p=>rel===p||rel.startsWith(p+'/')))throw fault('FORBIDDEN','超出 Agent 授权范围',403)}
       ctx.actor='agent:'+agent.id
     }

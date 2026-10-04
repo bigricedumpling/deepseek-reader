@@ -9,7 +9,13 @@ export function useDialogFocus(open, element, cancel) {
     if(nestedMenu&&!element.value.contains(nestedMenu))return
     if (event.key === 'Escape' && cancel) { event.preventDefault(); event.stopImmediatePropagation(); cancel(); return }
     if (event.key !== 'Tab') return
-    const controls = [...element.value.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')].filter(el => el.getClientRects().length)
+    let controls = [...element.value.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')].filter(el => el.getClientRects().length)
+    // A native radio group contributes one Tab stop; arrow keys move inside it.
+    controls = controls.filter(el => {
+      if (el.type !== 'radio' || !el.name) return true
+      const group = controls.filter(item => item.type === 'radio' && item.name === el.name)
+      return el === (group.find(item => item.checked) || group[0])
+    })
     const first = controls[0] || element.value, last = controls.at(-1) || first
     if (!element.value.contains(document.activeElement) || (event.shiftKey ? document.activeElement === first : document.activeElement === last)) {
       event.preventDefault(); (event.shiftKey ? last : first).focus()

@@ -25,7 +25,7 @@ export function workspace(root) {
   fs.mkdirSync(home, { recursive: true, mode:0o700 })
   const db = new DatabaseSync(path.join(home, 'state.sqlite'))
   const schemaVersion = db.prepare('PRAGMA user_version').get().user_version
-  if (schemaVersion > 2) throw fault('SCHEMA_TOO_NEW', '知识库由更新版本的阅读器管理，请先升级阅读器', 500)
+  if (schemaVersion > 2) throw fault('SCHEMA_TOO_NEW', '抽屉由更新版本的阅读器管理，请先升级阅读器', 500)
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, kind TEXT NOT NULL, meta TEXT NOT NULL DEFAULT '{}', fingerprint TEXT, missing INTEGER NOT NULL DEFAULT 0);

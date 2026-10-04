@@ -1,3 +1,4 @@
+import { BRAND_NAME } from './brand.js'
 import { callTool, definitions } from './scripts/reader.mjs'
 import { startManagedServer } from './managed-server.js'
 
@@ -26,13 +27,13 @@ export function apply(ctx) {
   ctx.effect(() => {
     managed = startManagedServer()
     return () => managed.stop()
-  }, 'Reader local service')
+  }, `${BRAND_NAME} local service`)
   ctx.connection.fetch.register({
     path: '/api/reader-workspace/status', methods: ['GET'], requestBody: 'buffered',
     fetch: () => Promise.resolve(Response.json({ ...managed.status }, { headers: { 'cache-control': 'no-store' } }))
   })
   // The browser entry works without Agent access. Do not expose tools that
-  // would fail every call until an authorized Reader token is configured.
+  // would fail every call until an authorized Typocket token is configured.
   if (!process.env.READER_TOKEN) return
   for (const [toolName, description, , , schema] of definitions) {
     ctx.tools.register({
@@ -46,7 +47,7 @@ export function apply(ctx) {
       async execute(args, execution) {
         validateInput(schema, args)
         const result = await callTool(toolName, args, { signal: execution.signal })
-        if (!result.ok) throw new Error(result.error || result.code || 'Reader 请求失败')
+        if (!result.ok) throw new Error(result.error || result.code || `${BRAND_NAME} 请求失败`)
         return result
       }
     })

@@ -90,8 +90,8 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
     },
     'GET /agent-keys':async()=>({ok:true,data:repo.db.prepare('SELECT id,name,scopes,permissions,expires,revoked FROM credentials').all().map(r=>({...r,scopes:JSON.parse(r.scopes),permissions:JSON.parse(r.permissions)}))}),
     'POST /agent-keys':async body=>{
-      if(!Array.isArray(body.scopes)||!body.scopes.length)throw fault('INVALID_SCOPE','请选择知识库')
-      const scopes=body.scopes.map(rel=>{assertVisible(rel);if(rel.includes('/')||!fs.statSync(path.join(repo.root,rel)).isDirectory())throw fault('INVALID_SCOPE','知识库范围无效');return repo.node(rel,'folder').id})
+      if(!Array.isArray(body.scopes)||!body.scopes.length)throw fault('INVALID_SCOPE','请选择抽屉')
+      const scopes=body.scopes.map(rel=>{assertVisible(rel);if(rel.includes('/')||!fs.statSync(path.join(repo.root,rel)).isDirectory())throw fault('INVALID_SCOPE','抽屉范围无效');return repo.node(rel,'folder').id})
       const permissions=body.write?['read','write']:['read'],token=randomBytes(32).toString('hex'),id=randomUUID()
       const expires=Date.now()+Math.max(1,Math.min(365,Number(body.days)||30))*86400000
       repo.db.prepare('INSERT INTO credentials VALUES (?,?,?,?,?,?,0)').run(id,digest(token),String(body.name||'Agent').slice(0,80),JSON.stringify(scopes),JSON.stringify(permissions),expires)

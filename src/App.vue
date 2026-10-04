@@ -221,7 +221,7 @@ function askDeleteCategory(folder) {
   })
 }
 async function askCreateDoc(dir) {
-  // 目录从哪来：根部按钮传当前知识库路径，目录行传它所在的目录。
+  // 目录从哪来：根部按钮传当前抽屉路径，目录行传它所在的目录。
   // 没传参时也**默认根目录** —— 以前会悄悄落到"当前文档所在目录"，
   // 于是按了根部的按钮、对话框里却写着在『笔试』下新建文档，很莫名其妙。
   const target = dir == null ? '' : dir

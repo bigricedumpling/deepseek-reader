@@ -1,14 +1,14 @@
 <template>
   <!--
-    桌面端横向排知识库栏与文档树；手机端知识库列表改为弹窗。
+    桌面端横向排抽屉栏与文档树；手机端抽屉列表改为弹窗。
   -->
   <div class="flex h-screen flex-shrink-0">
-    <!-- 手机端切换列表才用遮罩；桌面保留并排的知识库列表。 -->
+    <!-- 手机端切换列表才用遮罩；桌面保留并排的抽屉列表。 -->
     <transition name="lib-backdrop">
       <button
         v-if="libPanel.open && isMobileLibView()"
         class="lib-modal-backdrop"
-        aria-label="关闭知识库弹窗"
+        aria-label="关闭抽屉弹窗"
         @click="closeLibPanel"
       />
     </transition>
@@ -18,16 +18,16 @@
         v-if="libPanel.open"
         class="lib-panel"
         :style="{ '--lib-w': libWidth + 'px' }"
-        aria-label="知识库列表"
+        aria-label="抽屉列表"
         @click.stop="onLibPanelClick"
       >
         <div class="lib-panel-head">
-          <span class="lib-panel-title">知识库</span>
+          <span class="lib-panel-title">抽屉</span>
           <span class="lib-panel-head-acts">
-            <button v-if="!isGuest" class="icon-btn" title="新建知识库" @click.stop="createLib">
+            <button v-if="!isGuest" class="icon-btn" title="新建抽屉" @click.stop="createLib">
               <PhPlus :size="14" />
             </button>
-            <button class="icon-btn" title="关闭知识库" aria-label="关闭知识库" @click="closeLibPanel">
+            <button class="icon-btn" title="关闭抽屉" aria-label="关闭抽屉" @click="closeLibPanel">
               <PhCaretDoubleLeft :size="15" class="lib-close-desktop" />
               <PhX :size="15" class="lib-close-mobile" />
             </button>
@@ -37,11 +37,11 @@
         <input ref="libIconInput" type="file" accept="image/*" class="hidden" @change="onPickLibIcon" />
 
         <div class="lib-panel-sort">
-          <SelectMenu v-model="libSort" :options="libSortOptions" label="知识库排序" />
-          <button class="lib-browse-entry" :title="isGuest ? '浏览知识库' : '管理知识库'" @click="openManager"><PhSquaresFour :size="16" weight="regular" /><span>浏览全部</span></button>
+          <SelectMenu v-model="libSort" :options="libSortOptions" label="抽屉排序" />
+          <button class="lib-browse-entry" :title="isGuest ? '浏览抽屉' : '管理抽屉'" @click="openManager"><PhSquaresFour :size="16" weight="regular" /><span>浏览全部</span></button>
         </div>
 
-        <div class="lib-panel-resize" title="拖动调整知识库栏宽度" @pointerdown.stop="startLibResize" />
+        <div class="lib-panel-resize" title="拖动调整抽屉栏宽度" @pointerdown.stop="startLibResize" />
 
         <div class="lib-panel-list">
           <div
@@ -50,8 +50,8 @@
             class="lib-row"
             :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }"
           >
-            <!-- 每个知识库用自己的图标 -->
-            <button class="lib-icon-edit" :disabled="isGuest" title="更换知识库图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon class="lib-row-icon" :value="lib.icon || siteIcon" /></button>
+            <!-- 每个抽屉用自己的图标 -->
+            <button class="lib-icon-edit" :disabled="isGuest" title="更换抽屉图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon class="lib-row-icon" :value="lib.icon || siteIcon" /></button>
 
 
             <button class="lib-row-name" @contextmenu="libContext($event,lib)" :title="isGuest ? lib.name + '（' + (store.canEdit(lib) ? '可编辑' : '只读') + '）' : lib.name" @click="goLib(lib)">
@@ -72,7 +72,7 @@
                 <span class="lib-row-meta">{{ lib.docs }} 篇</span>
               </template>
             </button>
-            <button v-if="!isGuest" class="icon-btn xs lib-pin" :title="pinnedLibs.includes(lib.name) ? '取消置顶' : '置顶知识库'" :aria-label="pinnedLibs.includes(lib.name) ? '取消置顶' : '置顶知识库'" @click.stop="togglePin(lib.name)"><PhPushPin :size="15" :weight="pinnedLibs.includes(lib.name) ? 'fill' : 'regular'" /></button>
+            <button v-if="!isGuest" class="icon-btn xs lib-pin" :title="pinnedLibs.includes(lib.name) ? '取消置顶' : '置顶抽屉'" :aria-label="pinnedLibs.includes(lib.name) ? '取消置顶' : '置顶抽屉'" @click.stop="togglePin(lib.name)"><PhPushPin :size="15" :weight="pinnedLibs.includes(lib.name) ? 'fill' : 'regular'" /></button>
 
             <!-- 与侧边栏一致：悬停出现三个点，操作收进菜单 -->
             <button
@@ -93,20 +93,20 @@
 
     <PublicSharing v-if="publicSharingOpen && !isGuest" @close="publicSharingOpen=false;managerOpen=true" />
     <Teleport to="body">
-      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false" /></transition>
+      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭抽屉管理'" @click="managerOpen=false" /></transition>
       <transition name="lib-manager">
-        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" :class="{'history-panel':managerSection==='previews'}" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览知识库' : '管理知识库'">
-          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? '工作区浏览记录' : '知识库' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection==='libs' && !isGuest" class="icon-btn" aria-label="新建知识库" @click="createLib"><PhPlus :size="18" /></button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭知识库管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
-          <p v-if="managerSection === 'libs' && !isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收录到知识库，也可以直接新建文档。</p>
+        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" :class="{'history-panel':managerSection==='previews'}" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览抽屉' : '管理抽屉'">
+          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? '工作区浏览记录' : '抽屉' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection==='libs' && !isGuest" class="icon-btn" aria-label="新建抽屉" @click="createLib"><PhPlus :size="18" /></button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭抽屉管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
+          <p v-if="managerSection === 'libs' && !isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收录到抽屉，也可以直接新建文档。</p>
           <div v-if="managerSection === 'libs' || managerSection === 'previews' && !selectedPreview" class="lib-manager-tools">
             <div class="lib-manager-search-row">
-              <input v-if="managerSection === 'libs'" v-model.trim="libQuery" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus />
+              <input v-if="managerSection === 'libs'" v-model.trim="libQuery" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus />
               <input v-else v-model.trim="previewQuery" type="search" placeholder="搜索浏览记录" aria-label="搜索工作区浏览记录" />
-              <SelectMenu v-if="managerSection === 'libs'" v-model="libSort" :options="libSortOptions" label="知识库排序" />
+              <SelectMenu v-if="managerSection === 'libs'" v-model="libSort" :options="libSortOptions" label="抽屉排序" />
               <SelectMenu v-else :model-value="previewArchived ? 'hidden' : 'recent'" :options="[{value:'recent',label:'最近浏览'},{value:'hidden',label:'已隐藏'}]" label="浏览记录筛选" @update:model-value="setPreviewFilter" />
             </div>
             <div v-if="managerSection === 'libs' && !isGuest" class="lib-manager-filter-row">
-              <div class="lib-manager-filters" role="group" aria-label="筛选知识库">
+              <div class="lib-manager-filters" role="group" aria-label="筛选抽屉">
                 <button v-for="filter in [{value:'all',label:'全部'},{value:'public',label:'分享范围'},{value:'private',label:'仅自己'}]" :key="filter.value" :class="{ 'is-on': managerFilter === filter.value }" :aria-pressed="managerFilter === filter.value" @click="managerFilter=filter.value">{{ filter.label }}</button>
               </div>
             </div>
@@ -116,9 +116,9 @@
               <button class="lib-manager-card-main" @click="goLib(lib); managerOpen=false"><ContentIcon :value="lib.icon || siteIcon" class="lib-manager-icon" /><strong>{{ lib.name }}</strong><span class="lib-card-meta"><span>{{ lib.docs }} 篇</span><span class="lib-card-status"><component :is="isGuest ? store.canEdit(lib) ? PhPencilSimple : PhLock : lib.shared ? lib.locked ? PhLock : PhPencilSimple : PhEyeSlash" :size="13" weight="regular" />{{ isGuest ? store.canEdit(lib) ? '可编辑' : '只读' : lib.shared ? lib.locked ? '访客只读' : '访客可编辑' : '仅自己' }}</span></span></button>
               <button v-if="!isGuest" class="lib-manager-card-more icon-btn xs" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" weight="bold" /></button>
             </div>
-            <p v-if="!managerLibs.length" class="lib-empty">没有匹配的知识库</p>
+            <p v-if="!managerLibs.length" class="lib-empty">没有匹配的抽屉</p>
           </div>
-          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="regular" />分享只读副本</button><button title="允许 Agent 访问指定知识库" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="regular" />Agent 访问</button></footer>
+          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="regular" />分享只读副本</button><button title="允许 Agent 访问指定抽屉" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="regular" />Agent 访问</button></footer>
           <div v-if="managerSection === 'previews'" class="lib-manager-previews">
             <div v-if="!selectedPreview" class="preview-list">
               <p v-if="previewLoading" class="lib-empty" role="status">正在读取…</p>
@@ -141,14 +141,14 @@
 
     <Teleport to="body">
       <Transition name="overlay" appear><div v-if="transfer.open" class="transfer-backdrop" @click.self="transfer.open=false">
-        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库'">
-          <h2>{{ transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库' }}</h2>
+        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉'">
+          <h2>{{ transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉' }}</h2>
           <p class="transfer-source">{{ transfer.mode === 'collect' ? selectedPreview?.title : transfer.path }}</p>
           <label v-if="transfer.mode === 'collect'">文档名称<input v-model="transfer.name" maxlength="160" /></label>
-          <div class="transfer-library-head"><span>目标知识库</span><input v-model.trim="transferSearch" type="search" placeholder="搜索知识库" aria-label="搜索目标知识库" /></div>
-          <div class="transfer-library-grid" role="group" aria-label="选择目标知识库">
+          <div class="transfer-library-head"><span>目标抽屉</span><input v-model.trim="transferSearch" type="search" placeholder="搜索抽屉" aria-label="搜索目标抽屉" /></div>
+          <div class="transfer-library-grid" role="group" aria-label="选择目标抽屉">
             <button v-for="lib in transferLibs" :key="lib.name" type="button" :class="{ 'is-on': transfer.lib === lib.name, 'is-draft': lib.name === '草稿' }" :aria-pressed="transfer.lib === lib.name" @click="onTransferLibSelect(lib.name)"><ContentIcon :value="lib.icon || siteIcon" :size="20" /><span>{{ lib.name }}</span><small>{{ lib.docs }} 篇</small></button>
-            <p v-if="!transferLibs.length" class="lib-empty">没有匹配的知识库</p>
+            <p v-if="!transferLibs.length" class="lib-empty">没有匹配的抽屉</p>
           </div>
           <div v-if="transfer.lib && transfer.folders.length > 1" class="transfer-field"><span>目标位置</span><SelectMenu v-model="transfer.dir" :options="transfer.folders.map(folder => ({ value: folder.path, label: folder.label }))" label="目标位置" /></div>
           <p v-if="transfer.error" class="transfer-error" role="alert">{{ transfer.error }}</p>
@@ -187,7 +187,7 @@
         整个塞进去会撑爆配额，而且侧栏里只显示 22px，没必要留原图。
       -->
       <div class="px-4 pt-5 pb-3 flex items-start gap-2.5 shrink-0">
-        <button class="brand-logo" title="打开知识库" @click.stop="openLibPanel">
+        <button class="brand-logo" title="打开抽屉" @click.stop="openLibPanel">
           <ContentIcon :value="logo" />
         </button>
         <div class="min-w-0 flex-1">
@@ -199,24 +199,24 @@
             :class="i === 0 ? 'is-title' : 'is-sub'"
             spellcheck="false"
             :readonly="isGuest || !currentLibEditable"
-            :title="isGuest ? '' : '编辑阅读器名称'"
+            :title="isGuest ? '' : '编辑抽屉名称'"
             @keydown.enter.prevent="$event.target.blur()"
             @change="onBrandEdited(i, $event.target.value)"
           />
         </div>
         <!--
-          展开知识库：放在收起按钮左边，与它同尺寸同排。
+          展开抽屉：放在收起按钮左边，与它同尺寸同排。
           当前是哪个库、共有几个，走 tooltip 提示，不占版面。
         -->
         <button
           class="icon-btn"
-          :title="'知识库：' + (currentLib || '未选择') + '（共 ' + libPanel.libs.length + ' 个）'"
+          :title="'抽屉：' + (currentLib || '未选择') + '（共 ' + libPanel.libs.length + ' 个）'"
           @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"
         >
           <PhStack :size="16" :weight="libPanel.open ? 'fill' : 'regular'" />
         </button>
         <!--
-          收起侧栏时把知识库面板一起收掉。
+          收起侧栏时把抽屉面板一起收掉。
           两栏各管各的开合是一开始的想法，但收起了侧栏、左边却还杵着一个面板，
           看着就是没收干净 —— 收起是"把这块收掉"的意思，范围该覆盖整块。
         -->
@@ -247,7 +247,7 @@
         <button
           class="icon-btn"
           :class="{ 'is-active': searchOpen }"
-          title="搜索当前知识库文档"
+          title="搜索当前抽屉文档"
           @click="toggleSearch"
         >
           <PhMagnifyingGlass :size="15" />
@@ -298,7 +298,7 @@
         <input
           ref="searchEl"
           v-model="query"
-          class="w-full h-7 px-2.5 ui-round-control bg-[var(--c-field)] border border-[var(--c-line)] text-[12.5px] outline-none focus:border-[var(--color-ds)]/50 transition-colors"
+          class="w-full h-7 px-2.5 ui-round-control bg-[var(--c-field)] border border-[var(--c-line)] text-[12.5px] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
           placeholder="搜索文档名或路径"
           @keydown.esc="closeSearch"
         />
@@ -397,16 +397,17 @@
 
       </nav>
       <div v-if="!isGuest" class="workspace-history-footer">
-        <button class="workspace-history-link" title="在 DSH 用阅读器打开过的 Markdown" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
-        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
+        <button class="workspace-history-link" :title="`在 DSH 用 ${BRAND_NAME} 打开过的 Markdown`" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
+        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="footerTools=false;settingsOpen=true"><PhGearSix :size="16"/>设置</button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
       </div>
     </template>
     </aside>
 
+    <ProductSettings v-if="settingsOpen" @close="closeSettings" />
     <RecoveryPanel :initial-tab="recoveryTab" :open="recoveryOpen" @close="closeRecovery" @restored="onRecovered" />
     <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false;managerOpen=true" />
     <IconPicker v-if="iconPicking" :save="saveLibIcon" :anchor="libIconAnchor" @close="iconPicking=false" />
-    <!-- 新建 / 删除知识库的确认框：用站内统一那套，不用浏览器原生弹窗 -->
+    <!-- 新建 / 删除抽屉的确认框：用站内统一那套，不用浏览器原生弹窗 -->
     <AppDialog
       :open="libDialog.open"
       :mode="libDialog.danger ? 'confirm' : 'prompt'"
@@ -423,7 +424,9 @@
 </template>
 
 <script setup>
+import { BRAND_NAME } from '../../brand.mjs'
 import SelectMenu from './SelectMenu.vue'
+import ProductSettings from './ProductSettings.vue'
 import PublicSharing from './PublicSharing.vue'
 import {setFavicon} from '../utils/favicon'
 
@@ -435,7 +438,7 @@ import { resizePanel } from '../utils/panel-resize'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, provide } from 'vue'
 // 菜单里的图标：树的操作、分组与排序
 import {
-  PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
+  PhGearSix, PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
   PhSquaresFour, PhUserCircle, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
   PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
@@ -485,7 +488,7 @@ const currentLibEditable = computed(() => store.canEdit(libPanel.libs.find(l => 
 /*
  * 标题两行。
  *
- * 第一行不是一份独立数据 —— 它就是"当前知识库的名字"，真源在服务端的注册表里
+ * 第一行不是一份独立数据 —— 它就是"当前抽屉的名字"，真源在服务端的注册表里
  * （.知识库.json）。这里只是一份显示副本，改它等于改库名（改名会同步重命名文件夹）。
  * 第二行是副标题，纯粹给人看的，不参与任何同步。
  *
@@ -498,7 +501,7 @@ const brandLines = ref(['', FALLBACK_SUB])
 
 const libIconInput = ref(null)
 
-/* ---------- 知识库面板：列出所有库，可切换 / 改名 / 换图标 / 管可见性 ---------- */
+/* ---------- 抽屉面板：列出所有库，可切换 / 改名 / 换图标 / 管可见性 ---------- */
 
 const libPanel = reactive({ open: false, libs: [], busy: '' })
 const managerOpen = ref(false)
@@ -555,7 +558,7 @@ async function openTransfer(mode, kind, source) {
   transfer.error = ''
   transferSearch.value = ''
   if (!libPanel.libs.length) await loadLibs()
-  if (!libPanel.libs.length) { store.error = '知识库读取失败，请稍后重试'; return }
+  if (!libPanel.libs.length) { store.error = '抽屉读取失败，请稍后重试'; return }
   transfer.lib = ''
   transfer.dir = ''
   transfer.folders = []
@@ -603,6 +606,8 @@ async function confirmTransfer() {
   } catch (error) { transfer.error = String(error.message || error) }
   finally { transfer.busy = false }
 }
+const settingsOpen=ref(false)
+async function closeSettings(){settingsOpen.value=false;await nextTick();toolsTrigger.value?.focus()}
 const footerTools=ref(false),recoveryTab=ref('trash'),toolsTrigger=ref(null),toolsPanel=ref(null)
 async function toggleFooterTools(){footerTools.value=!footerTools.value;if(footerTools.value){await nextTick();toolsPanel.value?.querySelector('button')?.focus()}}
 async function closeRecovery(){recoveryOpen.value=false;await nextTick();toolsTrigger.value?.focus()}
@@ -654,7 +659,7 @@ const managerLibs = computed(() => {
   )
 })
 
-/** 当前所在的知识库：文档根的名字（每个实例一个根，所以直接问服务端） */
+/** 当前所在的抽屉：文档根的名字（每个实例一个根，所以直接问服务端） */
 /** 当前库的完整信息（图标、说明），从注册表同步过来 */
 const currentLibIcon = ref('')
 
@@ -692,23 +697,23 @@ function applyCurrentLib() {
   const lib = libPanel.libs.find((l) => l.name === currentLib.value)
   if (!lib) return
   brandLines.value[0] = lib.name
-  /* 副标题也按库走：每个知识库各说各的，不再共用主库那一句 */
+  /* 副标题也按库走：每个抽屉各说各的，不再共用主库那一句 */
   brandLines.value[1] = lib.sub || FALLBACK_SUB
   currentLibIcon.value = lib.icon || ''
   /*
-   * 浏览器标签页也跟着走：标题换成当前知识库名，图标换成它的 icon。
+   * 浏览器标签页也跟着走：标题换成当前抽屉名，图标换成它的 icon。
    * 切库之后标签页还挂着上一个库的名字，等于对外显示错了身份。
    */
-  document.title = lib.name
+  document.title = lib.name ? `${lib.name} | ${BRAND_NAME}` : BRAND_NAME
 
 }
 
 /*
- * 新建知识库：建目录 + 写注册表一步到位（服务端做），
+ * 新建抽屉：建目录 + 写注册表一步到位（服务端做），
  * 名字先用 prompt 问 —— 建完立刻切过去，看到的就是刚建的那个空库。
  */
 /*
- * 新建知识库的弹窗状态。
+ * 新建抽屉的弹窗状态。
  *
  * 以前用 window.prompt —— 浏览器原生框，样式和站内完全不搭，
  * 而且不能带说明文字。站内有 AppDialog（支持 prompt 模式），直接用它。
@@ -739,9 +744,9 @@ function askLibDialog(opts) {
 
 async function createLib() {
   askLibDialog({
-    title: '新建知识库',
+    title: '新建抽屉',
     message: '',
-    placeholder: '知识库名字',
+    placeholder: '抽屉名称',
     confirmText: '新建',
     onConfirm: (value) => { closeLibDialog(); doCreateLib(value) }
   })
@@ -771,9 +776,9 @@ async function doCreateLib(value) {
 }
 
 /*
- * 收起态点图标只展开文档侧栏；展开态的品牌图标才打开知识库栏。
+ * 收起态点图标只展开文档侧栏；展开态的品牌图标才打开抽屉栏。
  */
-/** 收起整个左区：知识库面板 + 文档栏 */
+/** 收起整个左区：抽屉面板 + 文档栏 */
 function collapseAllUI() {
   libPanel.open = false
   emit('toggle-collapse')
@@ -819,9 +824,9 @@ function isCurrentLib(lib) {
 }
 
 /*
- * 切换知识库：只换地址栏里的 ?lib=<库名>，然后重新拉树。
+ * 切换抽屉：只换地址栏里的 ?lib=<库名>，然后重新拉树。
  *
- * 不换实例、不换根目录 —— 一个知识库就是根下的一个文件夹，
+ * 不换实例、不换根目录 —— 一个抽屉就是根下的一个文件夹，
  * 选了它侧边栏就只显示它（服务端按 ?lib= 裁剪），路径仍然相对文档根，
  * 所以文档读取、保存那一整套不用改。
  */
@@ -836,7 +841,7 @@ async function goLib(lib) {
   // 切库会清空当前文档缓存，必须先等最新内容落盘。
   if (store.currentPath && (store.isDirty || store.saving) && !(await store.save())) return
   /*
-   * 桌面保持知识库栏，便于连续切换；手机在完成切换后关闭弹窗。
+   * 桌面保持抽屉栏，便于连续切换；手机在完成切换后关闭弹窗。
    */
   const url = new URL(location.href)
   url.searchParams.set('lib', name)
@@ -854,7 +859,7 @@ async function goLib(lib) {
 }
 
 /*
- * 知识库的…菜单：复用侧边栏那一套浮层（tree.menu），
+ * 抽屉的…菜单：复用侧边栏那一套浮层（tree.menu），
  * 所以位置、样式、点别处关掉的行为都一样，不用另造一个。
  */
 function libContext(e,lib){if(isGuest.value||e.target.closest('input,textarea'))return;e.preventDefault();e.stopPropagation();openLibMenu(lib,e)}
@@ -899,10 +904,10 @@ function cancelRename() {
 /** 两个改名入口共用这一条流程；当前库改名会使所有文档路径失效。 */
 async function renameLib(from, to) {
   if (!from || !to || to === from) return
-  if (to.includes('/') || to.startsWith('.')) throw new Error('知识库名不能带斜杠或以点开头')
+  if (to.includes('/') || to.startsWith('.')) throw new Error('抽屉名不能带斜杠或以点开头')
   const active = from === currentLib.value
   if (active && (store.isDirty || store.saving) && !(await store.save())) {
-    throw new Error(store.error || '保存失败，未改名知识库')
+    throw new Error(store.error || '重命名失败')
   }
   libPanel.busy = from
   try {
@@ -963,7 +968,7 @@ async function onBrandEdited(i, value) {
   }
 }
 
-/** 换某个知识库的图标 */
+/** 换某个抽屉的图标 */
 const recoveryOpen=ref(false)
 async function onRecovered(){await loadLibs();await store.loadTree()}
 const agentSettings=ref(false), iconPicking=ref(false)
@@ -1007,12 +1012,12 @@ function readAsDataUrl(file) {
 }
 
 /*
- * 删除知识库 = 把那个文件夹移到回收站（不真删）。
+ * 删除抽屉 = 把那个文件夹移到回收站（不真删）。
  * 一次操作就是几百个文件，所以确认框里把篇数写清楚。
  */
 async function deleteLib(lib) {
   askLibDialog({
-    title: '删除知识库《' + lib.name + '》',
+    title: '删除抽屉《' + lib.name + '》',
     message: '它的 ' + (lib.docs || 0) + ' 篇文档会被移到回收站，可以再捞回来。',
     confirmText: '移到回收站',
     danger: true,
@@ -1024,7 +1029,7 @@ async function doDeleteLib(lib) {
   libPanel.busy = lib.name
   try {
     if (lib.name === currentLib.value && (store.isDirty || store.saving) && !(await store.save())) {
-      throw new Error(store.error || '保存失败，未删除知识库')
+      throw new Error(store.error || '删除失败')
     }
     const res = await fetch(API_BASE + '/api/lib', {
       method: 'DELETE',
@@ -1083,8 +1088,8 @@ onMounted(() => {
        * 补上 lib 之后必须重新拉树。
        *
        * 最初那次 /api/tree 是不带 lib 拉的（进来时地址栏里还没有），拿到的是整棵树 ——
-       * 于是 /onlyread 这种不带 lib 的地址会显示出根下的几个知识库目录，
-       * 看着就像"知识库和它内部文件夹的关系乱了"。
+       * 于是 /onlyread 这种不带 lib 的地址会显示出根下的几个抽屉目录，
+       * 看着就像"抽屉和它内部文件夹的关系乱了"。
        */
       store.switchLib()
     }
@@ -1122,7 +1127,7 @@ const customLogo = ref(localStorage.getItem(LOGO_STORE) || '')
  */
 const siteIcon = '__SITE_ICON__'
 /*
- * 图标也只有一个真源：当前知识库的 icon 字段（注册表里）。
+ * 图标也只有一个真源：当前抽屉的 icon 字段（注册表里）。
  * customLogo 是"这个实例自己的图标"，没有库图标时兜底。
  */
 const logo = computed(
@@ -1215,7 +1220,7 @@ const tree = reactive({
     if (i < 0) return
     this.dropAt = { parent, index: i + (y > 0.5 ? 1 : 0) }
   },
-  /** 落在空白处：挪到当前知识库根目录末尾。 */
+  /** 落在空白处：挪到当前抽屉根目录末尾。 */
   overRoot(e) {
     if (!this.drag || e.defaultPrevented) return
     e.preventDefault()
@@ -1460,10 +1465,10 @@ const menuItems = computed(() => {
   if (canRevealInFinder.value) items.push({ id: 'reveal', label: fileManagerLabel(kind !== 'file'), icon: PhFolderSimple })
   if (!store.canEdit(node)) return items
   if (kind === 'lib') {
-    if (!isGuest.value) items.push({ id:'lib-icon',label:'更换图标',icon:PhImage },{ id:'lib-rename',label:'重命名',icon:PhPencilSimple },{ id:'lib-delete',label:'删除知识库',icon:PhTrash,danger:true })
+    if (!isGuest.value) items.push({ id:'lib-icon',label:'更换图标',icon:PhImage },{ id:'lib-rename',label:'重命名',icon:PhPencilSimple },{ id:'lib-delete',label:'删除抽屉',icon:PhTrash,danger:true })
   } else {
     if (kind === 'folder') items.push({id:'new-doc',label:'新建文档',icon:PhFilePlus},{id:'new-folder',label:'新建文件夹',icon:PhFolderSimplePlus})
-    items.push({id:'copy-to',label:'复制到知识库',icon:PhCopy},{id:'move-to',label:'移动到知识库',icon:PhArrowRight})
+    items.push({id:'copy-to',label:'复制到抽屉',icon:PhCopy},{id:'move-to',label:'移动到抽屉',icon:PhArrowRight})
     items.push({id:'rename',label:'重命名',icon:PhPencilSimple},{id:'delete',label:kind==='folder'?'删除目录':'删除',icon:PhTrash,danger:true})
   }
   return items
@@ -1500,7 +1505,7 @@ function onMenuPick(item) {
     store.requestAccess(node.path || node.file, item.id === 'access-lock' ? { locked: !node.locked } : { shared: node.shared === false }, item.label)
     return
   }
-  /* 知识库那几个动作：名字就是文件夹名，所以改名 = 重命名文件夹 */
+  /* 抽屉那几个动作：名字就是文件夹名，所以改名 = 重命名文件夹 */
   if (kind === 'lib') {
     const lib = { name: node.name, path: node.path, docs: node.docs, shared: node.shared }
     if (item.id === 'lib-icon') pickLibIcon(lib)
@@ -1849,10 +1854,10 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 .lib-manager-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 10px; padding: 0 24px 24px; overflow-y: auto; }.lib-manager-grid .lib-empty { grid-column: 1 / -1; }
 .lib-manager-card { position:relative; display: flex; min-height: 110px; padding: 15px; border-radius: 22px; corner-shape: superellipse(2); background: var(--c-field); text-align: left; }.lib-manager-card:hover, .lib-manager-card.is-current { background: var(--c-hover); }.lib-manager-card-main { display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left; }.lib-manager-card strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-ink); font-size: 12px; font-weight: 500; }.lib-manager-card span { color: var(--c-faint); font-size: 11px; }.lib-manager-icon { width: 21px; height: 21px; }.lib-manager-card-more { position:absolute;right:8px;top:8px;opacity:0; }.lib-manager-card:hover .lib-manager-card-more,.lib-manager-card:focus-within .lib-manager-card-more { opacity:1; }
 .lib-preview-entry { display:flex;align-items:center;gap:13px;width:100%;min-height:44px;margin-bottom:5px;padding:8px 12px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left; }.lib-preview-entry:hover { background:var(--c-hover);color:var(--c-ink); }.lib-manager-head-actions { display:flex;align-items:center;gap:9px; }.lib-manager-head-actions>button:not(.icon-btn) { padding:7px 10px;border-radius:var(--radius-control);background:var(--c-field);color:var(--c-sub);font-size:12px; }.lib-manager-previews { min-height:0;overflow-y:auto; }.lib-manager-previews .lib-manager-grid { overflow:visible; }.lib-preview-detail { margin:0 24px 24px;padding:16px;background:var(--c-field);border-radius:22px;corner-shape:superellipse(2); }.lib-preview-detail-head { display:flex;justify-content:space-between;gap:12px;font-size:12px; }.lib-preview-detail-head span,.lib-preview-source { color:var(--c-faint);font-size:11px; }.lib-preview-source { overflow-wrap:anywhere;margin:8px 0; }.lib-preview-body { max-height:300px;overflow:auto;padding:12px 0;font-size:12px;line-height:1.7;overflow-wrap:anywhere; }.lib-preview-body img { max-width:100%; }.lib-preview-body pre { overflow:auto; }.lib-preview-actions { display:flex;justify-content:flex-end;gap:8px; }.lib-preview-actions button { padding:8px 12px;border-radius:var(--radius-control);background:var(--c-pop);font-size:12px; }.lib-preview-actions button:disabled { opacity:.45;cursor:default; }
-.lib-preview-body :is(h1,h2,h3) { margin:1.3em 0 .55em;line-height:1.4;font-weight:600; }.lib-preview-body h1 { font-size:1.45em; }.lib-preview-body h2 { font-size:1.25em; }.lib-preview-body h3 { font-size:1.1em; }.lib-preview-body p,.lib-preview-body ul,.lib-preview-body ol { margin:0 0 1em; }.lib-preview-body :is(ul,ol) { padding-left:1.7em; }.lib-preview-body code { font-family:ui-monospace,monospace;font-size:.9em; }.lib-preview-body pre { padding:10px;background:var(--c-pop);border-radius:12px; }.lib-preview-body table { display:block;max-width:100%;overflow:auto;border-collapse:collapse; }.lib-preview-body :is(td,th) { border:1px solid var(--c-line);padding:4px 7px; }.lib-preview-body a { color:var(--color-ds); }.lib-preview-body a[href="#"] { cursor:help;text-decoration-style:dotted; }
+.lib-preview-body :is(h1,h2,h3) { margin:1.3em 0 .55em;line-height:1.4;font-weight:600; }.lib-preview-body h1 { font-size:1.45em; }.lib-preview-body h2 { font-size:1.25em; }.lib-preview-body h3 { font-size:1.1em; }.lib-preview-body p,.lib-preview-body ul,.lib-preview-body ol { margin:0 0 1em; }.lib-preview-body :is(ul,ol) { padding-left:1.7em; }.lib-preview-body code { font-family:ui-monospace,monospace;font-size:.9em; }.lib-preview-body pre { padding:10px;background:var(--c-pop);border-radius:12px; }.lib-preview-body table { display:block;max-width:100%;overflow:auto;border-collapse:collapse; }.lib-preview-body :is(td,th) { border:1px solid var(--c-line);padding:4px 7px; }.lib-preview-body a { color:var(--c-accent); }.lib-preview-body a[href="#"] { cursor:help;text-decoration-style:dotted; }
 .transfer-backdrop { position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:18px;background:var(--c-overlay); }.transfer-dialog { width:min(410px,100%);max-height:85dvh;overflow:auto;padding:24px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:34px;corner-shape:superellipse(2);box-shadow:var(--c-pop-shadow);color:var(--c-ink); }.transfer-dialog h2 { margin:0;font-size:17px;font-weight:600; }.transfer-dialog p { margin:8px 0 16px;font-size:12px;color:var(--c-sub);overflow-wrap:anywhere; }.transfer-dialog label { display:block;margin:13px 0;font-size:12px;color:var(--c-sub); }.transfer-dialog select { display:block;width:100%;margin-top:7px;padding:9px 11px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);color:var(--c-ink);font:inherit; }.transfer-dialog .transfer-hint { margin-top:18px;line-height:1.6; }.transfer-dialog .transfer-error { color:#bd4545; }.transfer-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:20px; }.transfer-actions button { padding:8px 15px;border-radius:var(--radius-control);background:var(--c-field);font-size:12px; }.transfer-actions button:last-child { background:var(--c-hover); }.transfer-actions button:disabled { opacity:.45;cursor:default; }
 .transfer-dialog input { display:block;width:100%;margin-top:7px;padding:9px 11px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);color:var(--c-ink);font:inherit; }
-.transfer-toast { position:fixed;right:22px;bottom:24px;z-index:95;display:flex;align-items:center;gap:12px;max-width:min(430px,calc(100vw - 28px));padding:10px 14px;border:1px solid var(--c-line);border-radius:20px;corner-shape:superellipse(2);background:var(--c-pop);box-shadow:var(--c-pop-shadow);color:var(--c-ink);font-size:12px; }.transfer-toast span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.transfer-toast button { color:var(--color-ds);white-space:nowrap; }
+.transfer-toast { position:fixed;right:22px;bottom:24px;z-index:95;display:flex;align-items:center;gap:12px;max-width:min(430px,calc(100vw - 28px));padding:10px 14px;border:1px solid var(--c-line);border-radius:20px;corner-shape:superellipse(2);background:var(--c-pop);box-shadow:var(--c-pop-shadow);color:var(--c-ink);font-size:12px; }.transfer-toast span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.transfer-toast button { color:var(--c-accent);white-space:nowrap; }
 @media (max-width: 520px) { .lib-manager-head { padding:26px 25px 17px; }.lib-preview-detail { margin-inline:14px; } }
 .lib-manager-enter-active, .lib-manager-leave-active { transition: transform .2s ease, opacity .2s ease; }.lib-manager-enter-from, .lib-manager-leave-to { transform: translate(-50%, -46%) scale(.97); opacity: 0; }
 /* 拖拽条：贴在面板右缘，与文档栏那条一个做法 */
@@ -1897,10 +1902,10 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 .lib-row:hover { background: var(--c-hover); }
 .lib-panel-sort .select-menu-trigger{width:auto;min-width:114px;flex:none}
 .lib-row.is-current { background: var(--c-hover); }
-.lib-row.is-draft { background: color-mix(in srgb, var(--color-ds) 5%, var(--c-panel)); }
-.lib-row.is-draft:hover, .lib-row.is-draft.is-current { background: color-mix(in srgb, var(--color-ds) 9%, var(--c-panel)); }
-.lib-row.is-draft .lib-row-icon, .lib-manager-card.is-draft .lib-manager-icon { color: var(--color-ds); }
-.lib-manager-card.is-draft { background: color-mix(in srgb, var(--color-ds) 5%, var(--c-pop)); }
+.lib-row.is-draft { background: color-mix(in srgb, var(--c-accent) 5%, var(--c-panel)); }
+.lib-row.is-draft:hover, .lib-row.is-draft.is-current { background: color-mix(in srgb, var(--c-accent) 9%, var(--c-panel)); }
+.lib-row.is-draft .lib-row-icon, .lib-manager-card.is-draft .lib-manager-icon { color: var(--c-accent); }
+.lib-manager-card.is-draft { background: color-mix(in srgb, var(--c-accent) 5%, var(--c-pop)); }
 /* 图标：与侧边栏的文档图标同尺寸（13px），行内不再单独占位 */
 .lib-row-icon { width: 17px; height: 17px; flex-shrink: 0; object-fit: contain; }
 .lib-row-name {
@@ -1937,12 +1942,12 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
  *
  * .acts-btn 自带的规则只认 .cat-row / .doc-row（见 style.css），
  * 面板的行是 .lib-row，不在那两个选择器里 —— 按钮会一直停在 opacity:0，
- * 看着就是"知识库里没有三个点"。这里补上自己那一条。
+ * 看着就是"抽屉里没有三个点"。这里补上自己那一条。
  */
 .lib-row:hover .acts-btn,
 .lib-row:focus-within .acts-btn { opacity: 1; }
 .lib-row-act:hover { background: var(--c-line); color: var(--c-ink); }
-/* 左上角展开知识库的提示 */
+/* 左上角展开抽屉的提示 */
 /*
  * 标题两行：第一行是主标题，第二行是副标题。
  * 副标题只是略小一点、颜色淡一点 —— 拉得太小会像注脚，反而看不出是同一组。
@@ -1978,7 +1983,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 }
 .brand-input:focus {
   background: var(--c-field);
-  border-color: var(--color-ds);
+  border-color: var(--c-accent);
 }
 
 /* 图标：点一下换图 */
@@ -2037,7 +2042,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
   transform: scale(0.92);
 }
 .rail-btn.is-on {
-  color: var(--color-ds);
+  color: var(--c-accent);
   background: var(--c-active);
 }
 
@@ -2077,7 +2082,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
   color: var(--c-ink);
 }
 .side-menu-item.is-on {
-  color: var(--color-ds);
+  color: var(--c-accent);
 }
 .side-menu-sep {
   height: 1px;
@@ -2166,10 +2171,10 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 .transfer-library-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-height:290px;overflow:auto}
 .transfer-library-grid button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;min-height:85px;padding:11px 13px;border:1px solid transparent;border-radius:22px;corner-shape:superellipse(2);background:var(--c-field);text-align:left}
 .transfer-library-grid button:hover{background:var(--c-hover)}
-.transfer-library-grid button.is-on{border-color:var(--color-ds);background:var(--c-active)}
-.transfer-library-grid button.is-draft{background:color-mix(in srgb,var(--color-ds) 5%,var(--c-pop))}
-.transfer-library-grid button.is-draft:hover{background:color-mix(in srgb,var(--color-ds) 9%,var(--c-pop))}
-.transfer-library-grid button.is-draft.is-on{border-color:var(--color-ds);background:var(--c-active)}
+.transfer-library-grid button.is-on{border-color:var(--c-accent);background:var(--c-active)}
+.transfer-library-grid button.is-draft{background:color-mix(in srgb,var(--c-accent) 5%,var(--c-pop))}
+.transfer-library-grid button.is-draft:hover{background:color-mix(in srgb,var(--c-accent) 9%,var(--c-pop))}
+.transfer-library-grid button.is-draft.is-on{border-color:var(--c-accent);background:var(--c-active)}
 .transfer-library-grid button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-ink);font-size:12px}
 .transfer-library-grid button small{color:var(--c-faint);font-size:10px}
 .transfer-backdrop.overlay-enter-active .transfer-dialog,.transfer-backdrop.overlay-leave-active .transfer-dialog{transition:transform var(--motion-enter) var(--motion-ease),opacity var(--motion-enter) ease}

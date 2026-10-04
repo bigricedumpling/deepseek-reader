@@ -1,3 +1,4 @@
+import { BRAND_NAME, BRAND_DESCRIPTION_ZH } from './brand.mjs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
@@ -41,7 +42,10 @@ function inlineIcon() {
 
 export default defineConfig(async ({ command }) => ({
   base: process.env.VITE_BASE || '/',
-  plugins: [inlineIcon(), { name: 'pdf-runtime-assets', apply: 'build', closeBundle() { for (const dir of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.resolve('node_modules/pdfjs-dist', dir), path.resolve('dist/pdfjs', dir), {recursive:true}); fs.copyFileSync(path.resolve('node_modules/pdfjs-dist/LICENSE'), path.resolve('dist/pdfjs/LICENSE')); fs.rmSync(path.resolve('dist/fonts/Weixin.otf'), {force:true}) } }, ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
+  plugins: [{ name: 'product-brand', transformIndexHtml(html) {
+    const escape = value => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
+    return html.replaceAll('__APP_NAME__', escape(BRAND_NAME)).replaceAll('__APP_DESCRIPTION__', escape(BRAND_DESCRIPTION_ZH))
+  } }, inlineIcon(), { name: 'pdf-runtime-assets', apply: 'build', closeBundle() { for (const dir of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.resolve('node_modules/pdfjs-dist', dir), path.resolve('dist/pdfjs', dir), {recursive:true}); fs.copyFileSync(path.resolve('node_modules/pdfjs-dist/LICENSE'), path.resolve('dist/pdfjs/LICENSE')); fs.rmSync(path.resolve('dist/fonts/Weixin.otf'), {force:true}) } }, ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')

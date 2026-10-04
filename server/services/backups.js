@@ -14,7 +14,7 @@ export function backupService(repo) {
   const realRoot = fs.realpathSync(repo.root)
   const home = path.join(path.dirname(realRoot), 'Reader备份', digest(repo.root).slice(0,12))
   function safeHome() {
-    if (home === realRoot || home.startsWith(realRoot + path.sep)) throw fault('INVALID_BACKUP_LOCATION', '备份目录不能位于当前知识库内')
+    if (home === realRoot || home.startsWith(realRoot + path.sep)) throw fault('INVALID_BACKUP_LOCATION', '备份目录不能位于当前抽屉内')
     let dir = home
     while (dir !== path.dirname(dir)) {
       if (fs.existsSync(dir) && fs.lstatSync(dir).isSymbolicLink()) throw fault('SYMLINK', '备份位置不能是符号链接')

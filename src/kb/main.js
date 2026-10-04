@@ -1,4 +1,6 @@
+import { initAccent } from '../composables/useAccent'
 import { createApp } from 'vue'
+initAccent()
 import '@fontsource/noto-serif-sc/chinese-simplified-400.css'
 import '@fontsource/noto-serif-sc/chinese-simplified-600.css'
 import '@fontsource/noto-serif-sc/latin-400.css'

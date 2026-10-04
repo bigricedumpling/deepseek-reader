@@ -1,3 +1,4 @@
+import { BRAND_NAME } from '../brand.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -15,4 +16,4 @@ fs.cpSync(path.join(root, 'server'), path.join(runtime, 'server'), { recursive: 
 // installations store their own libraries under DOCS_ROOT.
 fs.rmSync(path.join(runtime, 'dist', 'kb.json'), { force: true })
 fs.rmSync(path.join(runtime, 'dist', 'shots'), { recursive: true, force: true })
-console.log('Reader runtime staged for the DSH plugin')
+console.log(`${BRAND_NAME} runtime staged for the DSH plugin`)

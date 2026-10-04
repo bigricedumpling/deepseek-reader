@@ -16,7 +16,7 @@
             v-if="mode === 'prompt'"
             ref="inputEl"
             v-model="draft"
-            class="w-full h-9 px-3 mb-4 ui-round-control bg-[var(--c-field)] outline-none text-[13px] text-[var(--c-ink)] focus:ring-1 focus:ring-[var(--color-ds)]/50"
+            class="w-full h-9 px-3 mb-4 ui-round-control bg-[var(--c-field)] outline-none text-[13px] text-[var(--c-ink)]"
             :placeholder="placeholder"
             @keydown.enter.prevent="onConfirm"
             @keydown.esc.prevent="onCancel"
@@ -28,8 +28,8 @@
             <button class="btn-text" @click="onCancel">取消</button>
             <button v-if="altText" class="btn-text" @click="emit('alt')">{{ altText }}</button>
             <button
-              class="px-3.5 h-7 ui-round-control text-[12.5px] text-white transition-colors"
-              :class="danger ? 'bg-[#d9534f] hover:bg-[#c9302c]' : 'bg-ds hover:bg-ds-dark'"
+              class="app-confirm px-3.5 h-7 ui-round-control text-[12.5px] transition-colors"
+              :class="{ 'is-danger': danger }"
               :disabled="mode === 'prompt' && !draft.trim()"
               @click="onConfirm"
             >
@@ -86,3 +86,12 @@ function onCancel() {
   emit('cancel')
 }
 </script>
+
+<style scoped>
+.app-confirm{background:var(--c-accent);color:var(--c-on-accent)}
+.app-confirm:hover{background:var(--c-accent-hover)}
+.app-confirm.is-danger{background:#c8403b;color:#fff}
+.app-confirm.is-danger:hover{background:#ac302c}
+.app-confirm:disabled{opacity:.38;cursor:default}
+.app-dialog input:focus{outline:1.5px solid var(--c-focus);outline-offset:2px;box-shadow:none}
+</style>

@@ -337,7 +337,7 @@ function landSpot(doc, index, from, deletedSize) {
 /* 当前编辑器实例：插入链接要用它 */
 let activeView = null
 
-/** 从 fromDoc 所在目录算到 target 的相对路径（都在知识库根下） */
+/** 从 fromDoc 所在目录算到 target 的相对路径（都在抽屉根下） */
 function relativePath(fromDoc, target) {
   const a = String(fromDoc || '').split('/').slice(0, -1)
   const b = String(target || '').split('/')
@@ -347,7 +347,7 @@ function relativePath(fromDoc, target) {
   return up.concat(b.slice(i)).join('/')
 }
 
-/** 把正文里的相对链接解析成知识库里的路径（点了要开哪一篇） */
+/** 把正文里的相对链接解析成抽屉里的路径（点了要开哪一篇） */
 export function resolveDocHref(href, fromDoc) {
   const raw = String(href || '').split('#')[0]
   if (!raw || /^[a-z]+:/i.test(raw) || raw.startsWith('/')) return ''
@@ -364,7 +364,7 @@ export function resolveDocHref(href, fromDoc) {
 }
 
 /**
- * 在光标处插入一条指向本知识库其他文档的链接。
+ * 在光标处插入一条指向当前抽屉其他文档的链接。
  *
  * 存成普通的 markdown 链接 —— 正文里不留私货，换任何编辑器打开都还是人话；
  * 点击的行为由下面的"内部链接"分支负责：开工具内部的标签页，不是浏览器标签页。
@@ -510,7 +510,7 @@ export function editorShortcuts(props = {}) {
               window.open(href, '_blank', 'noopener')
               return
             }
-            // 指向本知识库其他文档的链接：开成工具内部的标签页（不是浏览器标签页）
+            // 指向当前抽屉其他文档的链接：开成工具内部的标签页（不是浏览器标签页）
             const target = resolveDocHref(href, props.docId)
             if (!target) return
             e.preventDefault()

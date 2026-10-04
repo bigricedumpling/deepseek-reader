@@ -141,15 +141,15 @@
    * 结果每个图标都淡得像禁用。给次级文字色，图标才立得住。
    */
   --crepe-color-outline: var(--c-sub);
-  --crepe-color-primary: var(--color-ds);
-  --crepe-color-secondary: #e8ecff;
-  --crepe-color-on-secondary: #3448c4;
+  --crepe-color-primary: var(--c-accent);
+  --crepe-color-secondary: var(--c-active);
+  --crepe-color-on-secondary: var(--c-text);
   --crepe-color-inverse: #1a1a1a;
   --crepe-color-on-inverse: #ffffff;
-  --crepe-color-inline-code: #3448c4;
+  --crepe-color-inline-code: var(--c-text);
   --crepe-color-error: #d9534f;
   --crepe-color-hover: #f2f2f2;
-  --crepe-color-selected: #e8ecff;
+  --crepe-color-selected: var(--c-active);
   --crepe-color-inline-area: #ededed;
   --crepe-font-default: var(--reading-font, "Noto Sans SC", sans-serif);
   --crepe-font-title: var(--reading-font, "Noto Sans SC", sans-serif);
@@ -173,7 +173,7 @@
   font-size: var(--reading-size, 15.5px);
   line-height: var(--reading-lh, 1.95);
   color: var(--c-text);
-  caret-color: var(--color-ds);
+  caret-color: var(--c-accent);
   letter-spacing: var(--reading-tracking, 0em);
   text-align: justify;
   text-justify: inter-ideograph;
@@ -407,8 +407,8 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 
 /* 链接：唯一的彩色 */
 .crepe-host .milkdown .ProseMirror a {
-  color: var(--color-ds);
-  border-bottom: 1px solid rgba(77, 107, 254, 0.25);
+  color: var(--c-accent);
+  border-bottom: 1px solid color-mix(in srgb,currentColor 40%,transparent);
   text-decoration: none;
 }
 
@@ -604,7 +604,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 /*
  * 关掉 Crepe 的「插入行列」悬停指示器。
  *
- * 它是一根和表格等高的竖线（实测这张表 1520px，蓝色 #4d6bfe），加号胶囊用
+ * 它是一根和表格等高的竖线（实测这张表 1520px，强调色），加号胶囊用
  * translate(-50%, -50%) 以光标为中心定位。结果是鼠标在表格里稍微一动，
  * 就有一根蓝线切过单元格文字、一个加号压在光标底下反复闪，非常吵。
  *
@@ -620,7 +620,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 .col-guide {
   position: fixed;
   width: 2px;
-  background: var(--color-ds);
+  background: var(--c-accent);
   opacity: 0.45;
   border-radius: 1px;
   pointer-events: none;
@@ -791,15 +791,15 @@ body[data-theme="sepia"] .crepe-host .milkdown {
   --crepe-color-on-surface: var(--c-text);
   --crepe-color-on-surface-variant: var(--c-sub);
   --crepe-color-outline: var(--c-sub);
-  --crepe-color-primary: var(--color-ds);
-  --crepe-color-secondary: #e3e7f8;
-  --crepe-color-on-secondary: #3448c4;
+  --crepe-color-primary: var(--c-accent);
+  --crepe-color-secondary: var(--c-active);
+  --crepe-color-on-secondary: var(--c-text);
   --crepe-color-inverse: #2b2721;
   --crepe-color-on-inverse: #f4eedd;
-  --crepe-color-inline-code: #3448c4;
+  --crepe-color-inline-code: var(--c-text);
   --crepe-color-error: #c0473f;
   --crepe-color-hover: rgba(90, 74, 40, 0.07);
-  --crepe-color-selected: rgba(77, 107, 254, 0.14);
+  --crepe-color-selected: var(--c-selection);
   --crepe-color-inline-area: rgba(90, 74, 40, 0.09);
 }
 /* 行内代码在浅色下是冷灰底，护眼里换成暖的 */
@@ -823,22 +823,22 @@ body[data-theme="dark"] .crepe-host .milkdown {
   --crepe-color-outline: var(--c-sub);
   --crepe-color-inverse: #ececec;
   --crepe-color-on-inverse: var(--c-surface);
-  --crepe-color-inline-code: #9db2ff;
+  --crepe-color-inline-code: var(--c-text);
   --crepe-color-hover: rgba(255, 255, 255, 0.07);
-  --crepe-color-selected: rgba(122, 146, 255, 0.2);
+  --crepe-color-selected: var(--c-selection);
   --crepe-color-inline-area: rgba(255, 255, 255, 0.08);
 }
 body[data-theme="dark"] .crepe-host .milkdown .ProseMirror code {
   background: var(--c-code-inline);
-  color: #9db2ff;
+  color: var(--c-text);
 }
 body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
   background: var(--c-code-bg);
 }
 
-/* 选中态用品牌蓝 */
+/* 选区使用独立灰阶，区别于控件选中态 */
 .crepe-host .milkdown .ProseMirror ::selection {
-  background: rgba(77, 107, 254, 0.16);
+  background: var(--c-selection);
 }
 /* 块格式入口属于选区工具栏，与行内格式共用一个浮窗。 */
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="block-type"] {
@@ -894,7 +894,7 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .crepe-host .milkdown .ProseMirror .reader-column> :first-child{margin-top:0!important}
 .crepe-host .milkdown .ProseMirror .reader-column> :last-child{margin-bottom:0!important}
 .crepe-host .milkdown .ProseMirror .reader-column .milkdown-image-block{width:100%;max-width:100%}
-.reader-column-drop{position:fixed;z-index:9999;width:3px;background:var(--color-ds);pointer-events:none;border-radius:3px}
+.reader-column-drop{position:fixed;z-index:9999;width:3px;background:var(--c-accent);pointer-events:none;border-radius:3px}
 @media(max-width:640px){.crepe-host .milkdown .ProseMirror .reader-columns{grid-template-columns:1fr;gap:20px}}
 
 /* Editable callout: the icon is decoration; the body is real editor content. */
@@ -907,14 +907,21 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 /* Callout identity is a clickable control; body editing stays independent. */
 .editor-shell .rich-callout-icon{display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:28px;cursor:pointer;border-radius: 8px}
 .editor-shell .rich-callout-icon:hover{background:var(--c-hover)}
-.editor-shell .rich-callout-icon:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}
+.editor-shell .rich-callout-icon:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
 .editor-shell [contenteditable="false"] .rich-callout-icon{cursor:default}
 .editor-shell [contenteditable="false"] .rich-callout-icon:hover{background:none}
-.reader-raw-block{position:relative;min-height:24px;cursor:text;border-radius:6px;white-space:normal}.reader-raw-block:hover{outline:1px solid var(--c-line)}.reader-raw-block:focus-visible{outline:2px solid var(--color-ds)}.reader-raw-block pre{white-space:pre-wrap}.reader-footnote-reference{color:var(--color-ds);font-size:.75em}.reader-footnote-definition{display:flex;align-items:baseline;gap:12px;font-size:.85em;color:var(--c-sub)}.reader-footnote-definition>.footnote-label{flex-shrink:0}.reader-footnote-definition>div{min-width:0;flex:1}
+.reader-raw-block{position:relative;min-height:24px;cursor:text;border-radius:6px;white-space:normal}.reader-raw-block:hover{outline:1px solid var(--c-line)}.reader-raw-block:focus-visible{outline:2px solid var(--c-accent)}.reader-raw-block pre{white-space:pre-wrap}.reader-footnote-reference{color:var(--c-accent);font-size:.75em}.reader-footnote-definition{display:flex;align-items:baseline;gap:12px;font-size:.85em;color:var(--c-sub)}.reader-footnote-definition>.footnote-label{flex-shrink:0}.reader-footnote-definition>div{min-width:0;flex:1}
 .reader-frontmatter{font:12px/1.5 var(--font-sans);color:var(--c-sub);padding:6px 10px;background:var(--c-field);width:max-content;margin:8px 0}.source-mode-bar{gap:3px!important;width:max-content;background:var(--c-field);padding:3px;border-radius:9px}.source-mode-bar .lossy-btn{border:0!important;padding:4px 10px!important}.source-mode-bar .lossy-btn[aria-pressed=true]{background:var(--c-pop);color:var(--c-ink)}
 .raw-edit-button{position:absolute;right:4px;top:3px;padding:3px 7px;border-radius:6px;background:var(--c-field);font:11px/1.5 var(--font-sans);color:var(--c-sub);opacity:0}.reader-raw-block:hover>.raw-edit-button,.reader-raw-block:focus-within>.raw-edit-button{opacity:1}.reader-frontmatter{padding-right:48px}.ProseMirror[contenteditable=false] .raw-edit-button{display:none}@media(hover:none){.raw-edit-button{opacity:1;position:static;float:right}}
-.milkdown-latex-inline-edit{display:none!important}.crepe-host [data-type="math_inline"][role="button"]{cursor:pointer;border-radius:4px}.crepe-host [data-type="math_inline"]:focus-visible{outline:2px solid var(--color-ds);outline-offset:3px}
+.milkdown-latex-inline-edit{display:none!important}.crepe-host [data-type="math_inline"][role="button"]{cursor:pointer;border-radius:4px}.crepe-host [data-type="math_inline"]:focus-visible{outline:2px solid var(--c-accent);outline-offset:3px}
 
 /* File metadata is retained in serialization, outside the visible document body. */
 .crepe-host .milkdown .ProseMirror .reader-frontmatter{display:none}
 .crepe-host .milkdown .milkdown-slash-menu .tab-group ul li{padding:5px 6px;font-size:11px}
+
+/* CodeMirror chrome follows the same neutral surface and selection scale. */
+.crepe-host .milkdown .cm-editor{color:var(--c-text);background:var(--c-code-bg)}
+.crepe-host .milkdown .cm-gutters{color:var(--c-sub);background:var(--c-code-bg);border:0}
+.crepe-host .milkdown .cm-activeLine,.crepe-host .milkdown .cm-activeLineGutter{background:var(--c-hover)}
+.crepe-host .milkdown .cm-selectionBackground,.crepe-host .milkdown .cm-focused .cm-selectionBackground{background:var(--c-selection)!important}
+.crepe-host .milkdown .cm-cursor{border-left-color:var(--c-ink)}

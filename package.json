@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Local Markdown reader and knowledge workspace for DeepSeek Harness",
+  "description": "Typocket: Read, write and organize local documents in DeepSeek Harness.",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
@@ -31,7 +31,11 @@
     "test:user-recovery": "node scripts/test-user-recovery.mjs",
     "test:upgrade": "node scripts/test-upgrade.mjs",
     "test:workflow": "node scripts/test-workflow.mjs",
-    "measure:performance": "node scripts/measure-performance.mjs"
+    "measure:performance": "node scripts/measure-performance.mjs",
+    "brand:sync": "node scripts/sync-brand.mjs",
+    "brand:check": "node scripts/sync-brand.mjs --check",
+    "predev": "npm run brand:sync",
+    "prebuild": "npm run brand:sync"
   },
   "dependencies": {
     "@codemirror/language-data": "^6.5.2",

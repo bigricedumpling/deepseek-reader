@@ -1,4 +1,6 @@
+import { initAccent } from './composables/useAccent'
 import { createApp } from 'vue'
+initAccent()
 import { createPinia } from 'pinia'
 
 /* 正文字体一：思源宋体 */

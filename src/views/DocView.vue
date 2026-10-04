@@ -4,7 +4,7 @@
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
       <DocTabs v-if="tabItems.length" class="mr-auto" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" />
-      <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原知识库"><PhClockCounterClockwise :size="12" />恢复副本</span>
+      <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原抽屉"><PhClockCounterClockwise :size="12" />恢复副本</span>
       <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
       <div v-if="!isPreview" ref="searchWrap" class="doc-search-wrap" :style="{ '--search-available': searchPanelWidth + 'px' }">
@@ -211,7 +211,7 @@
         @rebuild="restoredEpoch++"
       />
       <div v-else-if="!isPreview && !docId && !store.loading" class="ui-font text-center pt-24 text-[var(--c-sub)]">
-        <p class="text-[14px]">这个知识库还没有文档</p>
+        <p class="text-[14px]">这个抽屉还没有文档</p>
         <button v-if="!store.isGuest" class="mt-4 text-[12px] text-ds hover:underline" @click="emit('create-doc')">新建第一篇文档</button>
       </div>
       <p v-else-if="!isPreview && error" class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">读取失败，请点击上方重新读取</p>
@@ -232,12 +232,12 @@
       <template v-else-if="isPdf">
         <span class="ui-font tabular-nums">{{ pdfPages ? pdfPages + ' 页' : 'PDF' }}</span>
         <span v-if="meta.size" class="ui-font tabular-nums">{{ (meta.size / 1024 / 1024).toFixed(1) }} MB</span>
-        <span v-if="store.pdfTranslate.status === 'running'" class="ui-font tabular-nums text-[var(--color-ds)]">
+        <span v-if="store.pdfTranslate.status === 'running'" class="ui-font tabular-nums text-[var(--c-accent)]">
           翻译中 {{ store.pdfTranslate.progress }}%
         </span>
         <button
           v-else-if="store.pdfTranslate.status === 'done'"
-          class="ui-font underline text-[var(--color-ds)]"
+          class="ui-font underline text-[var(--c-accent)]"
           @click="onTranslate"
         >
           {{ store.pdfView === 'translated' ? '正在看译文，点回原文' : '译文已就绪，点看译文' }}
@@ -714,7 +714,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   transition: color 0.12s;
 }
 .pop-item.is-on .pop-hint {
-  color: var(--color-ds);
+  color: var(--c-accent);
   opacity: 0.6;
 }
 .pop-item:hover {
@@ -725,7 +725,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   transform: scale(0.98);
 }
 .pop-item.is-on {
-  color: var(--color-ds);
+  color: var(--c-accent);
 }
 /* 排版面板 */
 .type-label {
@@ -772,8 +772,8 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   height: 28px;
   padding: 0 10px;
   border-radius: var(--radius-control);
-  background: var(--color-ds);
-  color: #fff;
+  background: var(--c-accent);
+  color: var(--c-on-accent);
   font-size: 11.5px;
   flex-shrink: 0;
 }
@@ -802,7 +802,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 .type-chip:hover { background: var(--c-chip-hover); color: var(--c-ink); }
 .type-chip:active { transform: scale(0.96); }
 .type-chip.is-on {
-  color: var(--color-ds);
+  color: var(--c-accent);
   background: var(--c-active);
 }
 .font-choices .type-chip { justify-content: flex-start; padding-inline: 10px; }
@@ -816,7 +816,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   color: var(--c-ink);
 }
 .type-chip.is-on .chip-icon {
-  color: var(--color-ds);
+  color: var(--c-accent);
 }
 .menu-icon {
   flex-shrink: 0;
@@ -854,7 +854,7 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--color-ds);
+  background: var(--c-accent);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
@@ -898,14 +898,14 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
 </style>
 
 <style scoped>
-.doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--color-ds)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
+.doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--c-accent)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
 .document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
 <style scoped>.status-to-top{display:grid;place-items:center;width:26px;height:24px;background:var(--c-field);border-radius:var(--radius-surface)}.status-to-top:hover{background:var(--c-chip-hover)}.status-to-top:disabled{opacity:.35;cursor:default}.guest-access-note{gap:4px;flex-shrink:0;display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);color:var(--c-sub);font:11px var(--font-sans)}@media(max-width:640px){.guest-access-note{padding-inline:6px}}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
-<style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
+<style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
 <style scoped>

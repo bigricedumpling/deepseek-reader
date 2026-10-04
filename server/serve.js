@@ -1,3 +1,4 @@
+import { BRAND_NAME } from './brand.js'
 /**
  * 分享服务器：把打包好的前端 + 同一套 /api 一起端出去。
  *
@@ -234,7 +235,7 @@ function notFound(res) {
 
 server.listen(PORT, '127.0.0.1', () => {
   process.send?.({ port: server.address().port })
-  console.log('文档工作台已启动：http://127.0.0.1:' + server.address().port + '/')
+  console.log(`${BRAND_NAME} 已启动：http://127.0.0.1:` + server.address().port + '/')
   console.log('文档根目录：' + DOCS_ROOT)
 })
 

@@ -31,7 +31,7 @@ export function buildPublicSnapshot(source, share, destination) {
   const assets = resources(source)
   function copy(rel) {
     const from = path.join(source.root, rel), to = path.join(destination, rel)
-    if (!path.resolve(to).startsWith(path.resolve(destination) + path.sep) || !fs.realpathSync(from).startsWith(fs.realpathSync(source.root) + path.sep)) throw Error('资源路径超出知识库')
+    if (!path.resolve(to).startsWith(path.resolve(destination) + path.sep) || !fs.realpathSync(from).startsWith(fs.realpathSync(source.root) + path.sep)) throw Error('资源路径超出抽屉')
     if (fs.lstatSync(from).isSymbolicLink()) throw Error('公开快照不支持符号链接')
     fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(from, to)
   }

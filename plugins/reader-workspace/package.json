@@ -1,7 +1,7 @@
 {
   "name": "dsh-reader-workspace",
-  "version": "0.2.0-preview.2",
-  "description": "Open Reader in the DSH sidebar to read and organize local knowledge bases and preview workspace Markdown",
+  "version": "0.2.0-preview.3",
+  "description": "Typocket: Read, write and organize local documents in DeepSeek Harness.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
   },
   "files": [
     "index.js",
+    "brand.js",
     "client.js",
     "managed-server.js",
     "platform.js",

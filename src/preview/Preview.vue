@@ -2,7 +2,7 @@
   <main class="preview-shell">
     <header class="preview-header">
       <div class="preview-identity"><span class="preview-kicker">工作区文件</span><span class="preview-filename" :title="filePath">{{ title || 'Markdown 预览' }}</span></div>
-      <button v-if="ready" class="collect-button" type="button" @click="openPicker">收录副本到知识库</button>
+      <button v-if="ready" class="collect-button" type="button" @click="openPicker">收录副本到抽屉</button>
     </header>
     <div v-if="!ready" class="preview-state">正在读取工作区文件…</div>
     <div v-else class="preview-reader" @click="onArticleClick">
@@ -10,16 +10,16 @@
       <article class="preview-image-probe" aria-hidden="true" v-html="html" />
     </div>
     <div v-if="picker" class="picker-mask" @click.self="picker=false">
-      <section class="picker" role="dialog" aria-modal="true" aria-label="收录副本到知识库" @keydown.esc="picker=false">
-        <div class="picker-heading">收录副本到知识库<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
-        <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus /><SelectMenu v-model="libFilter" :options="[{value:'all',label:'全部'},{value:'private',label:'未公开'},{value:'public',label:'公开'}]" label="筛选知识库" /></div>
+      <section class="picker" role="dialog" aria-modal="true" aria-label="收录副本到抽屉" @keydown.esc="picker=false">
+        <div class="picker-heading">收录副本到抽屉<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
+        <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus /><SelectMenu v-model="libFilter" :options="[{value:'all',label:'全部'},{value:'private',label:'未公开'},{value:'public',label:'公开'}]" label="筛选抽屉" /></div>
         <div class="picker-grid">
           <button v-for="lib in filteredLibraries" :key="lib.name" type="button" class="picker-card" :class="{ selected: destination === lib.name, draft: lib.name === DRAFT_NAME }" @click="destination=lib.name">
             <ContentIcon :value="lib.name === DRAFT_NAME ? 'icon:draft' : lib.icon || 'icon:book'" :size="24" />
             <strong>{{ lib.name }}</strong>
             <small>{{ lib.docs || 0 }} 篇</small>
           </button>
-          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的知识库</p><div v-if="!libraries.length" class="empty-library-create"><label>知识库名称<input v-model="newLibraryName" placeholder="新知识库" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建知识库</button></div>
+          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的抽屉</p><div v-if="!libraries.length" class="empty-library-create"><label>抽屉名称<input v-model="newLibraryName" placeholder="新抽屉" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建抽屉</button></div>
         </div>
         <label>文档名称<input v-model="newName" maxlength="160" /></label>
         <p v-if="pickerError" class="picker-error">{{ pickerError }}</p>
@@ -218,7 +218,7 @@ async function openPicker() {
       fetch(API_BASE + '/api/libs', { credentials: 'same-origin' }).then(r => r.json())
     ])
     if (me?.data?.role !== 'owner') throw Error('请先在阅读器中进入管理工作区')
-    if (!result.ok) throw Error(result.error || '无法读取知识库')
+    if (!result.ok) throw Error(result.error || '无法读取抽屉')
     libraries.value = result.data.libs
     if (!libraries.value.some(lib => lib.name === destination.value)) destination.value = libraries.value[0]?.name || ''
   } catch (error) { pickerError.value = error.message }
@@ -279,8 +279,8 @@ body { margin: 0; }
 .picker-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(148px,1fr)); gap: 10px; max-height: min(42dvh,350px); overflow: auto; padding: 2px; }
 .picker-card { display: flex; align-items: flex-start; flex-direction: column; gap: 5px; min-height: 120px; padding: 16px; border: 1px solid transparent; border-radius: 24px; corner-shape: superellipse(2); background: var(--c-field); color: var(--c-text); text-align: left; cursor: pointer; }
 .picker-card:hover { background: var(--c-hover); }
-.picker-card.selected { border-color: var(--color-ds); background: color-mix(in srgb,var(--color-ds) 8%,var(--c-pop)); }
-.picker-card.draft { background: color-mix(in srgb,var(--color-ds) 5%,var(--c-pop)); }
+.picker-card.selected { border-color: var(--c-accent); background: color-mix(in srgb,var(--c-accent) 8%,var(--c-pop)); }
+.picker-card.draft { background: color-mix(in srgb,var(--c-accent) 5%,var(--c-pop)); }
 .picker-card-icon { font-size: 21px; line-height: 1; }
 .picker-card strong { font-size: 13px; font-weight: 400; }
 .picker-card small { font-size: 11px; color: var(--c-sub); }
