@@ -11,7 +11,7 @@ export async function openRestoredReader(root){
  const stateFile=path.join(root,'.reader','restore-viewer.json')
  let port=0
  if(fs.existsSync(stateFile)){const value=JSON.parse(fs.readFileSync(stateFile,'utf8'));port=value.port;if(!Number.isInteger(port)||port<1||port>65535)throw Error('恢复副本的服务记录无效')}
- const child=spawn(process.execPath,[fileURLToPath(new URL('../serve.js',import.meta.url))],{env:{...process.env,DOCS_ROOT:root,PORT:String(port),READER_RUNTIME_DIR:path.join(root,'.reader','runtime'),ELECTRON_RUN_AS_NODE:'1',KB_TITLE:'Reader · 恢复副本',READER_RESTORED_COPY:'1'},stdio:['ignore','ignore','pipe','ipc']})
+ const child=spawn(process.execPath,[fileURLToPath(new URL('../serve.js',import.meta.url))],{env:{...process.env,DOCS_ROOT:root,PORT:String(port),READER_RUNTIME_DIR:path.join(root,'.reader','runtime'),ELECTRON_RUN_AS_NODE:'1',KB_TITLE:'Reader，恢复副本',READER_RESTORED_COPY:'1'},stdio:['ignore','ignore','pipe','ipc']})
  const ready=new Promise((resolve,reject)=>{
   let errors='',settled=false
   const timer=setTimeout(()=>{child.kill();reject(Error('恢复副本启动超时，请重试'))},15000)

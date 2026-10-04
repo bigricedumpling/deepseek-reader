@@ -1,20 +1,12 @@
-/* All floating shells share one visual surface; components own only their layout.
-   Explicit precedence prevents scoped component styles from reintroducing drift. */
-:is(.reader-dialog,.app-dialog,.access-dialog,.pick,.pop-menu,.side-menu,.lib-manager,.transfer-dialog,.picker,.public-sharing-panel,.select-menu-panel,
-    .tree-menu,.identity-menu,.doc-search-panel,.bt-menu,.text-style-menu,.rail-toc-hint) {
-  background:var(--c-pop)!important;
-  border:1px solid var(--c-line)!important;
-  box-shadow:var(--c-pop-shadow)!important;
-}
-:is(.app-backdrop,.reader-modal-shade,.access-backdrop) {
-  background:var(--c-overlay)!important;
-  backdrop-filter:none;
-}
-@media(max-width:820px) {
-  .lib-panel {
-    background:var(--c-pop)!important;
-    border:1px solid var(--c-line)!important;
-    box-shadow:var(--c-pop-shadow)!important;
-  }
-  .lib-modal-backdrop { background:var(--c-overlay)!important }
-}
+/* Elevation follows interaction, not individual components.
+   Attached controls: hairline + small shadow. Modal tasks: scrim + deeper shadow.
+   Hints: dark fill, no border or shadow. Inline cards: no elevation. */
+:root{--surface-menu-border:color-mix(in srgb,var(--c-ink) 10%,transparent);--surface-menu-shadow:0 3px 10px #00000008,0 10px 28px #0000000d;--surface-dialog-shadow:0 12px 40px #00000014,0 3px 12px #00000008}
+:is(.pop-menu,.side-menu,.select-menu-panel,.tree-menu,.identity-menu,.doc-search-panel,.bt-menu,.text-style-menu,.milkdown-toolbar,.milkdown-slash-menu){background:var(--c-pop)!important;border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-menu-shadow)!important}
+:is(.reader-dialog,.app-dialog,.access-dialog,.pick,.lib-manager,.transfer-dialog,.picker,.public-sharing-panel){background:var(--c-pop)!important;border:0!important;box-shadow:var(--surface-dialog-shadow)!important}
+:is(.app-backdrop,.reader-modal-shade,.access-backdrop,.transfer-backdrop,.public-sharing-backdrop){background:var(--c-overlay)!important;backdrop-filter:none}
+:is(.rail-toc-hint,.reader-tooltip){border:0!important;box-shadow:none!important;background:rgba(30,33,42,.82)!important;color:white!important}
+@media(max-width:820px){.lib-panel{background:var(--c-pop)!important;border:0!important;box-shadow:var(--surface-dialog-shadow)!important}.lib-modal-backdrop{background:var(--c-overlay)!important}}
+/* Anchored icon pickers do not dim the page, so they use the menu level. */
+.icon-picker.reader-dialog{border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-menu-shadow)!important}
+.crepe-host{--crepe-shadow-1:var(--surface-menu-shadow);--crepe-shadow-2:var(--surface-menu-shadow)}

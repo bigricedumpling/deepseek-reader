@@ -209,7 +209,7 @@ function askDeleteCategory(folder) {
   ask({
     title: '删除目录' + folder.name + '',
     message:
-      '整个目录会连同里面的东西一起挪到 .回收站，文件不会被真删掉，想找回随时可以。',
+      '目录及其内容将移入回收站。',
     confirmText: '删除',
     danger: true,
     onConfirm: async () => {
@@ -247,7 +247,7 @@ function askDeleteDoc(doc) {
   ask({
     title: '删除文档' + doc.name + '',
     message:
-      '文件不会被真删掉，会从 ' + doc.file + ' 挪到 .回收站 里，想找回随时可以。' +
+      '移入回收站：' + doc.file +
       (editingThis ? '\n\n注意：这篇正文有改动还没保存，删掉之后这些改动也没了。' : ''),
     confirmText: '删除',
     danger: true,

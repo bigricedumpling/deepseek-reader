@@ -12,37 +12,26 @@
       </details>
       <input ref="replacementInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="replaceImage" />
     </div>
-    <div v-if="lossy && !readonly" class="source-mode-note ui-font">
-      <div class="source-mode-bar">
-        <span title="此文档包含需要保留原格式的结构，可阅读或主动编辑 Markdown 源码">原格式阅读</span>
-        <button class="lossy-btn" :aria-pressed="sourceEditing" @click="sourceEditing=!sourceEditing">{{ sourceEditing ? '返回阅读' : '编辑源码' }}</button>
-        <button v-if="diff.length" class="lossy-btn" @click="showDiff=!showDiff">{{ showDiff ? '收起格式差异' : '格式差异' }}</button>
+    <div v-if="!readonly" class="source-mode-note ui-font">
+      <div class="source-mode-bar" role="group" aria-label="编辑方式">
+        <button class="lossy-btn" :aria-pressed="!sourceEditing" @click="returnToEditor">{{ lossy ? '阅读' : '编辑' }}</button>
+        <button class="lossy-btn" :aria-pressed="sourceEditing" @click="sourceEditing=true">Markdown</button>
       </div>
-      <div v-if="showDiff" class="lossy-actions">
-        <span>转换为富文本会采用下面的变化。</span>
-        <button v-if="!hasTransientImages" class="lossy-btn" @click="emit('canonize', roundTripText)">按这些变化转换</button>
-      </div>
-      <div v-if="sourceEditing" class="lossy-actions"><button class="lossy-btn" @click="chooseNewImage">插入图片</button><input ref="newImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="insertNewImage" /></div>
-      <ul v-if="showDiff" class="lossy-diff">
-        <li v-for="d in diff" :key="d.line">
-          <span class="lossy-line">第 {{ d.line }} 行</span>
-          <span class="lossy-side is-before">- {{ d.original === null ? '（没有这一行）' : d.original }}</span>
-          <span class="lossy-side is-after">+ {{ d.out === null ? '（编辑器会删掉）' : d.out }}</span>
-        </li>
-      </ul>
     </div>
     <textarea
-      v-if="lossy && sourceEditing && !readonly"
+      v-if="sourceEditing && !readonly"
       ref="srcEl"
       class="src-editor"
+      aria-label="Markdown 内容"
       :value="value"
       :readonly="readonly"
       spellcheck="false"
       @input="onSourceInput"
     />
     <MarkdownReading v-if="lossy && (!sourceEditing || readonly)" :value="value" />
-    <div v-show="!lossy" ref="host" class="crepe-host"></div>
+    <div v-show="!lossy && !sourceEditing" ref="host" class="crepe-host"></div>
 
+    <RawBlockEditor v-if="rawBlock" :value="rawBlock.node.attrs.value" @close="rawBlock=null" @save="saveRawBlock" />
     <!-- 块左侧那个六点手柄，点一下弹出来的转为菜单 -->
     <Transition name="pop">
       <BlockTypeMenu
@@ -62,7 +51,7 @@
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Crepe } from '@milkdown/crepe'
 import { renderMermaidSvg } from '../utils/mermaid'
-import { normalizeMarkdown, diffLines, isCosmeticOnly } from '../utils/markdown-normalize'
+import { normalizeMarkdown, isCosmeticOnly } from '../utils/markdown-normalize'
 import { editorShortcuts, applyBlockKind, blockKindOf } from '../utils/editor-shortcuts'
 import { editorFold, bindFoldView, refreshFolds } from '../utils/editor-fold'
 import { foldKey, isFolded, isFoldable, setFoldable, toggleFold, foldState, foldDoc } from '../utils/toc-fold'
@@ -70,6 +59,8 @@ import BlockTypeMenu from './BlockTypeMenu.vue'
 import TextStyleMenu from './TextStyleMenu.vue'
 import IconPicker from './IconPicker.vue'
 import MarkdownReading from './MarkdownReading.vue'
+import RawBlockEditor from './RawBlockEditor.vue'
+import { preservedRemark, preservedSchema, configurePreservedMarkdown } from '../utils/editor-preserved'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
@@ -101,7 +92,7 @@ const props = defineProps({
   /** 文档在仓库里的相对路径，列宽旁路文件用它做键 */
   docFile: { type: String, default: '' }
 })
-const emit = defineEmits(['update:value', 'lossy', 'canonize', 'restore', 'pick-doc', 'open-doc'])
+const emit = defineEmits(['update:value', 'lossy', 'canonize', 'restore', 'pick-doc', 'open-doc', 'rebuild'])
 
 const host = ref(null)
 const srcEl = ref(null)
@@ -116,9 +107,6 @@ const colw = useTableColumnWidths({
 const lossy = ref(false)
 const sourceEditing = ref(false)
 /** 有损时：还原后的文本（用户点"按编辑器规范重排"就写它）与差异行 */
-const roundTripText = ref('')
-const diff = ref([])
-const showDiff = ref(false)
 const uploadError = ref('')
 const replacementInput = ref(null)
 const newImageInput = ref(null)
@@ -322,10 +310,12 @@ onMounted(async () => {
   if (props.readonly) crepe.setReadonly(true)
   crepe.editor.use(editorShortcuts({ docId: props.docId, onOpenDoc: (path) => emit('open-doc', path) }))
   crepe.editor.config(configureInlineStyleMarkdown)
+  crepe.editor.config(configurePreservedMarkdown)
   crepe.editor.use(imagePaste(uploadImage,message=>{uploadError.value=message}))
   crepe.editor.use(columnsRemark).use(columnSchema).use(columnsSchema).use(columnsDrag)
   crepe.editor.use(richBlockRemark).use(calloutSchema).use(richBlockSchema).use(calloutKeys)
   crepe.editor.use(inlineStyleRemark).use(textColorMark).use(highlightMark).use(underlineMark)
+  crepe.editor.use(preservedRemark).use(preservedSchema)
   // 正文里的标题折叠（跟右侧目录共用一份折叠状态）
   crepe.editor.use(editorFold())
 
@@ -362,6 +352,7 @@ onMounted(async () => {
   window.addEventListener('reader-restore-version', restoreVersion)
   host.value?.addEventListener('dblclick', editRich)
   host.value?.addEventListener('click', openCalloutIcon)
+  host.value?.addEventListener('click', openRawBlock)
   host.value?.addEventListener('keydown', onCalloutIconKey, true)
 
   // 开发期把编辑器和原文快照暴露出来，方便查往返到底差在哪
@@ -388,13 +379,8 @@ onMounted(async () => {
   const differs = roundTrip.replace(/\s+$/, '') !== String(baseline).replace(/\s+$/, '')
   // 只有格式写法不同才让富文本继续工作；真正有内容差异时保留源码编辑。
   // 打开文档本身绝不自动改写磁盘内容。
-  const sourceOnly = /^(---|\+\+\+)\r?\n[\s\S]*?\r?\n\1(?:\r?\n|$)/.test(baseline) || /^\[\^[^\]]+\]:/m.test(baseline) || /^\s*<(?:div|details|summary|table|figure|section)(?:\s|>)/mi.test(baseline)
-  lossy.value = sourceOnly || (differs && !isCosmeticOnly(baseline, roundTrip))
+  lossy.value = differs && !isCosmeticOnly(baseline, roundTrip)
   emit('lossy', lossy.value)
-  if (lossy.value) {
-    roundTripText.value = roundTrip
-    diff.value = diffLines(baseline, roundTrip, 6)
-  }
 
   // 只有真的敲了键盘、粘贴或拖放，才算用户编辑过
   for (const ev of ['keydown', 'paste', 'cut', 'drop', 'beforeinput']) {
@@ -438,7 +424,21 @@ function viewOf() {
 
 function restoreVersion(e){if(!props.readonly&&e.detail.path===props.docFile)emit('restore',e.detail.content)}
 function openRichDoc(e){emit('open-doc',e.detail)}
-const calloutPicker=shallowRef(null)
+const calloutPicker=shallowRef(null),rawBlock=shallowRef(null)
+function openRawBlock(e){
+ if(props.readonly)return
+ const raw=e.target.closest('[data-reader-raw]'),view=viewOf()
+ if(!raw||!view)return
+ if(e.type==='click'&&!e.target.closest('.raw-edit-button'))return
+ e.preventDefault();e.stopPropagation()
+ view.state.doc.descendants((node,pos)=>{if(node.type.name==='reader_raw'&&view.nodeDOM(pos)===raw){rawBlock.value={pos,node};return false}})
+}
+function saveRawBlock(value){
+ const view=viewOf(),target=rawBlock.value
+ if(!view||!target||view.state.doc.nodeAt(target.pos)!==target.node)return
+ userTyped=true;view.dispatch(view.state.tr.setNodeMarkup(target.pos,undefined,{value}));rawBlock.value=null
+}
+
 function openCalloutIcon(e){
  if(props.readonly||lossy.value)return
  const anchor=e.target.closest('.rich-callout-icon'),el=anchor?.closest('[data-reader-callout], [data-reader-block]'),view=viewOf()
@@ -448,7 +448,7 @@ function openCalloutIcon(e){
  e.preventDefault();e.stopPropagation()
  calloutPicker.value={anchor,pos,node,path:props.docFile}
 }
-function onCalloutIconKey(e){if((e.key==='Enter'||e.key===' ')&&e.target.closest('.rich-callout-icon'))openCalloutIcon(e)}
+function onCalloutIconKey(e){if(e.key==='Enter'&&e.target.matches('[data-reader-raw]')){openRawBlock(e);return}if((e.key==='Enter'||e.key===' ')&&e.target.closest('.rich-callout-icon'))openCalloutIcon(e)}
 function saveCalloutIcon(icon){
  const target=calloutPicker.value,view=viewOf()
  if(props.readonly||!view||!target||target.path!==props.docFile)throw Error('文档已切换，请重新选择图标')
@@ -461,7 +461,9 @@ function saveCalloutIcon(icon){
 }
 function editRich(e){
  if(props.readonly)return
- const view=viewOf(),el=e.target.closest('[data-reader-block], [data-reader-callout]');if(!el||!view)return
+ if(e.target.closest('[data-reader-raw]')){openRawBlock(e);return}
+ const view=viewOf()
+ const el=e.target.closest('[data-reader-block], [data-reader-callout]');if(!el||!view)return
  if(el.hasAttribute('data-reader-callout')||e.target.closest('.rich-callout-icon'))return
  let pos=view.posAtDOM(el,0);if(el.hasAttribute('data-reader-callout'))pos--
  const node=view.state.doc.nodeAt(pos);if(!node||!['reader_block','reader_callout'].includes(node.type.name))return
@@ -734,6 +736,7 @@ async function onMenuPick(kind) {
   applyBlockKind(view, kind)
 }
 
+function returnToEditor(){if(sourceEditing.value)emit('rebuild');sourceEditing.value=false}
 function onSourceInput(e) {
   emit('update:value', e.target.value)
 }
@@ -744,6 +747,7 @@ onBeforeUnmount(async () => {
   window.removeEventListener('reader-restore-version', restoreVersion)
   host.value?.removeEventListener('dblclick', editRich)
   host.value?.removeEventListener('click', openCalloutIcon)
+  host.value?.removeEventListener('click', openRawBlock)
   host.value?.removeEventListener('keydown', onCalloutIconKey, true)
   host.value?.removeEventListener('pointerdown', onHandleDown, true)
   host.value?.removeEventListener('click', onHandleClick, true)

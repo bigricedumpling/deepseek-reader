@@ -32,7 +32,7 @@
         </button>
         <transition name="pop">
           <div v-if="open === 'type'" class="pop-menu is-panel type-panel">
-            <p class="settings-scope">阅读偏好 · 此浏览器的所有文档</p>
+
             <div class="type-tabs" role="tablist" aria-label="排版设置">
               <button v-for="section in [{ id: 'text', label: '文字' }, { id: 'paragraph', label: '段落' }, { id: 'table', label: '表格' }]" :key="section.id" role="tab" :aria-selected="typeSection === section.id" :class="{ 'is-on': typeSection === section.id }" @click="typeSection = section.id">{{ section.label }}</button>
             </div>
@@ -214,7 +214,7 @@
         </button>
         <transition name="pop">
           <div v-if="open === 'look'" class="pop-menu is-panel look-panel">
-            <p class="settings-scope">界面外观 · 仅此浏览器</p>
+
             <p class="type-label"><span class="label-main"><component :is="PhCircleHalf" :size="12" class="label-icon" />主题</span></p>
             <div class="type-row columns-2">
               <button
@@ -356,6 +356,7 @@
         @update:value="emit('input', $event)"
         @canonize="emit('canonize', $event)"
         @restore="restoreContent"
+        @rebuild="restoredEpoch++"
       />
       <div v-else-if="!isPreview && !docId && !store.loading" class="ui-font text-center pt-24 text-[var(--c-sub)]">
         <p class="text-[14px]">这个知识库还没有文档</p>
@@ -406,7 +407,8 @@
 
   </div>
   <DocumentInfo :open="infoOpen" :path="docId" @close="infoOpen=false" />
-  <VersionHistory :open="historyOpen" :path="docId" :current-content="raw" :preserve-current="() => store.save()" @close="closeHistory" @restore="restoreContent" />
+  <VersionHistory :open="historyOpen" :path="docId" :current-content="raw" :preserve-current="() => store.save()" @close="closeHistory" @restore="restoreContent"
+        @rebuild="restoredEpoch++" />
 </template>
 
 <script setup>

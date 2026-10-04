@@ -1,4 +1,4 @@
-# Reader · DSH 插件 Preview
+# Reader，DSH 插件 Preview
 
 Reader 在 DSH 右侧栏提供本机知识库阅读、编辑，以及工作区 Markdown 预览。插件安装包包含完整网页和本机服务。启用插件后自动启动，无需另装 Reader、Node.js 或运行终端命令。
 

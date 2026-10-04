@@ -2,11 +2,11 @@
   <Teleport to="body"><Transition name="overlay" appear @after-leave="$emit('close')"><div v-if="visible" class="public-sharing-backdrop" @click.self="visible=false">
     <section ref="dialog" tabindex="-1" class="public-sharing-panel" role="dialog" aria-modal="true" aria-label="分享只读副本">
       <header><button class="icon-btn" aria-label="返回知识库" @click="visible=false"><PhArrowLeft :size="18" /></button><h2>分享只读副本</h2></header>
-      <p class="snapshot-description">分享副本始终只读，原稿修改后需主动更新。</p>
+
       <div v-if="loading" class="public-sharing-time" role="status">正在读取分享范围…</div>
-      <details v-else-if="state.scope" class="sharing-scope"><summary>{{ state.active ? '下次更新范围' : '本次分享范围' }} · {{ state.scope.libraries.length }} 个知识库 · {{ state.scope.documents }} 篇</summary><ul><li v-for="lib in state.scope.libraries" :key="lib.name"><strong>{{ lib.name }}</strong><ul><li v-for="file in lib.documents" :key="file">{{ file.startsWith(lib.name+'/') ? file.slice(lib.name.length+1) : file }}</li></ul></li></ul></details>
+      <details v-else-if="state.scope" class="sharing-scope"><summary>{{ state.active ? '下次更新范围' : '本次分享范围' }}，{{ state.scope.libraries.length }} 个知识库，{{ state.scope.documents }} 篇</summary><ul><li v-for="lib in state.scope.libraries" :key="lib.name"><strong>{{ lib.name }}</strong><ul><li v-for="file in lib.documents" :key="file">{{ file.startsWith(lib.name+'/') ? file.slice(lib.name.length+1) : file }}</li></ul></li></ul></details>
       <p v-if="state.scope && !state.scope.documents" class="public-sharing-time">尚未选择文档。返回知识库设置分享范围。</p>
-      <div class="public-sharing-status"><span>{{ state.active ? '链接已开启' : '链接未开启' }}</span><span v-if="state.active"><PhLock :size="13"/> 只读 · {{ state.documents || 0 }} 篇</span></div>
+      <div class="public-sharing-status"><span>{{ state.active ? '链接已开启' : '链接未开启' }}</span><span v-if="state.active"><PhLock :size="13"/> 只读，{{ state.documents || 0 }} 篇</span></div>
       <div v-if="state.active" class="public-sharing-link"><input :value="state.url" readonly aria-label="访客地址" /><button @click="copy">{{ copied ? '已复制' : '复制地址' }}</button></div>
       <p v-if="state.updated" class="public-sharing-time">{{ new Date(state.updated).toLocaleString('zh-CN') }} 更新</p>
       <p v-if="state.available === false && !state.active" class="public-sharing-time">此设备暂未配置公网分享。你仍可从文档菜单导出文件。</p>

@@ -3,7 +3,7 @@
     <div v-if="open" class="reader-modal-shade" @mousedown.self="close">
       <section ref="dialog" tabindex="-1" class="reader-dialog version-history" role="dialog" aria-modal="true" aria-label="历史版本">
         <header><h2>历史版本</h2><button class="btn-icon" title="关闭" @click="close"><PhX :size="18" /></button></header>
-        <p class="version-hint">保存前的版本，最多保留 100 份。选择后可查看正文。</p>
+
         <p v-if="error" role="alert" class="reader-error">{{ error }}</p>
         <p v-if="loading" role="status">正在读取…</p>
         <p v-else-if="!items.length">这篇文档还没有历史版本。</p>
@@ -11,7 +11,7 @@
           <nav aria-label="版本列表"><button v-for="item in items" :key="item.id" :aria-pressed="selected === item.id" @click="select(item.id)">{{ new Date(item.at).toLocaleString() }}</button></nav>
           <TextComparison v-if="content!==null" :before="content" :after="currentContent" /><p v-else class="version-hint">选择一个版本查看差异</p>
         </div>
-        <footer><span>恢复会先保留当前修改。</span><button :disabled="content === null || fetching || busy" class="reader-button" @click="restore">{{ busy ? '正在保存当前修改…' : '恢复此版本' }}</button></footer>
+        <footer><button :disabled="content === null || fetching || busy" class="reader-button" @click="restore">{{ busy ? '正在保存当前修改…' : '恢复此版本' }}</button></footer>
       </section>
     </div>
   </Transition></Teleport>

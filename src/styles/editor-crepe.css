@@ -160,12 +160,8 @@
    * 阴影。Crepe 原值第二层是 rgba(0,0,0,.3)，落在白底上发黑，浮层看着很沉。
    * 换成两层浅影：一层贴边定轮廓，一层散开给层次，跟工具条弹层一个观感。
    */
-  --crepe-shadow-1:
-    0 1px 2px rgba(0, 0, 0, 0.05),
-    0 4px 12px rgba(0, 0, 0, 0.07);
-  --crepe-shadow-2:
-    0 2px 4px rgba(0, 0, 0, 0.05),
-    0 8px 24px rgba(0, 0, 0, 0.1);
+  --crepe-shadow-1:var(--surface-menu-shadow);
+  --crepe-shadow-2:var(--surface-menu-shadow);
 }
 
 /* 正文容器：整块铺满，宽度限制下放到每个块上，这样表格才能突破出去 */
@@ -913,3 +909,6 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .editor-shell .rich-callout-icon:focus-visible{outline:2px solid var(--color-ds);outline-offset:2px}
 .editor-shell [contenteditable="false"] .rich-callout-icon{cursor:default}
 .editor-shell [contenteditable="false"] .rich-callout-icon:hover{background:none}
+.reader-raw-block{position:relative;min-height:24px;cursor:text;border-radius:6px;white-space:normal}.reader-raw-block:hover{outline:1px solid var(--c-line)}.reader-raw-block:focus-visible{outline:2px solid var(--color-ds)}.reader-raw-block pre{white-space:pre-wrap}.reader-footnote-reference{color:var(--color-ds);font-size:.75em}.reader-footnote-definition{display:flex;align-items:baseline;gap:12px;font-size:.85em;color:var(--c-sub)}.reader-footnote-definition>.footnote-label{flex-shrink:0}.reader-footnote-definition>div{min-width:0;flex:1}
+.reader-frontmatter{font:12px/1.5 var(--font-sans);color:var(--c-sub);padding:6px 10px;background:var(--c-field);width:max-content;margin:8px 0}.source-mode-bar{gap:3px!important;width:max-content;background:var(--c-field);padding:3px;border-radius:9px}.source-mode-bar .lossy-btn{border:0!important;padding:4px 10px!important}.source-mode-bar .lossy-btn[aria-pressed=true]{background:var(--c-pop);color:var(--c-ink)}
+.raw-edit-button{position:absolute;right:4px;top:3px;padding:3px 7px;border-radius:6px;background:var(--c-field);font:11px/1.5 var(--font-sans);color:var(--c-sub);opacity:0}.reader-raw-block:hover>.raw-edit-button,.reader-raw-block:focus-within>.raw-edit-button{opacity:1}.reader-frontmatter{padding-right:48px}.ProseMirror[contenteditable=false] .raw-edit-button{display:none}@media(hover:none){.raw-edit-button{opacity:1;position:static;float:right}}
