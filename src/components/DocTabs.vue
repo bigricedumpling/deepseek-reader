@@ -29,7 +29,7 @@
           @click="$emit('select', t.file)"
           @auxclick="onAux($event, t.file)"
         >
-          <ContentIcon :value="t.icon" :size="16" />
+          <ContentIcon v-if="t.icon" :value="t.icon" :size="16" />
           <span class="doc-tab-name">{{ t.name }}</span>
           <span v-if="t.dirty" class="doc-tab-dot" title="改动还在往回写的路上" />
         </button>
@@ -273,7 +273,7 @@ function onAux(e, file) {
 .doc-tab:not(:last-child):not(.is-active)::after{content:'';position:absolute;right:-1px;top:10px;bottom:10px;width:1px;background:var(--c-line)}.doc-tab:has(+ .is-active)::after{display:none}.doc-tab-name.is-clipped{mask-image:linear-gradient(to right,#000 calc(100% - 18px),transparent)}.doc-tab-main .content-icon{width:16px;height:16px}.doc-tab-x{flex-shrink:0}.doc-tabs:not(.has-left):not(.has-right){mask-image:none;-webkit-mask-image:none}
 </style>
 <style scoped>
-.doc-tabs{min-height:36px}.doc-tab.tab-move{transition:transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:opacity 180ms ease,transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-from,.doc-tab.tab-leave-to{opacity:0;transform:translateY(5px) scale(.94)}.single-document .doc-tab{--smooth-fill:transparent!important;max-width:100%}.single-document .doc-tab-main{padding-left:0}.single-document .doc-tab-main .content-icon{display:none}.single-document .doc-tab-name{color:var(--c-sub)}
+.doc-tabs{min-height:36px}.doc-tab.tab-move{transition:transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:opacity 180ms ease,transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-from,.doc-tab.tab-leave-to{opacity:0;transform:translateY(5px) scale(.94)}.single-document .doc-tab{--smooth-fill:transparent!important;max-width:100%}.single-document .doc-tab-main{padding-left:0}.single-document .doc-tab-name{color:var(--c-sub)}
 @media(prefers-reduced-motion:reduce){.doc-tab.tab-move,.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:none!important}}
 </style>
 
