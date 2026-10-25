@@ -163,26 +163,24 @@
     <!-- 展开态 -->
     <template v-else>
       <!--
-        品牌：标题两行可以直接改，图标点一下换。
+        品牌：一个抽屉一个标题，直接改就是改库名；图标点一下换。
         图标缩到 96px 存成 data URL 放 localStorage——原图动辄几百 KB，
         整个塞进去会撑爆配额，而且侧栏里只显示 22px，没必要留原图。
       -->
       <div class="px-4 pt-5 pb-3 flex items-start gap-2.5 shrink-0">
-        <button class="brand-logo" title="打开抽屉" @click.stop="openLibPanel">
+        <button class="brand-logo" :title="brandTitle ? '抽屉：' + brandTitle + '（共 ' + libPanel.libs.length + ' 个）' : '打开抽屉'" :aria-label="brandTitle ? '当前抽屉：' + brandTitle : '打开抽屉'" @click.stop="openLibPanel">
           <ContentIcon :value="logo" />
         </button>
-        <div class="min-w-0 flex-1">
+        <div class="brand-copy" :class="{ 'is-narrow': brandNarrow }" :aria-hidden="brandNarrow">
           <input
-            v-for="(line, i) in brandLines"
-            :key="i"
-            v-model="brandLines[i]"
-            class="brand-line brand-input"
-            :class="i === 0 ? 'is-title' : 'is-sub'"
+            v-model="brandTitle"
+            class="brand-line brand-input is-title"
             spellcheck="false"
+            :tabindex="brandNarrow ? -1 : 0"
             :readonly="isGuest || !currentLibEditable"
             :title="isGuest ? '' : '编辑抽屉名称'"
             @keydown.enter.prevent="$event.target.blur()"
-            @change="onBrandEdited(i, $event.target.value)"
+            @change="onBrandEdited($event.target.value)"
           />
         </div>
         <!--
@@ -190,6 +188,7 @@
           当前是哪个库、共有几个，走 tooltip 提示，不占版面。
         -->
         <button
+          v-if="!brandNarrow"
           class="icon-btn"
           :title="'抽屉：' + (currentLib || '未选择') + '（共 ' + libPanel.libs.length + ' 个）'"
           @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"
@@ -206,24 +205,24 @@
         </button>
       </div>
 
-    <!-- 新建文档 -->
-    <div v-if="currentLibEditable" class="px-3 pt-2 pb-3">
+    <!-- 新建：文档是主操作，文件夹同排但更紧凑 -->
+    <div v-if="currentLibEditable" class="px-3 pt-2 pb-3 flex items-stretch gap-2">
       <button
-        class="newdoc-btn w-full h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
+        class="newdoc-btn flex-1 min-w-0 h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
         title="在根目录新建文档"
         @click="emit('create-doc', currentLib || '')"
       >
         <PhPlus :size="13" weight="bold" />
         新建文档
       </button>
+      <button class="newfolder-btn" title="在根目录新建文件夹" aria-label="新建文件夹" @click="emit('create-category', currentLib || '')">
+        <PhFolderSimplePlus :size="14" />
+        <span>文件夹</span>
+      </button>
     </div>
 
     <!-- 工具条 -->
     <div class="px-3 pb-2 flex items-center gap-0.5 shrink-0">
-      <button v-if="currentLibEditable" class="newfolder-btn" aria-label="新建文件夹" @click="emit('create-category', currentLib || '')">
-        <PhFolderSimplePlus :size="16" />
-        <span>文件夹</span>
-      </button>
       <span class="ml-auto flex items-center gap-0.5">
         <button
           class="icon-btn"
@@ -462,23 +461,15 @@ const currentLibEditable = computed(() => store.canEdit(libPanel.libs.find(l => 
  * 前端只负责显示；本地改只改当前这次会话，不落盘。
  */
 /*
- * 品牌来自构建时注入的 VITE_BRAND（形如第一行|第二行），
- * 与 VITE_BASE 一个机制 —— 每个实例构建自己的那一份，不依赖运行时环境变量，
- * 也不经过 localStorage（同域名下两个站点共用一个存储，写回就会串味）。
- */
-/*
- * 标题两行。
- *
- * 第一行不是一份独立数据 —— 它就是"当前抽屉的名字"，真源在服务端的注册表里
+ * 标题不是一份独立数据 —— 它就是"当前抽屉的名字"，真源在服务端的注册表里
  * （.知识库.json）。这里只是一份显示副本，改它等于改库名（改名会同步重命名文件夹）。
- * 第二行是副标题，纯粹给人看的，不参与任何同步。
- *
- * 以前这两行存在 localStorage 里，和目录名、注册表各存一份，
- * 于是"改了标题目录不动、改了目录标题不动"——那才是根子上的病。
+ * 旧数据里的 sub 字段不再读取：一个抽屉只保留一个标题。
  */
-/* 副标题的兜底：某个库没写 sub 时用它 */
-const FALLBACK_SUB = String(import.meta.env.VITE_BRAND || '').split('|')[1] || ''
-const brandLines = ref(['', FALLBACK_SUB])
+const brandTitle = ref('')
+const brandNarrow = computed(() => props.width < 210)
+watch(brandNarrow, narrow => {
+  if (narrow && document.activeElement?.classList.contains('brand-input')) document.activeElement.blur()
+})
 
 const libIconInput = ref(null)
 
@@ -648,9 +639,7 @@ async function loadLibs() {
 function applyCurrentLib() {
   const lib = libPanel.libs.find((l) => l.name === currentLib.value)
   if (!lib) return
-  brandLines.value[0] = lib.name
-  /* 副标题也按库走：每个抽屉各说各的，不再共用主库那一句 */
-  brandLines.value[1] = lib.sub || FALLBACK_SUB
+  brandTitle.value = lib.name
   currentLibIcon.value = lib.icon || ''
   /*
    * 浏览器标签页也跟着走：标题换成当前抽屉名，图标换成它的 icon。
@@ -769,7 +758,7 @@ function startLibResize(e) {
 function isCurrentLib(lib) {
   if (!currentLib.value) {
     /* 还没问出来时，用标题第一行兜底比一下，至少不闪 */
-    return lib.name === brandLines.value[0]
+    return lib.name === brandTitle.value
   }
   return lib.name === currentLib.value
 }
@@ -885,36 +874,17 @@ async function commitRename(lib) {
   }
 }
 
-/** 标题第一行改库名，第二行保存为该库的副标题。 */
-async function onBrandEdited(i, value) {
+/** 标题就是库名；改名会同步重命名目录。 */
+async function onBrandEdited(value) {
   const v = String(value || '').trim()
-  if (i === 1) {
-    if (!currentLib.value) return
-    try {
-      const res = await fetch(API_BASE + '/api/lib/meta', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: currentLib.value, sub: v })
-      })
-      const data = await res.json()
-      if (!data.ok) throw new Error(data.error || '副标题保存失败')
-      libPanel.libs = data.data.libs || []
-      applyCurrentLib()
-    } catch (e) {
-      applyCurrentLib()
-      store.setError(e.message || e)
-    }
-    return
-  }
-  if (i !== 0) return
   if (!v || v === currentLib.value) {
-    brandLines.value[0] = currentLib.value
+    brandTitle.value = currentLib.value
     return
   }
   try {
     await renameLib(currentLib.value, v)
   } catch (e) {
-    brandLines.value[0] = currentLib.value
+    brandTitle.value = currentLib.value
     store.setError(e.message || e)
   }
 }
@@ -1923,15 +1893,27 @@ onMounted(loadActivityUnread)
 .lib-row:focus-within .acts-btn { opacity: 1; }
 .lib-row-act:hover { background: var(--c-line); color: var(--c-ink); }
 /* 左上角展开抽屉的提示 */
-/*
- * 标题两行：第一行是主标题，第二行是副标题。
- * 副标题只是略小一点、颜色淡一点 —— 拉得太小会像注脚，反而看不出是同一组。
- * 主标题不加粗：这里本身已经是标题位，再加粗整块就太重了。
- */
 .brand-line.is-title { font-size: 17px; }
-.brand-line.is-sub { font-size: 14.5px; color: var(--c-sub); }
 .home-link {
   display: none;
+}
+
+/*
+ * 拖窄时标题收进图标，而不是被右侧按钮裁掉。
+ * max-width 参与过渡，所以不是到阈值才突然消失。
+ */
+.brand-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+  transition: max-width .18s ease, opacity .16s ease, transform .18s ease;
+}
+.brand-copy.is-narrow {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
 }
 
 .brand-line {
@@ -1945,6 +1927,7 @@ onMounted(loadActivityUnread)
 .brand-input {
   display: block;
   width: 100%;
+  text-overflow: ellipsis;
   padding: 1px 4px;
   margin-left: -4px;
   border-radius: var(--radius-control);
@@ -1985,8 +1968,8 @@ onMounted(loadActivityUnread)
   display: grid;
   place-items: center;
 }
-/* 文件夹入口与工具条同排，文字直接说明图标的动作。 */
-.newfolder-btn { display:inline-flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:0 6px;border-radius:var(--radius-control);color:var(--c-faint);font-size:12px;white-space:nowrap; }
+/* 文件夹和新建文档同排；文档占主位，文件夹保持紧凑。 */
+.newfolder-btn { display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;height:36px;padding:0 10px;border-radius:var(--radius-control);background:var(--c-field);color:var(--c-sub);font-size:12px;white-space:nowrap; }
 .newfolder-btn:hover { background:var(--c-hover);color:var(--c-ink); }
 .batch-bar{display:flex;align-items:center;gap:5px;color:var(--c-sub);font-size:12px}
 .batch-bar span{flex:1;min-width:0}
