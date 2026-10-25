@@ -451,6 +451,8 @@ import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
 import AppDialog from './AppDialog.vue'
 import { API_BASE } from '../utils/api'
+import { normalizeLibraryName } from '../utils/legacy-paths'
+import { storageGet, storageJSON, storageSet } from '../utils/storage'
 import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../utils/reveal'
 const props = defineProps({
   nodes: { type: Array, required: true },
@@ -558,7 +560,7 @@ async function openTransfer(mode, kind, source) {
   transfer.error = ''
   transferSearch.value = ''
   if (!libPanel.libs.length) await loadLibs()
-  if (!libPanel.libs.length) { store.error = '抽屉读取失败，请稍后重试'; return }
+  if (!libPanel.libs.length) { store.setError('抽屉读取失败，请稍后重试'); return }
   transfer.lib = ''
   transfer.dir = ''
   transfer.folders = []
@@ -625,7 +627,7 @@ const recentNames = ref(Array.isArray(readLibPrefs().recent) ? readLibPrefs().re
 const pinnedLibs = ref(Array.isArray(readLibPrefs().pinned) ? readLibPrefs().pinned : [])
 if (['recent', 'name', 'modified'].includes(readLibPrefs().sort)) libSort.value = readLibPrefs().sort
 function saveLibPrefs() {
-  localStorage.setItem(LIB_PREFS_KEY, JSON.stringify({ recent: recentNames.value.slice(0, 30), pinned: pinnedLibs.value, sort: libSort.value }))
+  storageSet(LIB_PREFS_KEY, JSON.stringify({ recent: recentNames.value.slice(0, 30), pinned: pinnedLibs.value, sort: libSort.value }))
 }
 watch(libSort, saveLibPrefs)
 function rememberLib(name) {
@@ -667,7 +669,7 @@ const currentLib = ref(
   (() => {
     try {
       const lib = String(new URLSearchParams(location.search).get('lib') || '').trim()
-      return lib === '业务面' ? '面试准备' : lib
+      return normalizeLibraryName(lib)
     } catch {
       return ''
     }
@@ -769,7 +771,7 @@ async function doCreateLib(value) {
     const made = libPanel.libs.find((l) => l.name === to)
     if (made) { await goLib(made); managerOpen.value=false }
   } catch (e) {
-    window.alert(String(e.message || e))
+    store.setError(e.message || e)
   } finally {
     creatingLib.value = false
   }
@@ -930,7 +932,7 @@ async function commitRename(lib) {
   try {
     await renameLib(from, to)
   } catch (e) {
-    window.alert(String(e.message || e))
+    store.setError(e.message || e)
   }
 }
 
@@ -951,7 +953,7 @@ async function onBrandEdited(i, value) {
       applyCurrentLib()
     } catch (e) {
       applyCurrentLib()
-      window.alert(String(e.message || e))
+      store.setError(e.message || e)
     }
     return
   }
@@ -964,7 +966,7 @@ async function onBrandEdited(i, value) {
     await renameLib(currentLib.value, v)
   } catch (e) {
     brandLines.value[0] = currentLib.value
-    window.alert(String(e.message || e))
+    store.setError(e.message || e)
   }
 }
 
@@ -1045,7 +1047,7 @@ async function doDeleteLib(lib) {
       if (first) await goLib(first)
     }
   } catch (e) {
-    window.alert(String(e.message || e))
+    store.setError(e.message || e)
   } finally {
     libPanel.busy = ''
   }
@@ -1112,7 +1114,7 @@ onMounted(() => {
  * 键名与品牌一样用构建时注入，不依赖运行时环境变量。
  */
 const LOGO_STORE = String(import.meta.env.VITE_LOGO_KEY || 'reader.logo')
-const customLogo = ref(localStorage.getItem(LOGO_STORE) || '')
+const customLogo = ref(storageGet(LOGO_STORE) || '')
 /*
  * 图标的优先级：自己换过的 > 服务端按实例给的 > 站内默认。
  * 绝对路径：深链（/edit/某目录/某文档）之后，'./favicon.svg' 会被解析到那一层去，图就裂了。
@@ -1140,7 +1142,7 @@ const topFolders = computed(() => props.nodes.filter((n) => n.type === 'folder')
 
 function folderHasCurrent(folder) {
   if (!props.currentPath) return false
-  const walk = (n) => (n.type === 'doc' ? n.file === props.currentPath : (n.children || []).some(walk))
+  const walk = (n) => (n.type !== 'folder' ? n.file === props.currentPath : (n.children || []).some(walk))
   return (folder.children || []).some(walk)
 }
 
@@ -1236,16 +1238,18 @@ const tree = reactive({
     this.end()
     if (!d) return
     const visibleMode = sortMode.value
-    // 拖过就切手动排序，否则列表会按按名称立刻重排，白拖
-    sortMode.value = 'manual'
     try {
       if (into !== null && into !== undefined) {
         if (into === d.parent) return
+        // 拖过就切手动排序，否则列表会按按名称立刻重排，白拖
+        sortMode.value = 'manual'
         if (d.kind === 'doc') await store.moveDoc(d.path, into)
         else await store.moveCategory(d.path, into)
         return
       }
       if (!at) return
+      // 拖过就切手动排序，否则列表会按按名称立刻重排，白拖
+      sortMode.value = 'manual'
       let path = d.path
       // 跨层插入：先挪进那一层，再排序
       if (at.parent !== d.parent) {
@@ -1267,7 +1271,7 @@ const tree = reactive({
       names.splice(to, 0, key)
       await store.reorderEntries(at.parent, names)
     } catch (e) {
-      store.error = String(e.message || e)
+      store.setError(e.message || e)
     }
   },
   end() {
@@ -1296,7 +1300,7 @@ const tree = reactive({
       if (e.kind === 'doc') await store.renameDoc(e.node.file, next)
       else await store.renameCategory(e.node.path, next)
     } catch (err) {
-      store.error = String(err.message || err)
+      store.setError(err.message || err)
     }
   },
 
@@ -1380,7 +1384,7 @@ function requestBatchDelete() {
   visit(props.nodes)
   const selected = [...batch.selected.values()].map(item => current.get(item.path))
   if (selected.some(node => !node || !store.canEdit(node))) {
-    store.error = '文档列表已变化，请重新选择'
+    store.setError('文档列表已变化，请重新选择')
     batch.cancel()
     return
   }
@@ -1396,7 +1400,7 @@ function requestBatchDelete() {
       const currentPath = store.currentPath
       const deletesCurrent = selected.some(node => currentPath === batch.path(node) || node.type === 'folder' && currentPath.startsWith(node.path + '/'))
       if (deletesCurrent && store.isDirty && !(await store.save())) {
-        store.error = '当前文档未保存，未执行删除'
+        store.setError('当前文档未保存，未执行删除')
         return
       }
       let done = 0
@@ -1408,7 +1412,7 @@ function requestBatchDelete() {
           batch.selected.delete(path)
           done++
         } catch (error) {
-          store.error = `已移入回收站 ${done} 项；${path} 未删除：${String(error.message || error)}`
+          store.setError(`已移入回收站 ${done} 项；${path} 未删除：${String(error.message || error)}`)
           return
         }
       }
@@ -1438,7 +1442,7 @@ async function guardShare(fn) {
   try {
     await fn()
   } catch (e) {
-    store.error = String(e.message || e)
+    store.setError(e.message || e)
   }
 }
 
@@ -1525,7 +1529,7 @@ async function showInFinder(path) {
   try {
     await revealInFileManager(path)
   } catch (error) {
-    store.error = String(error.message || error)
+    store.setError(String(error.message || error))
   }
 }
 
@@ -1577,9 +1581,9 @@ const SORTS = [
 
 const LS = { group: 'reader.group', sort: 'reader.sort', cats: 'reader.cats' }
 
-const groupMode = ref(localStorage.getItem(LS.group) === 'flat' ? 'flat' : 'tree')
+const groupMode = ref(storageGet(LS.group) === 'flat' ? 'flat' : 'tree')
 // 默认手动：没拖过时它就是接口给的顺序（文档在前、目录在后，各自按名字）
-const sortMode = ref(localStorage.getItem(LS.sort) || 'manual')
+const sortMode = ref(storageGet(LS.sort) || 'manual')
 /**
  * 目录收起状态。
  *
@@ -1587,9 +1591,11 @@ const sortMode = ref(localStorage.getItem(LS.sort) || 'manual')
  * 只展开当前这篇所在的那条路径 —— 存档下面是三层、十几篇文档，
  * 全展开会把侧栏撑得很长，想找的东西反而看不见。
  */
-const storedCats = localStorage.getItem(LS.cats)
-const collapsedCats = ref(new Set(storedCats ? JSON.parse(storedCats) : []))
-let catsInitialized = !!storedCats
+const storedCats = storageJSON(LS.cats, [])
+const collapsedCats = ref(new Set(
+  Array.isArray(storedCats) ? storedCats.filter((name) => typeof name === 'string') : []
+))
+let catsInitialized = storageGet(LS.cats) !== null
 watch(
   () => props.nodes,
   (nodes) => {
@@ -1658,12 +1664,12 @@ const query = ref('')
 const searchEl = ref(null)
 
 watch([groupMode, sortMode], () => {
-  localStorage.setItem(LS.group, groupMode.value)
-  localStorage.setItem(LS.sort, sortMode.value)
+  storageSet(LS.group, groupMode.value)
+  storageSet(LS.sort, sortMode.value)
 })
 watch(
   collapsedCats,
-  (v) => localStorage.setItem(LS.cats, JSON.stringify([...v])),
+  (v) => storageSet(LS.cats, JSON.stringify([...v])),
   { deep: true }
 )
 
@@ -1694,12 +1700,12 @@ async function rescan() {
     if(!isGuest.value){
       const result=await (await fetch(API_BASE+'/api/reconcile')).json()
       if(!result.ok)throw Error(result.error)
-      if(result.data.length){const move=result.data[0];askLibDialog({title:'确认外部改名',message:move.from+' → '+move.to+'。确认后会保留原来的权限、图标和历史。',confirmText:'保留设置并继续',onConfirm:async()=>{try{const out=await(await fetch(API_BASE+'/api/reconcile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(move)})).json();if(!out.ok)throw Error(out.error);closeLibDialog();await rescan()}catch(e){store.error=e.message;closeLibDialog()}}});return}
+      if(result.data.length){const move=result.data[0];askLibDialog({title:'确认外部改名',message:move.from+' → '+move.to+'。确认后会保留原来的权限、图标和历史。',confirmText:'保留设置并继续',onConfirm:async()=>{try{const out=await(await fetch(API_BASE+'/api/reconcile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(move)})).json();if(!out.ok)throw Error(out.error);closeLibDialog();await rescan()}catch(e){store.setError(e.message);closeLibDialog()}}});return}
     }
     await store.loadTree()
     if (store.currentPath && !store.isDirty) await store.reload()
   } catch (e) {
-    store.error = String(e.message || e)
+    store.setError(e.message || e)
   }
 }
 
@@ -1734,11 +1740,15 @@ function closeSearch() {
   query.value = ''
 }
 async function expandAndSearch() {
-  emit('toggle-collapse')
-  await nextTick()
+  /* 侧栏收起时先展开；已经展开就不要再切一次，否则 Cmd+K 会把侧栏关掉 */
+  if (props.collapsed) {
+    emit('toggle-collapse')
+    await nextTick()
+  }
   searchOpen.value = true
   await nextTick()
   searchEl.value?.focus()
+  searchEl.value?.select?.()
 }
 
 /* ---------- 过滤与排序 ---------- */
@@ -1756,7 +1766,7 @@ const byName = (a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: t
 
 const flatDocs = computed(() => {
   const q = query.value.trim().toLowerCase()
-  const list = flatten(props.nodes, '', []).filter((d) => !q || d.name.toLowerCase().includes(q))
+  const list = flatten(props.nodes, '', []).filter((d) => !q || d.name.toLowerCase().includes(q) || String(d.file || '').toLowerCase().includes(q))
   if (sortMode.value === 'recent') list.sort((a, b) => (b.mtime || 0) - (a.mtime || 0))
   else if (sortMode.value === 'name') list.sort(byName)
   return list
@@ -1766,7 +1776,7 @@ const flatDocs = computed(() => {
 function countMatches(nodes, q) {
   let n = 0
   for (const x of nodes || []) {
-    if (x.type === 'doc') { if (!q || x.name.toLowerCase().includes(q)) n++ }
+    if (x.type !== 'folder') { if (!q || x.name.toLowerCase().includes(q) || String(x.file || '').toLowerCase().includes(q)) n++ }
     else n += countMatches(x.children, q)
   }
   return n
@@ -1810,6 +1820,9 @@ function onLibEscape(e) {
   }
   closeLibPanel()
 }
+/* Cmd+K 从外壳调进来：展开侧栏并聚焦文档搜索 */
+defineExpose({ expandAndSearch })
+
 onMounted(() => document.addEventListener('click', onDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 onMounted(() => document.addEventListener('keydown', onLibEscape))

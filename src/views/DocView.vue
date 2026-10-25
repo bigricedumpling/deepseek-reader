@@ -14,7 +14,7 @@
         <button class="btn-icon" title="查找当前文档" aria-label="查找当前文档" :aria-expanded="searchOpen" @click="toggleDocSearch"><PhMagnifyingGlass :size="15" /></button>
         <transition name="pop">
         <div v-if="searchOpen" class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
-          <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
+          <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.enter.prevent="results[0]?.hits[0] && onResultClick(results[0], results[0].hits[0])" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
           <div v-if="keyword.trim()" class="doc-search-results">
             <p v-if="!results.length" class="search-scope">没有匹配</p>
             <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r, h)"><span v-html="highlight(h.text, keyword)" /><small>第 {{ h.line }} 行{{ h.occurrence > 1 ? `，本行第 ${h.occurrence} 处` : '' }}</small></button></template>
@@ -120,7 +120,7 @@
           <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="15" /> Markdown 文件</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
           <button v-if="!isPreview" class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
-          <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener"><PhArrowSquareOut :size="15" />打开原文件</a>
+          <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener" @click="open=''"><PhArrowSquareOut :size="15" />打开原文件</a>
         </div>
         <div v-else-if="open === 'visibility'" class="pop-menu is-panel document-actions">
           <button ref="visibilityBack" class="pop-item" @click="backToActions"><PhCaretLeft :size="15" />分享范围</button>
@@ -171,9 +171,21 @@
     >
       <PhWarningCircle :size="15" class="text-[#d9534f] mt-[1px] shrink-0" />
       <span class="ui-font flex-1 text-[12.5px] leading-relaxed text-[#c0392b]">{{ error }}</span>
-      <button class="ui-font text-[12px] text-[#c0392b] underline shrink-0" @click="emit('reload')">
-        重新读取
-      </button>
+      <button
+        v-if="store.errorKind === 'save'"
+        class="ui-font text-[12px] text-[#c0392b] underline shrink-0"
+        @click="store.save()"
+      >重试保存</button>
+      <button
+        v-else-if="store.errorKind === 'load'"
+        class="ui-font text-[12px] text-[#c0392b] underline shrink-0"
+        @click="emit('reload')"
+      >重新读取</button>
+      <button
+        class="ui-font text-[12px] text-[#c0392b] underline shrink-0"
+        :aria-label="store.errorKind === 'save' ? '关闭错误提示' : '知道了'"
+        @click="store.clearError()"
+      >{{ store.errorKind === 'save' || store.errorKind === 'load' ? '关闭' : '知道了' }}</button>
     </div>
 
     <!-- 正文：永远可编辑，没有阅读态和编辑态之分 -->
@@ -188,7 +200,7 @@
         H5：整页渲染，保留它自己的布局，不套阅读器的行宽限制。
         两者都是成品文件，不经过 markdown 解析。
       -->
-      <PdfPreview v-if="isPdf" :url="pdfSrc" :page="pdfPage" @page="store.pdfPage=$event" @loaded="store.pdfPages=$event" @outline="store.pdfToc=$event.toc;store.pdfTocSource=$event.source" />
+      <PdfPreview v-if="isPdf" :url="pdfSrc" :page="effectivePdfPage" @page="onPdfPageChange" @loaded="store.pdfPages=$event" @outline="store.pdfToc=$event.toc;store.pdfTocSource=$event.source" />
       <iframe
         v-if="isH5"
         ref="frameRef"
@@ -203,7 +215,7 @@
         :key="String(store.currentReadonly) + docId + ':' + epoch + ':' + store.contentEpoch + ':' + restoredEpoch"
         :readonly="store.currentReadonly"
         @pick-doc="pickDoc = true"
-        @open-doc="store.select($event)"
+        @open-doc="emit('select', $event)"
         :value="raw"
         :doc-id="docId"
         :doc-file="meta.file || ''"
@@ -312,7 +324,7 @@ const canRevealInFinder = computed(() => !store.isGuest && fileManagerAvailable(
 async function showInFinder() {
   open.value = ''
   try { await revealInFileManager(props.docId) }
-  catch (error) { store.error = String(error.message || error) }
+  catch (error) { store.setError(error.message || error) }
 }
 const pageStyle=computed(()=>({...reader.readingStyle,...({narrow:{'--measure':'min(720px, 100%)'},wide:{'--measure':'min(1120px, 100%)'},full:{'--measure':'100%'}}[store.pageMeta.layout]||{})}))
 /** 斜杠菜单里插入文档打开的选择器 */
@@ -346,7 +358,7 @@ const props = defineProps({
 })
 const embedded = window.self !== window.top
 const browserUrl = computed(() => {
-  const path = String(props.docId || '').replace(/\.(md|pdf)$/i, '')
+  const path = String(props.docId || '').replace(/\.(md|pdf|html?)$/i, '')
   const url = new URL(API_BASE + '/' + (window.__readerPublicView ? 'onlyread' : 'doc') + (path ? '/' + path.split('/').map(encodeURIComponent).join('/') : '/'), location.origin)
   const lib = path.split('/')[0] || new URLSearchParams(location.search).get('lib')
   if (lib) url.searchParams.set('lib', lib)
@@ -363,7 +375,7 @@ const isPreview = computed(() => isPdf.value || isH5.value)
 const tabItems = computed(() =>
   store.tabs.map((file) => ({
     file,
-    name: store.allFiles.find((f) => f.file === file)?.name || file.split('/').pop().replace(/\.(md|pdf)$/i, ''),
+    name: store.allFiles.find((f) => f.file === file)?.name || file.split('/').pop().replace(/\.(md|pdf|html?)$/i, ''),
     icon: store.allFiles.find(f=>f.file===file)?.meta?.icon || '',
     dirty: file === props.docId && props.dirty
   }))
@@ -403,7 +415,7 @@ function onPreviewAction(event) {
   const lib = String(props.meta?.file || '').split('/')[0]
   if (!lib || !rel.startsWith(lib + '/') || rel.includes('\\') || rel.includes('\0') || rel.split('/').some(part => !part || part.startsWith('.'))) return
   if (data.kind === 'document' && store.allFiles.some(file => file.file === rel)) {
-    store.select(rel)
+    emit('select', rel)
   }
 }
 onMounted(() => window.addEventListener('message', onPreviewAction))
@@ -428,26 +440,15 @@ function onTranslate() {
 }
 const frameRef = ref(null)
 
-/**
- * 右栏点了目录：让 iframe 跳到那一页。
- * 同源 iframe 直接改 hash，Chrome 自带的阅读器会跳页，不用把整份 pdf 重新下一遍。
- */
-watch(
-  () => props.pdfPage,
-  (n) => {
-    const f = frameRef.value
-    if (!f || !n) return
-    // 译文是原文一页、译文一页交替的（36 页 = 18 页原文 + 18 页译文），
-    // 所以看译文时目录里的第 n 页要跳到第 2n-1 页，落在原文那面上。
-    const page = store.pdfView === 'translated' ? n * 2 - 1 : n
-    try {
-      if (f.contentWindow) f.contentWindow.location.hash = '#page=' + page
-      else f.src = pdfSrc.value + '#page=' + page
-    } catch {
-      f.src = pdfSrc.value + '#page=' + page
-    }
-  }
-)
+// 译文是原文一页、译文一页交替的（36 页 = 18 页原文 + 18 页译文），
+// 所以看译文时目录里的第 n 页要跳到第 2n-1 页，翻页后反算回逻辑页码。
+const effectivePdfPage = computed(() => {
+  const n = props.pdfPage || 1
+  return store.pdfView === 'translated' ? n * 2 - 1 : n
+})
+function onPdfPageChange(page) {
+  store.pdfPage = store.pdfView === 'translated' ? Math.ceil(page / 2) : page
+}
 
 /* 宽度三档定义在 reader store 里，那边算阅读宽度时也要用同一份 */
 const WIDTHS = WIDTH_OPTIONS.map((w, i) => ({
@@ -580,7 +581,7 @@ const stats = computed(() => {
 })
 
 const saveStateText = computed(() => {
-  if (props.error) return '保存失败'
+  if (props.error) return { save: '保存失败', load: '打开失败' }[store.errorKind] || '操作失败'
   if (props.saving) return '保存中'
   if (props.dirty) return '待保存'
   if (props.savedAt) {
@@ -620,7 +621,7 @@ function pickSize(v) {
 function pickExport(kind) {
   open.value = ''
   if (kind === 'md') exportMarkdown()
-  else if(kind==='html')exportHtml().catch(e=>{store.error=e.message})
+  else if(kind==='html')exportHtml().catch(e=>{store.setError(e.message)})
   else exportPdf()
 }
 function closeSearch() {
@@ -640,21 +641,14 @@ function onResultClick(r, hit) {
 /* ---------- 滚动 ---------- */
 /*
  * 回顶按钮的显隐、T 键、切文档记住读到哪，都在 useDocScroll 里。
- * 这里只把还原位置要等 DOM 落定这个界面侧的事接过来。
+ * 它会在正文异步渲染期间逐帧重试，这里只负责把目标位置落到容器上。
  */
 const { showTop, scrollTop } = useDocScroll({
   scroller,
   docId: computed(() => props.docId),
   scrollTopSignal: computed(() => props.scrollTopSignal),
   onRestore: (pos) => {
-    nextTick(() => {
-      // 正文是异步进来的，等一帧再落，否则滚了个空容器
-      setTimeout(() => {
-        if (!scroller.value) return
-        scroller.value.scrollTop = pos
-        showTop.value = scroller.value.scrollTop > 420
-      }, 120)
-    })
+    if (scroller.value) scroller.value.scrollTop = pos
   }
 })
 

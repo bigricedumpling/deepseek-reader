@@ -179,8 +179,9 @@ function onMessage(event) {
     requests.delete(String(data.requestId))
     pendingImages.value = Math.max(0, pendingImages.value - 1)
     if (data.error) imageFailures.set(reference, String(data.error))
-    else if (data.mime && data.base64) { imageData.set(reference, { mime: data.mime, base64: data.base64 }); imageVersion.value++ }
+    else if (data.mime && data.base64) { imageData.set(reference, { mime: data.mime, base64: data.base64 }); if (pendingImages.value === 0) imageVersion.value++ }
     scanImages()
+    if (pendingImages.value === 0 && imageData.size > 0 && !imageVersion.value) imageVersion.value++
     saveSnapshot()
     if (awaitingImages && pendingImages.value === 0) { awaitingImages = false; commitCollect() }
   } else if (data.type === 'dsh-reader-preview:full-content') {

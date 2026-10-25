@@ -39,6 +39,7 @@
 import { BRAND_NAME } from '../../brand.mjs'
 import { computed, onMounted, ref } from 'vue'
 import { API_BASE } from '../utils/api'
+import { storageGet, storageSet } from '../utils/storage'
 
 /*
  * 抽屉首页。
@@ -67,12 +68,12 @@ const THEMES = [
 
 const title = ref(BRAND_NAME)
 const libs = ref(FALLBACK)
-const theme = ref(localStorage.getItem('reader.theme') || 'light')
-const logo = computed(() => localStorage.getItem('reader.brandLogo') || '__SITE_ICON__')
+const theme = ref(storageGet('reader.theme') || 'light')
+const logo = computed(() => storageGet('reader.brandLogo') || '__SITE_ICON__')
 
 function pick(id) {
   theme.value = id
-  localStorage.setItem('reader.theme', id)
+  storageSet('reader.theme', id)
   document.body.dataset.theme = id
 }
 

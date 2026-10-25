@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { renderMarkdown, extractToc, searchDocs } from '../utils/markdown'
 import { API_BASE } from '../utils/api'
-import { interviewPaths } from '../utils/interview-paths'
+import { legacyInterviewDoc, legacyRootSectionPath, normalizeLibraryName } from '../utils/legacy-paths'
 
 /*
  * 成品文件的类型：pdf 与 h5。
@@ -53,7 +53,7 @@ const TABS_KEY = 'reader.tabs'
 function tabsKey() {
   try {
     const requestedLib = new URLSearchParams(location.search).get('lib') || ''
-    const lib = requestedLib === '业务面' ? '面试准备' : requestedLib
+    const lib = normalizeLibraryName(requestedLib)
     const guest = window.__readerMode === 'guest' ? ':guest' : ''
     return TABS_KEY + guest + (lib ? ':' + lib : '')
   } catch {
@@ -99,6 +99,19 @@ export const useDocsStore = defineStore('docs', () => {
   const saving = ref(false)
   const savedAt = ref(0)      // 上次保存成功的时间，底栏显示用
   const error = ref('')
+  /**
+   * 错误来自哪一步：save / load / action。
+   * 界面上不能把所有错误都当成"保存失败"，更不能用"重新读取"
+   * 去处理保存失败 —— 那会直接丢掉用户刚改的内容。
+   */
+  const errorKind = ref('')
+  function setError(message, kind = 'action') {
+    error.value = String(message || '')
+    errorKind.value = error.value ? kind : ''
+  }
+  function clearError() {
+    setError('')
+  }
   const searchKeyword = ref('')
   const pdfToc = ref([])   // 当前 pdf 的书签目录（右侧栏用）
   const pdfPage = ref(1)   // 右侧目录点了第几页，DocView 负责跳
@@ -155,6 +168,7 @@ export const useDocsStore = defineStore('docs', () => {
       if (!alive.has(k)) {
         delete rawMap.value[k]
         delete savedMap.value[k]
+        delete revisionMap.value[k]
       }
     }
   }
@@ -184,7 +198,7 @@ export const useDocsStore = defineStore('docs', () => {
       await api('PUT', '/access', { path, ...change })
       await loadAll()
       window.dispatchEvent(new Event('reader-access-updated'))
-    } catch (reason) { error.value = String(reason.message || reason) }
+    } catch (reason) { setError(reason.message || reason) }
   }
   function canEdit(node) { return !!node && (!isGuest.value || (node.locked === false && node.shared === true)) }
 
@@ -310,8 +324,7 @@ export const useDocsStore = defineStore('docs', () => {
    * 那时 笔试题 与 调研报告 是文档根下的两个顶层目录。
    * 后来资料按抽屉归拢：笔试题 成了Agent（设计方向）库，调研报告 挪进了它里面。
    *
-   * 规则：老路径的第一段（笔试题）在当前库里已经不存在，把它换成现在所属的库根，
-   * /笔试题/调研报告/评测调研 → /Agent（设计方向）/调研报告/评测调研
+   * 固定改名规则在 utils/legacy-paths.js；这里只保留需要看当前文档树才能判断的部分。
    *
    * 两个容易写错的地方：
    *   1. allFiles 只含文件（flatten 不产出目录），所以判断目录要看有没有文件的
@@ -321,30 +334,18 @@ export const useDocsStore = defineStore('docs', () => {
    */
   function legacyPath(raw) {
     if (!raw) return ''
-    if (raw.startsWith('笔试题/')) return 'Agent（设计方向）/' + raw.slice('笔试题/'.length)
-    const extension = /\.md$/i.test(raw) ? raw.slice(-3) : ''
-    const relocated = interviewPaths[raw.replace(/\.md$/i, '')]
-    if (relocated) return relocated + extension
-    /* 2026-09：散在面试准备根部的资料已归类，业务面也并回这个抽屉。 */
-    if (raw.startsWith('业务面/')) return '面试准备/' + raw
-    if (raw.startsWith('面试准备/')) {
-      const leaf = raw.slice('面试准备/'.length)
-      const stem = leaf.replace(/\.md$/i, '')
-      const section = {
-        README: '总览', 面试准备: '总览', 笔试面试总复习速览: '总览', 下一步计划: '总览',
-        岗位JD与目标: '岗位与策略', 能力线与笔试题型预测: '岗位与策略', 访问画像线索: '岗位与策略',
-        模拟题库: '问答演练', 全量问答手册: '问答演练', 术语急救卡: '问答演练', 反问清单与叙事结构: '问答演练',
-        wegen项目事实卡: '项目素材'
-      }[stem]
-      if (section) return legacyPath('面试准备/' + section + '/' + leaf)
-    }
+    const mapped = legacyInterviewDoc(raw)
+    if (mapped !== raw) return mapped
+    /* 根部资料归类：映射后仍走一次树匹配，分类目录不存在时还能落回原文 */
+    const sectioned = legacyRootSectionPath(raw)
+    if (sectioned) return legacyPath(sectioned)
     const files = allFiles.value
     if (!files.length) return raw
 
     const seg = (name) => files.find((f) => f.file.indexOf(name + '/') >= 0)
     const kids = (p) => files.filter((f) => f.file.indexOf(p + '/') === 0)
     const isDoc = (p) =>
-      files.some((f) => f.file === p || f.file.replace(/\.(md|pdf)$/i, '') === p)
+      files.some((f) => f.file === p || f.file.replace(/\.(md|pdf|html?)$/i, '') === p)
 
     const first = raw.split('/')[0]
     const rest = raw.slice(first.length + 1)
@@ -360,10 +361,10 @@ export const useDocsStore = defineStore('docs', () => {
     /* hit.file 里 head 之前的部分就是所属库根 */
     const idx = hit.file.indexOf(head)
     if (idx <= 0) return raw
-    const mapped = hit.file.slice(0, idx) + rest
+    const mappedPath = hit.file.slice(0, idx) + rest
     /* 指向目录时落到里面第一篇 */
-    const inner = kids(mapped)
-    return inner.length ? inner[0].file : mapped
+    const inner = kids(mappedPath)
+    return inner.length ? inner[0].file : mappedPath
   }
 
   /**
@@ -390,8 +391,9 @@ export const useDocsStore = defineStore('docs', () => {
     const head = rest.split('/')[0]
     const inside = files.find((f) => f.file.startsWith(head + '/'))
     if (!inside) return ''
+    /* hit.file 里 head 之前的部分可能不止一层；抽屉只认最顶层的名字 */
     const idx = inside.file.indexOf(head)
-    return idx > 0 ? inside.file.slice(0, idx).replace(/\/$/, '') : ''
+    return idx > 0 ? inside.file.slice(0, idx).split('/')[0] : ''
   }
 
   async function ensureCurrent() {
@@ -406,7 +408,7 @@ export const useDocsStore = defineStore('docs', () => {
     // 路由里写的是"不带扩展名的路径"（/edit/调研/数据调研），这里两种写法都认
     const routedHit = routed
       ? allFiles.value.find((f) => f.file === routed) ||
-        allFiles.value.find((f) => f.file.replace(/\.(md|pdf)$/i, '') === routed)
+        allFiles.value.find((f) => f.file.replace(/\.(md|pdf|html?)$/i, '') === routed)
       : null
     if (routedHit) {
       currentPath.value = routedHit.file
@@ -432,7 +434,7 @@ export const useDocsStore = defineStore('docs', () => {
       try {
         await loadDoc(currentPath.value)
       } catch (e) {
-        error.value = String(e.message || e)
+        setError(e.message || e, 'load')
       }
     }
   }
@@ -448,7 +450,7 @@ export const useDocsStore = defineStore('docs', () => {
   function routedLib() {
     try {
       const lib = String(new URLSearchParams(location.search).get('lib') || '').trim()
-      return lib === '业务面' ? '面试准备' : lib
+      return normalizeLibraryName(lib)
     } catch {
       return ''
     }
@@ -467,15 +469,28 @@ export const useDocsStore = defineStore('docs', () => {
     return true
   }
 
-  async function loadDoc(file, { force = false } = {}) {
+  async function loadDoc(file, { force = false, preserveLocal = true } = {}) {
     if (!file) return ''
     if (!force && rawMap.value[file] !== undefined) return rawMap.value[file]
+    const before = rawMap.value[file]
+    const savedBefore = savedMap.value[file]
     const res = await fetch(API_BASE + '/api/doc?path=' + encodeURIComponent(file))
     const json = await res.json()
     if (!json.ok) throw new Error(json.error || '读取失败')
+    /*
+     * 请求发出后用户可能已经开始编辑，甚至已经自动保存过。
+     * 这时磁盘响应可能比内存里的版本旧，直接覆盖会把刚打的字吞掉。
+     * 发现本地内容变过就放弃这次响应；revision 也保持旧值，下次保存会走冲突提示。
+     * 只有显式「重新读取」才允许用磁盘版本覆盖本地。
+     */
+    if (preserveLocal && before !== undefined && (rawMap.value[file] !== before || savedMap.value[file] !== savedBefore)) {
+      return rawMap.value[file]
+    }
+    const changed = before !== undefined && before !== json.data.content
     rawMap.value[file] = json.data.content
     savedMap.value[file] = json.data.content
     revisionMap.value[file] = json.data.revision
+    if (changed && currentPath.value === file) contentEpoch.value++
     return json.data.content
   }
 
@@ -502,7 +517,10 @@ export const useDocsStore = defineStore('docs', () => {
     tabs.value = loadTabs()
     currentPath.value = ''
     rawMap.value = {}
-    error.value = ''
+    savedMap.value = {}
+    revisionMap.value = {}
+    conflict.value = null
+    clearError()
     await loadAll()
   }
 
@@ -513,7 +531,7 @@ export const useDocsStore = defineStore('docs', () => {
     await loadMe()
     if (!isGuest.value) loadShare()
     loading.value = true
-    error.value = ''
+    clearError()
     try {
       if (!(await loadTree())) return
       if(currentPath.value)await loadPageMeta()
@@ -521,15 +539,15 @@ export const useDocsStore = defineStore('docs', () => {
       // 路由点名的那一篇最优先（/edit/调研/数据调研、分享过来的 /onlyread/…）
       const routed = routedDocPath()
       const routedHit = routed
-        ? allDocs.value.find((d) => d.file === routed || d.file.replace(/\.(md|pdf)$/i, '') === routed)
+        ? allFiles.value.find((d) => d.file === routed || d.file.replace(/\.(md|pdf|html?)$/i, '') === routed)
         : null
       if (routedHit) {
         if (currentPath.value !== routedHit.file) await select(routedHit.file)
-      } else if (!currentPath.value && allDocs.value.length) {
-        currentPath.value = allDocs.value[0].file
+      } else if (!currentPath.value && allFiles.value.length) {
+        currentPath.value = allFiles.value[0].file
       }
     } catch (e) {
-      if (request === allRequest) error.value = String(e.message || e)
+      if (request === allRequest) setError(e.message || e, 'load')
     } finally {
       if (request === allRequest) loading.value = false
     }
@@ -538,12 +556,12 @@ export const useDocsStore = defineStore('docs', () => {
   /** 把当前这一篇写进地址栏：/edit/<路径> 或 /onlyread/<路径>（别人复制地址就能直达） */
   function syncUrl() {
     const mode = window.__readerPublicView ? 'onlyread' : 'doc'
-    // 地址里不带 .md/.pdf：短一点、也跟用户手写的一致
-    const clean = String(currentPath.value || '').replace(/\.(md|pdf)$/i, '')
+    // 地址里不带 .md/.pdf/.html：短一点、也跟用户手写的一致
+    const clean = String(currentPath.value || '').replace(/\.(md|pdf|html?)$/i, '')
     const path = clean ? '/' + clean.split('/').map(encodeURIComponent).join('/') : ''
     /* 部署在子路径时，写回地址栏也要带前缀，否则一跳就跑到站点根上 */
     const search = new URLSearchParams(location.search)
-    if (search.get('lib') === '业务面') search.set('lib', '面试准备')
+    if (search.get('lib')) search.set('lib', normalizeLibraryName(search.get('lib')))
     const query = search.size ? '?' + search.toString() : ''
     const next = API_BASE + '/' + mode + path + query
     if (location.pathname + location.search !== next) history.replaceState(null, '', next)
@@ -551,24 +569,24 @@ export const useDocsStore = defineStore('docs', () => {
 
   async function select(file) {
     currentPath.value = file
-    await loadPageMeta()
+    const metaTask = loadPageMeta()
     syncUrl()
     openTab(file)
     rememberDoc(file)
-    error.value = ''
+    clearError()
     // pdf 没有正文可读，交给 DocView 里的预览；目录（书签）单独问接口
     if (PREVIEW_TYPES.has(currentNode.value?.type)) {
       pdfTranslate.value = { status: 'idle', progress: 0, output: '', error: '' }
       pdfView.value = 'source'
-      await loadPdfToc(file)
+      await Promise.all([metaTask, loadPdfToc(file)])
       checkTranslate(file)
       return
     }
     pdfToc.value = []
     try {
-      await loadDoc(file,{force:rawMap.value[file]===savedMap.value[file]})
+      await Promise.all([metaTask, loadDoc(file,{force:rawMap.value[file]===savedMap.value[file]})])
     } catch (e) {
-      error.value = '打开《' + (allDocs.value.find((d) => d.file === file)?.name || file) + '》失败：' + String(e.message || e)
+      setError('打开《' + (allDocs.value.find((d) => d.file === file)?.name || file) + '》失败：' + String(e.message || e), 'load')
     }
   }
 
@@ -585,11 +603,11 @@ export const useDocsStore = defineStore('docs', () => {
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || '起不了翻译任务')
       pdfTranslate.value = json.data
-      if (json.data.error) error.value = json.data.error
+      if (json.data.error) setError(json.data.error)
       if (json.data.status === 'running') pollTranslate()
       else if (json.data.status === 'done') pdfView.value = 'translated'
     } catch (e) {
-      error.value = '翻译失败：' + String(e.message || e)
+      setError('翻译失败：' + String(e.message || e))
     }
   }
 
@@ -609,7 +627,7 @@ export const useDocsStore = defineStore('docs', () => {
         pdfTranslate.value = json.data
         if (json.data.status === 'running') pollTranslate()
         else if (json.data.status === 'done') pdfView.value = 'translated'
-        else if (json.data.status === 'failed') error.value = json.data.error || '翻译失败'
+        else if (json.data.status === 'failed') setError(json.data.error || '翻译失败')
       } catch {
         pollTranslate()
       }
@@ -636,11 +654,12 @@ export const useDocsStore = defineStore('docs', () => {
   /** 重新从磁盘读当前这篇，放弃内存里的改动 */
   async function reload() {
     if (!currentPath.value) return
-    error.value = ''
+    clearError()
     try {
-      await loadDoc(currentPath.value, { force: true })
+      await loadDoc(currentPath.value, { force: true, preserveLocal: false })
+      contentEpoch.value++
     } catch (e) {
-      error.value = String(e.message || e)
+      setError(e.message || e, 'load')
     }
   }
 
@@ -671,13 +690,13 @@ export const useDocsStore = defineStore('docs', () => {
     while (saveTask) await saveTask
     // 从没读到过内容就保存，等于把空内容写回磁盘，必须拦住
     if (rawMap.value[path] === undefined) {
-      error.value = '这篇没有成功读取，拒绝保存，免得把空内容覆盖上去'
+      setError('这篇没有成功读取，拒绝保存，免得把空内容覆盖上去', 'save')
       return false
     }
     if (rawMap.value[path] === savedMap.value[path]) return true
     const task = (async () => {
       saving.value = true
-      error.value = ''
+      clearError()
       const content = rawMap.value[path]
       try {
         const result=await api('PUT', '/doc', {path,content,revision:revisionMap.value[path]})
@@ -688,7 +707,7 @@ export const useDocsStore = defineStore('docs', () => {
         return true
       } catch (e) {
         if(e.code==='CONFLICT')conflict.value={path,local:content,base:savedMap.value[path],remote:e.details.content,revision:e.details.revision}
-        error.value = '保存失败：' + String(e.message || e)
+        setError('保存失败：' + String(e.message || e), 'save')
         return false
       } finally {
         saving.value = false
@@ -733,6 +752,7 @@ export const useDocsStore = defineStore('docs', () => {
     await api('DELETE', '/doc', { path: file })
     delete rawMap.value[file]
     delete savedMap.value[file]
+    delete revisionMap.value[file]
     // 标签里也别留着一篇已经不存在的文档
     tabs.value = tabs.value.filter((f) => f !== file)
     saveTabs()
@@ -852,7 +872,7 @@ export const useDocsStore = defineStore('docs', () => {
     pageMeta.value={};pageMetaRevision.value=''
     if(!path)return
     try {const {data}=await api('GET','/metadata?path='+encodeURIComponent(path));if(currentPath.value===path){pageMeta.value=data.meta;pageMetaRevision.value=data.revision}}
-    catch(e){error.value=e.message}
+    catch(e){setError(e.message, 'save')}
   }
   async function savePageMeta(patch) {
     const path=currentPath.value
@@ -871,7 +891,7 @@ export const useDocsStore = defineStore('docs', () => {
     }
     revisionMap.value[c.path]=c.revision;savedMap.value[c.path]=c.remote
     rawMap.value[c.path]=mode==='merge'?merged:c.remote
-    conflict.value=null;error.value=''
+    conflict.value=null;clearError()
     contentEpoch.value++
     if(mode==='merge'){if(!(await savePath(c.path)))throw Error(error.value)}
     else await loadTree()
@@ -916,6 +936,9 @@ export const useDocsStore = defineStore('docs', () => {
     saving,
     savedAt,
     error,
+    errorKind,
+    setError,
+    clearError,
     searchKeyword,
     tabs,
     openTab,

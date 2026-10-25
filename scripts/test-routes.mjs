@@ -1,5 +1,19 @@
 import assert from 'node:assert/strict'
 import { resolveEntry } from '../src/utils/routes.js'
+import { legacyInterviewDoc, legacyRootSectionPath, normalizeLibraryName } from '../src/utils/legacy-paths.js'
+
+// 旧链接兼容：抽屉名、旧库根、面试准备内部的归类都只能按原样继续工作
+assert.equal(normalizeLibraryName('业务面'), '面试准备')
+assert.equal(normalizeLibraryName(' 面试准备 '), '面试准备')
+assert.equal(legacyInterviewDoc('业务面/会议总结'), '面试准备/业务面/会议总结')
+assert.equal(legacyInterviewDoc('面试准备/总览/下一步计划'), '面试准备/过程稿/总览/下一步计划')
+assert.equal(legacyInterviewDoc('面试准备/总览/下一步计划.md'), '面试准备/过程稿/总览/下一步计划.md')
+assert.equal(legacyInterviewDoc('面试准备/岗位与策略/岗位JD与目标'), '面试准备/常用资料/岗位JD与目标')
+assert.equal(legacyInterviewDoc('面试准备/README'), '面试准备/README')
+assert.equal(legacyRootSectionPath('面试准备/README'), '面试准备/总览/README')
+assert.equal(legacyRootSectionPath('面试准备/岗位JD与目标.md'), '面试准备/岗位与策略/岗位JD与目标.md')
+assert.equal(legacyRootSectionPath('别的目录/README'), '')
+
 for (const base of ['', '/deepseek/reader']) {
   assert.equal(resolveEntry(base + '/', '', base), base + '/')
   assert.equal(resolveEntry(base + '/doc/', '', base), base + '/doc/')

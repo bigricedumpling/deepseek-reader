@@ -19,7 +19,7 @@ const hint=ref(null), active=ref(0)
 const pdf=computed(()=>store.currentNode?.type==='pdf')
 const items=computed(()=>pdf.value ? store.pdfToc : store.currentToc)
 let scroller=null, frame=0
-const headings=()=>Array.from(scroller?.querySelectorAll('.ProseMirror h1,.ProseMirror h2,.ProseMirror h3,.ProseMirror h4,.ProseMirror h5,.ProseMirror h6') || []).filter(el=>!el.closest('.reader-rich-block'))
+const headings=()=>Array.from(scroller?.querySelectorAll('.ProseMirror h1,.ProseMirror h2,.ProseMirror h3,.ProseMirror h4,.ProseMirror h5,.ProseMirror h6') || []).filter(el=>!el.closest('.reader-rich-block, .reader-columns, .reader-raw-block'))
 function showHint(item,e){const r=e.currentTarget.getBoundingClientRect();hint.value={title:item.title,x:r.right+5,y:Math.max(24,Math.min(innerHeight-24,r.top+r.height/2))}}
 function sync(){
   if(pdf.value){active.value=Math.max(0,items.value.findLastIndex(t=>t.page<=store.pdfPage));return}

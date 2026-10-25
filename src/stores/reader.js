@@ -12,6 +12,7 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import { storageGet, storageSet } from '../utils/storage'
 
 const KEY = {
   font: 'reader.font',
@@ -38,16 +39,16 @@ const KEY = {
 const FONT_MIGRATE = { song: 'serif', hei: 'sans' }
 const SANS_DEFAULT_MIGRATION = 'reader.fontSansDefault.v1'
 
-const str = (k, fallback) => localStorage.getItem(KEY[k]) || fallback
+const str = (k, fallback) => storageGet(KEY[k]) || fallback
 /** 0 是合法取值（字间距），所以不能用 || 兜底 */
 const num = (k, fallback) => {
-  const raw = localStorage.getItem(KEY[k])
+  const raw = storageGet(KEY[k])
   if (raw === null || raw === '') return fallback
   const v = Number(raw)
   return Number.isFinite(v) ? v : fallback
 }
 const bool = (k, fallback) => {
-  const raw = localStorage.getItem(KEY[k])
+  const raw = storageGet(KEY[k])
   return raw === null ? fallback : raw === '1'
 }
 
@@ -78,13 +79,13 @@ export const WIDTH_OPTIONS = [
 
 export const useReaderStore = defineStore('reader', () => {
   /* ---------- 正文排版 ---------- */
-  const rawFont = localStorage.getItem(KEY.font)
+  const rawFont = storageGet(KEY.font)
   /* 旧默认衬线会在首次打开时自动换成当前默认字体。只迁移一次，之后手动选衬线仍会保留。 */
-  const migrateOldDefault = !localStorage.getItem(SANS_DEFAULT_MIGRATION)
+  const migrateOldDefault = !storageGet(SANS_DEFAULT_MIGRATION)
   const font = ref(migrateOldDefault && (rawFont === 'serif' || rawFont === 'song')
     ? 'harmony'
     : FONT_MIGRATE[rawFont] || rawFont || 'harmony')
-  if (migrateOldDefault) localStorage.setItem(SANS_DEFAULT_MIGRATION, '1')
+  if (migrateOldDefault) storageSet(SANS_DEFAULT_MIGRATION, '1')
   const size = ref(num('size', 15.5))
   /** 阅读宽度，0 表示铺满可用宽度 */
   const measure = ref(num('measure', 960))
@@ -171,22 +172,22 @@ export const useReaderStore = defineStore('reader', () => {
     b.style.setProperty('--reading-lh', String(leading.value))
     b.style.setProperty('--reading-tracking', tracking.value + 'em')
 
-    localStorage.setItem(KEY.font, font.value)
-    localStorage.setItem(KEY.size, String(size.value))
-    localStorage.setItem(KEY.measure, String(measure.value))
-    localStorage.setItem(KEY.leading, String(leading.value))
-    localStorage.setItem(KEY.tracking, String(tracking.value))
-    localStorage.setItem(KEY.para, paraStyle.value)
-    localStorage.setItem(KEY.strong, strongFace.value)
-    localStorage.setItem(KEY.italic, italicFace.value)
-    localStorage.setItem(KEY.theme, theme.value)
-    localStorage.setItem(KEY.zoom, String(zoom.value))
-    localStorage.setItem(KEY.tableWidth, tableWidth.value)
-    localStorage.setItem(KEY.tableAlign, tableAlign.value)
-    localStorage.setItem(KEY.toc, tocOpen.value ? '1' : '0')
-    localStorage.setItem(KEY.tocW, String(tocWidth.value))
-    localStorage.setItem(KEY.nav, navCollapsed.value ? '1' : '0')
-    localStorage.setItem(KEY.navW, String(navWidth.value))
+    storageSet(KEY.font, font.value)
+    storageSet(KEY.size, String(size.value))
+    storageSet(KEY.measure, String(measure.value))
+    storageSet(KEY.leading, String(leading.value))
+    storageSet(KEY.tracking, String(tracking.value))
+    storageSet(KEY.para, paraStyle.value)
+    storageSet(KEY.strong, strongFace.value)
+    storageSet(KEY.italic, italicFace.value)
+    storageSet(KEY.theme, theme.value)
+    storageSet(KEY.zoom, String(zoom.value))
+    storageSet(KEY.tableWidth, tableWidth.value)
+    storageSet(KEY.tableAlign, tableAlign.value)
+    storageSet(KEY.toc, tocOpen.value ? '1' : '0')
+    storageSet(KEY.tocW, String(tocWidth.value))
+    storageSet(KEY.nav, navCollapsed.value ? '1' : '0')
+    storageSet(KEY.navW, String(navWidth.value))
   }
 
   watch(

@@ -27,7 +27,7 @@ execSync(`rm -rf /tmp/kb-regression-* 2>/dev/null`, { stdio: 'ignore' })
 
 console.log('搭沙箱:', SB)
 fs.mkdirSync(SB_APP, { recursive: true })
-for (const item of ['src', 'server', 'public', 'index.html', 'package.json', 'vite.config.js']) {
+for (const item of ['src', 'server', 'public', 'index.html', 'package.json', 'vite.config.js', 'brand.mjs']) {
   fs.cpSync(path.join(ROOT, item), path.join(SB_APP, item), { recursive: true })
 }
 fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(SB_APP, 'node_modules'))
@@ -41,7 +41,16 @@ fs.writeFileSync(
     .replace('export default defineConfig({', `export default defineConfig({\n  cacheDir: ${JSON.stringify(path.join(SB_APP, '.vite-cache'))},`)
 )
 
-const app = spawn('npm', ['run', 'dev'], { cwd: SB_APP, stdio: 'ignore' })
+/*
+ * 直接起 Vite，不走 npm run dev。
+ * 沙箱只复制应用需要的文件，package.json 里的 predev 会去同步品牌和插件，
+ * 那些文件在沙箱里并不存在，npm 会在启动 dev 之前就失败。
+ */
+const app = spawn(process.execPath, [path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js')], {
+  cwd: SB_APP,
+  env: { ...process.env, DOCS_ROOT: SB },
+  stdio: 'ignore'
+})
 for (let i = 0; i < 60; i++) {
   try { if ((await fetch(`http://127.0.0.1:${APP_PORT}/`)).ok) break } catch {}
   await new Promise(r => setTimeout(r, 500))
@@ -49,15 +58,19 @@ for (let i = 0; i < 60; i++) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-execSync(`rm -rf "${SB}/内容" "${SB}/.回收站" "${SB}/文档一.md" "${SB}/文档一改名.md"`, { stdio: 'ignore' })
+execSync(`rm -rf "${SB}/内容" "${SB}/.回收站"`, { stdio: 'ignore' })
+/*
+ * 抽屉是文档根下的顶层目录。回归只建一个抽屉「内容」，
+ * 让启动时自动选中的库就是它，5 篇文档都在同一棵树里。
+ */
 execSync(`mkdir -p "${SB}/内容/分类甲" "${SB}/内容/分类乙"`)
-execSync(`printf '# 文档一\\n\\n正文 a\\n' > "${SB}/文档一.md"`)
+execSync(`printf '# 文档一\\n\\n正文 a\\n' > "${SB}/内容/文档一.md"`)
 execSync(`printf '# 文档二\\n\\n正文 b\\n' > "${SB}/内容/分类甲/文档二.md"`)
 execSync(`printf '# 文档三\\n\\n正文 c\\n' > "${SB}/内容/分类乙/文档三.md"`)
 
 // 表格行里"竖线前紧贴、不空格"的写法（真实文档里出现过：URL 后面跟中文括号）。
 // 还原时若重建这一行会平白多一个空格，整篇就被判成有损，这里钉住它。
-fs.writeFileSync(path.join(SB, '表格文档.md'), [
+fs.writeFileSync(path.join(SB, '内容/表格文档.md'), [
   '# 表格文档',
   '',
   '| 来源 | 说明 |',
@@ -67,7 +80,7 @@ fs.writeFileSync(path.join(SB, '表格文档.md'), [
   ''
 ].join('\n'))
 // 编辑器确实吃不下的写法（脚注 + 原始 HTML 块）：用来验"有损提示"这条路径
-fs.writeFileSync(path.join(SB, '有损文档.md'), [
+fs.writeFileSync(path.join(SB, '内容/有损文档.md'), [
   '# 有损文档',
   '',
   '下面几种写法编辑器大多吐不回原样：',
@@ -97,7 +110,7 @@ fs.writeFileSync(path.join(SB, '有损文档.md'), [
 ].join('\n'))
 
 // 树是扫盘扫出来的（目录 = 分类，文件名 = 文档名），不再需要清单文件。
-// 下面三篇的目录结构就是分类结构：根目录一篇、内容/分类甲 一篇、内容/分类乙 一篇。
+// 下面 5 篇都在同一个抽屉「内容」下：根目录一篇、分类甲/分类乙各一篇、根目录两篇特殊格式。
 
 const PORT = CDP_PORT
 const APP = `http://127.0.0.1:${APP_PORT}/`
@@ -105,6 +118,8 @@ const profile = '/tmp/kb-regression-profile-' + Date.now()
 
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  /* 默认 800×600 会触发窄屏收起侧栏，回归就点不到“新建文档” */
+  '--window-size=1440,900',
   `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, APP
 ], { stdio: 'ignore' })
 
@@ -174,10 +189,17 @@ try {
     if (await ev('return !!(window.__reader && window.__reader.currentPath)')) break
     await sleep(500)
   }
+  if (!(await ev('return !!window.__reader'))) {
+    const info = await ev(`return {
+      body: document.body?.innerText?.slice(0, 300) || '',
+      overlay: document.querySelector('vite-error-overlay')?.shadowRoot?.textContent?.slice(0, 500) || ''
+    }`)
+    throw new Error('页面没有启动: ' + (consoleErrors.slice(0, 3).join(' | ') || info.overlay || info.body || '没有控制台错误'))
+  }
 
   const boot = await ev(`return { path: window.__reader.currentPath, docs: window.__reader.allDocs.length,
     loaded: Object.keys(window.__reader.rawMap).length, err: window.__reader.error }`)
-  check('启动并读到 5 篇正文', boot.docs === 5 && boot.loaded === 5 && !boot.err, boot.err || `树 ${boot.docs} 篇，正文 ${boot.loaded} 篇`)
+  check('启动并读到 5 篇文档（当前篇正文已加载）', boot.docs === 5 && boot.loaded >= 1 && !boot.err, boot.err || `树 ${boot.docs} 篇，正文 ${boot.loaded} 篇`)
 
   /* ---------- 常驻编辑器：没有编辑态和阅读态之分 ---------- */
   await sleep(2200)
@@ -248,18 +270,18 @@ try {
 
   // 放行写入，让自动保存把改动落盘，后面的用例从干净状态开始
   await sleep(1600)
-  r = await ev(`const s = window.__reader; if (s.isDirty) await s.save(); s.error=''; return { dirty: s.isDirty }`)
+  r = await ev(`const s = window.__reader; if (s.isDirty) await s.save(); s.clearError(); return { dirty: s.isDirty }`)
   check('恢复写入后能存上', r.dirty === false)
 
 
-  r = await ev(`window.__reader.error='测试错误信息'; await new Promise(x=>setTimeout(x,400))
+  r = await ev(`window.__reader.setError('测试错误信息','load'); await new Promise(x=>setTimeout(x,400))
     return { seen: [...document.querySelectorAll('span')].some(s=>s.textContent.includes('测试错误信息')),
              btn: [...document.querySelectorAll('button')].some(b=>b.textContent.includes('重新读取')) }`)
   check('P0-4 错误显示在界面上', r.seen && r.btn)
-  await ev(`window.__reader.error=''; return true`)
+  await ev(`window.__reader.clearError(); return true`)
 
   r = await ev(`const s=window.__reader; const k=s.rawMap[s.currentPath]; delete s.rawMap[s.currentPath]
-    const ret = await s.save(); const err = s.error; s.rawMap[s.currentPath]=k; s.error=''; return {ret, err}`)
+    const ret = await s.save(); const err = s.error; s.rawMap[s.currentPath]=k; s.clearError(); return {ret, err}`)
   check('P0-4b 没读到内容拒绝保存', r.ret === false && /拒绝保存/.test(r.err), r.err)
 
   r = await ev(`const s=window.__reader
@@ -270,9 +292,9 @@ try {
     const j = await (await fetch('/api/doc?path=' + encodeURIComponent(path))).json()
     return { ok, path, disk: j.ok ? j.data.content.split('\\n')[0] : ('读失败 ' + j.error),
              name: (s.allDocs.find(d=>d.file===path)||{}).name,
-             bar: [...document.querySelectorAll('.doc-title')].some(e=>e.textContent.trim()===path.replace(/\.md$/, '')) }
+             bar: [...document.querySelectorAll('.doc-title')].some(e=>e.textContent.trim()===path.split('/').pop().replace(/\\.md$/, '')) }
   `)
-  check('P2-10 改正文一级标题不动文件名和侧栏名', r.ok && r.disk === '# 正文标题随便改' && r.name === r.path.replace(/\.md$/, '') && r.bar,
+  check('P2-10 改正文一级标题不动文件名和侧栏名', r.ok && r.disk === '# 正文标题随便改' && r.name === r.path.split('/').pop().replace(/\.md$/, '') && r.bar,
         'disk=' + JSON.stringify(r.disk) + ' 侧栏名=' + r.name + ' 文件=' + r.path)
 
   /*
@@ -306,15 +328,27 @@ try {
   await ev(`window.__reader.discard(); return true`)
   await sleep(300)
 
+  /*
+   * 查找是「当前文档内」的。上一步停在改名后的文档二，正文里没有“正文”这个词，
+   * 先回到文档一再查，否则测的是上一条用例的残留状态。
+   */
+  await ev(`await window.__reader.select('内容/文档一.md'); return true`)
+  await sleep(600)
+
   r = await ev(`const s=window.__reader
-    const inp = document.querySelector('input[placeholder="搜索"]')
-    inp.focus(); inp.dispatchEvent(new Event('focus',{bubbles:true}))
-    s.searchKeyword='正文'; await new Promise(x=>setTimeout(x,700))
-    const drop = document.querySelector('.search-drop'); const has = !!drop
-    if (has) { const b = drop.querySelector('button'); if (b) b.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true})) }
-    await new Promise(x=>setTimeout(x,700))
-    return { hadDrop: has, stillOpen: !!document.querySelector('.search-drop') }`)
-  check('P2-11 点搜索结果后下拉收起', r.hadDrop && !r.stillOpen, r.hadDrop ? (r.stillOpen ? '还开着' : '已收起') : '下拉没出现')
+    const btn=[...document.querySelectorAll('button')].find(b=>b.title==='查找当前文档')
+    if(!btn) return { err:'没有查找按钮' }
+    btn.click(); await new Promise(x=>setTimeout(x,300))
+    const inp=document.querySelector('input[placeholder="查找当前文档"]')
+    if(!inp) return { err:'没有查找输入框' }
+    const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set
+    set.call(inp,'正文'); inp.dispatchEvent(new Event('input',{bubbles:true}))
+    await new Promise(x=>setTimeout(x,500))
+    const hits=[...document.querySelectorAll('.search-hit')]
+    if(!hits.length) return { err:'没有搜索结果', hadDrop:false }
+    hits[0].click(); await new Promise(x=>setTimeout(x,400))
+    return { hadDrop:true, stillOpen: !!document.querySelector('.doc-search-panel'), err:'' }`)
+  check('P2-11 点搜索结果后搜索面板收起', !r.err && r.hadDrop && !r.stillOpen, r.err || (r.stillOpen ? '还开着' : '已收起'))
   await ev(`window.__reader.searchKeyword=''; return true`)
   await sleep(400)
 
@@ -342,7 +376,7 @@ try {
   await sleep(400)
   const real = consoleErrors.filter((e) => !/favicon|DevTools|Download the Vue/i.test(e))
   /* ---------- 表格行整行照抄：竖线前的空格不能凭空多出来 ---------- */
-  await ev(`await window.__reader.select('表格文档.md')`)
+  await ev(`await window.__reader.select('内容/表格文档.md')`)
   await sleep(2500)
   const tbl = await ev(`const base = String(window.__baseline)
     const out = window.__normalize(window.__crepe.getMarkdown(), base)
@@ -350,7 +384,7 @@ try {
   check('表格行逐字节还原（竖线前不加空格）', tbl.same && !tbl.note, `${tbl.b}→${tbl.o} lossy=${tbl.note}`)
 
   /* ---------- 有损这篇：黄条要说清差在哪、并给出一键重排 ---------- */
-  await ev(`await window.__reader.select('有损文档.md')`)
+  await ev(`await window.__reader.select('内容/有损文档.md')`)
   await sleep(2600)
   const lossyUI = await ev(`const note = document.querySelector('.lossy-note')
     if (!note) return { lossy: false }

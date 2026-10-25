@@ -33,7 +33,7 @@ export async function callTool(name,args={},options={}){
  const out=await res.json()
  const file=out?.data?.file||out?.data?.path
  if(out.ok && file && ['reader_create','reader_read','reader_rename','reader_move'].includes(name)){
-  const segments=file.replace(/\.(md|pdf)$/i,'').split('/').map(encodeURIComponent).join('/')
+  const segments=file.replace(/\.(md|pdf|html?)$/i,'').split('/').map(encodeURIComponent).join('/')
   const lib=file.split('/')[0]
   const page=new URL(base.replace(/\/$/,'')+'/doc/'+segments)
   page.searchParams.set('lib',lib)

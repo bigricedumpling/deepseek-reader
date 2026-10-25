@@ -1,6 +1,13 @@
 <template>
   <div class="editor-shell">
-    <p v-if="uploadError" class="lossy-note ui-font" role="alert">图片未保存：{{ uploadError }}</p>
+    <p v-if="uploadError" class="lossy-note ui-font flex items-start gap-2" role="alert">
+      <span class="flex-1">图片未保存：{{ uploadError }}</span>
+      <button class="lossy-btn" aria-label="关闭图片错误提示" @click="uploadError = ''">×</button>
+    </p>
+    <p v-if="actionError" class="lossy-note ui-font flex items-start gap-2" role="alert">
+      <span class="flex-1">{{ actionError }}</span>
+      <button class="lossy-btn" aria-label="关闭错误提示" @click="actionError = ''">×</button>
+    </p>
     <div v-if="hasTransientImages" class="lossy-note ui-font" role="alert">
       这篇有 {{ transientImageCount }} 张图片只记录了浏览器临时地址。正文和图片位置仍在，原图需从截图重新选择。
       <details v-if="!readonly" class="mt-2">
@@ -103,6 +110,8 @@ const colw = useTableColumnWidths({
 const lossy = ref(false)
 /** 有损时：还原后的文本（用户点"按编辑器规范重排"就写它）与差异行 */
 const uploadError = ref('')
+/** 非图片操作（折叠设置、内容块）失败时的提示，别混进“图片未保存”里 */
+const actionError = ref('')
 const replacementInput = ref(null)
 const newImageInput = ref(null)
 let replacementSrc = ''
@@ -503,9 +512,9 @@ function insertRich(e){
  let tr=view.state.tr
  if(Number.isInteger(d.pos)){
   const node=tr.doc.nodeAt(d.pos)
-  if(!node||!['reader_block','reader_callout'].includes(node.type.name)){uploadError.value='该内容已变化，请重新打开';return}
+  if(!node||!['reader_block','reader_callout'].includes(node.type.name)){actionError.value='该内容已变化，请重新打开';return}
   const raw=node.type.name==='reader_callout'?calloutValue(node,crepe.editor.ctx):node.attrs.value
-  if(JSON.stringify(JSON.parse(raw))!==d.previous){uploadError.value='该内容已变化，请重新打开';return}
+  if(JSON.stringify(JSON.parse(raw))!==d.previous){actionError.value='该内容已变化，请重新打开';return}
   tr=tr.replaceWith(d.pos,d.pos+node.nodeSize,replacement)
  }else tr=tr.replaceSelectionWith(replacement)
  userTyped=true;view.dispatch(tr.scrollIntoView());view.focus()
@@ -751,10 +760,11 @@ async function onMenuPick(kind) {
   }
   if (kind === 'make_foldable' || kind === 'make_plain') {
     if (!info) return
+    actionError.value = ''
     try {
       await setFoldable(info.key, kind === 'make_foldable')
     } catch (e) {
-      window.alert(String(e.message || e))
+      actionError.value = String(e.message || e)
     }
     return
   }

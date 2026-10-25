@@ -7,6 +7,7 @@
   <div class="flex h-screen w-full overflow-hidden bg-[var(--c-surface)]">
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="reader-superellipse" x="-20%" y="-30%" width="140%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 12 -4"/></filter></defs></svg>
     <Sidebar
+      ref="sidebarRef"
       :nodes="store.treeNodes"
       :current-path="store.currentPath"
       :width="reader.navWidth"
@@ -119,6 +120,8 @@ const reader = useReaderStore()
 
 /** 目录里的回顶按钮靠这个计数通知正文区 */
 const scrollTopSignal = ref(0)
+/** Cmd+K 要展开侧栏并聚焦文档搜索，因此拿到 Sidebar 的公开方法 */
+const sidebarRef = ref(null)
 
 /* ---------- 弹窗 ---------- */
 
@@ -363,8 +366,11 @@ watch(
 /* ---------- 快捷键 ---------- */
 
 function onKey(e) {
+  if (e.defaultPrevented) return
   const meta = e.metaKey || e.ctrlKey
   if (meta && e.key.toLowerCase() === 'k') {
+    // 弹窗打开时不要把焦点抢到后面的侧栏搜索
+    if (document.querySelector('[aria-modal="true"]')) return
     e.preventDefault()
     focusSearch()
   }
@@ -441,7 +447,7 @@ onMounted(async () => {
      *   3. 只按文件名 —— 分享出去的旧链接，在文件夹改名之后还能打开，
      *      不然"上周发给别人的链接"一改名就全废了。
      */
-    const strip = (f) => f.replace(/\.(md|pdf)$/i, '')
+    const strip = (f) => f.replace(/\.(md|pdf|html?)$/i, '')
     const tail = (f) => f.split('/').pop()
     const hit =
       store.allFiles.find((f) => f.file === routed) ||
@@ -492,7 +498,16 @@ function onBeforeUnload(e) {
   e.returnValue = ''
 }
 
+/**
+ * Cmd+K 找的是"哪篇文档"，交给侧栏的文档搜索；
+ * 当前文档内查找是 Cmd+F，由 DocView 自己处理。
+ */
 function focusSearch() {
+  if (sidebarRef.value?.expandAndSearch) {
+    sidebarRef.value.expandAndSearch()
+    return
+  }
+  // 兜底：侧栏方法不可用时，聚焦已经展开的当前文档搜索框
   const el = document.querySelector('input[placeholder="查找当前文档"]')
   if (el) {
     el.focus()
@@ -527,6 +542,22 @@ async function jumpTo(id, keyword, hit) {
   for (let attempt = 0; attempt < 20; attempt++) {
     await new Promise((resolve) => requestAnimationFrame(resolve))
     const root = document.getElementById('main-scroll-container')
+    const srcEditor = root?.querySelector('textarea.src-editor')
+    if (srcEditor && srcEditor.offsetParent !== null && keyword) {
+      const text = srcEditor.value
+      const needle = keyword.toLocaleLowerCase()
+      const lower = text.toLocaleLowerCase()
+      let at = lower.indexOf(needle), seen = 0, targetAt = at
+      while (at >= 0) {
+        if (seen++ === (hit?.ordinal ?? 0)) { targetAt = at; break }
+        at = lower.indexOf(needle, at + needle.length)
+      }
+      if (targetAt >= 0) {
+        srcEditor.focus()
+        srcEditor.setSelectionRange(targetAt, targetAt + keyword.length)
+      }
+      return
+    }
     const editor = root?.querySelector('.ProseMirror')
     if (!editor || !keyword) continue
     const block = findSearchBlock(editor, keyword, hit?.ordinal ?? 0)

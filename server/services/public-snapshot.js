@@ -68,9 +68,10 @@ export function buildPublicSnapshot(source, share, destination) {
   target.setJSON('libraries', { ...libraries, libs })
   target.setJSON('access', { shared: Object.fromEntries(libs.map(lib => [lib.name, true])), locked: Object.fromEntries(libs.map(lib => [lib.name, true])), editable: {} })
   // Keep presentation settings for public paths only.
-  for (const key of ['order', 'colWidths', 'foldables']) {
-    const settings = source.getJSON(key, {})
-    target.setJSON(key, Object.fromEntries(Object.entries(settings).filter(([rel]) => share.isShared(rel))))
+  for (const key of ['order', 'columns', 'foldables']) {
+    const value = source.getJSON(key, {}), map = key === 'order' ? value.order || {} : value
+    const filtered = Object.fromEntries(Object.entries(map).filter(([rel]) => share.isShared(rel)))
+    target.setJSON(key, key === 'order' ? { ...value, order: filtered } : filtered)
   }
   target.db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
   target.db.close()

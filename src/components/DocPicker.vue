@@ -30,6 +30,7 @@
           @click="choose(d)"
         >
           <PhFilePdf v-if="d.type === 'pdf'" :size="13" class="pick-icon" />
+          <PhFileHtml v-else-if="d.type === 'h5'" :size="13" class="pick-icon" />
           <PhFileText v-else :size="13" class="pick-icon" />
           <span class="pick-name">{{ d.name }}</span>
           <span class="pick-path">{{ folderOf(d.file) }}</span>
@@ -49,7 +50,7 @@
 <script setup>
 /* 斜杠菜单里"插入文档"用的选择器：搜名字或路径都行，键盘可用 */
 import { computed, onMounted, ref, watch } from 'vue'
-import { PhMagnifyingGlass, PhFileText, PhFilePdf } from '@phosphor-icons/vue'
+import { PhMagnifyingGlass, PhFileText, PhFilePdf, PhFileHtml } from '@phosphor-icons/vue'
 import { useDocsStore } from '../stores/docs'
 
 const emit = defineEmits(['close', 'pick'])
@@ -62,7 +63,7 @@ onMounted(() => inputEl.value?.focus())
 
 const list = computed(() => {
   const k = kw.value.trim().toLowerCase()
-  const all = (store.allDocs || []).filter((d) => d.file !== store.currentPath)
+  const all = (store.allFiles || []).filter((d) => d.file !== store.currentPath)
   const hit = k ? all.filter((d) => d.name.toLowerCase().includes(k) || d.file.toLowerCase().includes(k)) : all
   return hit.slice(0, 60)
 })

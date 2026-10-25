@@ -69,7 +69,7 @@ window.__ModuleLoader__.load({
       React.createElement('div', { className: 'dsh-reader-connect-actions' },
         !firstUse && React.createElement('button', { type: 'button', className: 'dsh-reader-connect-cancel', onClick: () => { setError(''); if (editing) setEditing(false); else onRetry() } }, editing ? '取消' : '重试'),
         editing ? React.createElement('button', { type: 'submit' }, '连接') : React.createElement('button', { type: 'button', onClick: () => setEditing(true) }, '更换地址')),
-      React.createElement('a', { href: 'https://zangqucheng.site/git/zangqucheng/deepseek-reader', target: '_blank', rel: 'noopener noreferrer' }, '查看安装说明'),
+      React.createElement('a', { href: 'https://github.com/bigricedumpling/deepseek-reader', target: '_blank', rel: 'noopener noreferrer' }, '查看安装说明'),
       error ? React.createElement('span', { role: 'alert' }, error) : null)
     }
 

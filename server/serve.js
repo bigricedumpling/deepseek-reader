@@ -97,7 +97,8 @@ const server = http.createServer(async (req, res) => {
    * 不记 token 本身，只记有没有。
    */
   try {
-    if (!url.pathname.match(/\.(js|css|png|jpe?g|svg|woff2?|otf|ttf|map)$/)) {
+    const accessLog = process.env.READER_ACCESS_LOG
+    if (accessLog && !url.pathname.match(/\.(js|css|png|jpe?g|svg|woff2?|otf|ttf|map)$/)) {
       const hasToken = url.searchParams.has('token')
       const cookieNames = String(req.headers.cookie || '')
         .split(';').map((x) => x.trim().split('=')[0]).filter(Boolean).join(',')
@@ -109,7 +110,7 @@ const server = http.createServer(async (req, res) => {
         'cookie=[' + cookieNames + ']',
         'ua=' + String(req.headers['user-agent'] || '').slice(0, 60),
       ].join(' | ')
-      fs.appendFileSync('/tmp/reader-access.log', line + '\n')
+      fs.appendFileSync(accessLog, line + '\n')
     }
   } catch { /* 日志失败不影响请求 */ }
 

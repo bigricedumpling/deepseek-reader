@@ -209,7 +209,10 @@ export function searchDocs(docs, keyword) {
   if (!kw) return []
   const results = []
   for (const doc of docs) {
-    const lines = layoutText(doc.raw).split('\n')
+    const raw = String(doc.raw ?? '')
+    const stripped = stripFrontMatter(raw)
+    const frontLines = raw === stripped ? 0 : raw.slice(0, raw.length - stripped.length).split('\n').length - 1
+    const lines = layoutText(stripped).split('\n')
     const hits = []
     let ordinal = 0
     lines.forEach((line, i) => {
@@ -223,7 +226,7 @@ export function searchDocs(docs, keyword) {
           const start = Math.max(0, from - 55)
           const clean = (start ? '…' : '') + visible.slice(start, from + kw.length + 75).replace(/^[#>\-*\s]+/, '').trim()
           if (clean) hits.push({
-            line: i + 1,
+            line: frontLines + i + 1,
             ordinal,
             occurrence,
             text: clean.length > 140 ? clean.slice(0, 140) + '…' : clean

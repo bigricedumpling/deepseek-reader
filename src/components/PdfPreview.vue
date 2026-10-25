@@ -8,9 +8,9 @@
     <a :href="url.split('#')[0]" target="_blank" rel="noopener" title="在浏览器打开 PDF"><PhArrowSquareOut :size="16"/><span class="sr-only">打开原文件</span></a>
   </nav>
   <p v-if="error" role="alert" class="pdf-message">{{ error }} <button @click="load">重试</button></p>
-  <p v-else-if="loading" role="status" class="pdf-message">正在加载 PDF…</p>
+  <p v-else-if="loading && !total" role="status" class="pdf-message">正在加载 PDF…</p>
   <div ref="container" class="pdf-page-area">
-    <div ref="paper" class="pdf-paper" :class="{pending:loading}"><canvas ref="canvas" aria-label="PDF 页面"/><div ref="textLayer" class="textLayer"/></div>
+    <div ref="paper" class="pdf-paper" :class="{pending:loading && !total}"><canvas ref="canvas" aria-label="PDF 页面"/><div ref="textLayer" class="textLayer"/></div>
   </div>
 </section>
 </template>
@@ -24,7 +24,7 @@ const props=defineProps({url:String,page:{type:Number,default:1}}),emit=defineEm
 const zoom=ref('fit')
 const zoomOptions=[{value:'fit',label:'适合宽度'},...['0.75','1','1.5','2'].map(value=>({value,label:Number(value)*100+'%'}))]
 const current=ref(1),total=ref(0),loading=ref(true),error=ref(''),canvas=ref(null),container=ref(null),paper=ref(null),textLayer=ref(null)
-let pdf,task,renderTask,textTask,observer,timer,generation=0,paint=0,engine
+let pdf,task,renderTask,textTask,observer,timer,generation=0,paint=0,engine,lastWidth=0
 async function draw(){
  if(!pdf||!container.value)return
  const id=++paint;renderTask?.cancel();textTask?.cancel();loading.value=true;error.value=''
@@ -67,7 +67,7 @@ async function load(){
 }
 watch(()=>props.url.split('#')[0],load)
 watch(()=>props.page,page=>{if(page!==current.value)go(page)})
-onMounted(()=>{load();observer=new ResizeObserver(()=>{clearTimeout(timer);timer=setTimeout(draw,120)});observer.observe(container.value)})
+onMounted(()=>{load();observer=new ResizeObserver(()=>{const w=container.value?.clientWidth||0;if(w===lastWidth)return;lastWidth=w;if(zoom.value!=='fit')return;clearTimeout(timer);timer=setTimeout(draw,120)});observer.observe(container.value)})
 onBeforeUnmount(()=>{++generation;++paint;clearTimeout(timer);observer?.disconnect();renderTask?.cancel();textTask?.cancel();task?.destroy()})
 </script>
 <style scoped>

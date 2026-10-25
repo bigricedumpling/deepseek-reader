@@ -205,7 +205,13 @@ function collect() {
     heads = []
     return
   }
-  heads = [...scroller.querySelectorAll('h1, h2, h3, h4, h5, h6')].filter(el=>!el.closest('.reader-rich-block'))
+  /*
+   * 只认正文里的标题。
+   * 斜杠菜单也用 h6 做分组标题，而且就挂在滚动容器里；如果从 scroller 直接查，
+   * 菜单一挂载就会被算成正文标题，目录高亮会跳到不存在的项。
+   */
+  heads = [...scroller.querySelectorAll('.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6')]
+    .filter(el=>!el.closest('.reader-rich-block, .reader-columns, .reader-raw-block'))
 }
 
 function syncActive() {
@@ -231,6 +237,8 @@ watch(
   () => props.docKey,
   (k) => {
     foldDoc.value = k || ''
+    activeIndex.value = -1
+    progress.value = 0
   },
   { immediate: true }
 )
@@ -263,42 +271,79 @@ function scrollTo(i) {
 
 /* ---------- 装配 ---------- */
 
+let timer1 = null
+let timer2 = null
+let settleFrame = 0
+
+function clearTimers() {
+  clearTimeout(timer1)
+  clearTimeout(timer2)
+  if (settleFrame) cancelAnimationFrame(settleFrame)
+  settleFrame = 0
+}
+
 function teardown() {
+  clearTimers()
   if (scroller) scroller.removeEventListener('scroll', onScroll)
 }
 
+/*
+ * 正文是异步挂载的：目录数据已经到了，标题节点可能还没铺进 DOM。
+ * 固定 400ms/1200ms 两次定时器在慢机器上会漏；这里逐帧重试到标题数量对得上，
+ * 再初始化高亮。只跑几秒，不会常驻轮询。
+ */
+function waitForHeadings(timeout = 3000) {
+  if (settleFrame) cancelAnimationFrame(settleFrame)
+  settleFrame = 0
+  const expected = Array.isArray(props.toc) ? props.toc.length : 0
+  if (!scroller || !expected || props.pdf) return
+  const deadline = performance.now() + timeout
+  const tick = () => {
+    settleFrame = 0
+    if (!scroller) return
+    collect()
+    if (heads.length >= expected) {
+      syncActive()
+      return
+    }
+    if (performance.now() < deadline) settleFrame = requestAnimationFrame(tick)
+    else syncActive()
+  }
+  settleFrame = requestAnimationFrame(tick)
+}
+
 function setup() {
-  teardown()
+  if (scroller) scroller.removeEventListener('scroll', onScroll)
   scroller = document.getElementById('main-scroll-container')
   if (!scroller) return
   collect()
   scroller.addEventListener('scroll', onScroll, { passive: true })
-  progress.value = 0
-  activeIndex.value = -1
   onScroll()
   syncActive()
+  waitForHeadings()
 }
 
-onMounted(() => nextTick(() => setTimeout(setup, 200)))
+onMounted(() => nextTick(() => { timer1 = setTimeout(setup, 200) }))
 onBeforeUnmount(teardown)
 
 watch(
   () => props.toc,
   async () => {
-    activeIndex.value = -1
-    progress.value = 0
+    clearTimers()
     await nextTick()
+    setup()
     // 编辑器是异步渲染的，等它把标题铺进 DOM 再量
-    setTimeout(setup, 400)
-    setTimeout(setup, 1200)
+    timer1 = setTimeout(setup, 400)
+    timer2 = setTimeout(setup, 1200)
   }
 )
 watch(
   () => props.collapsed,
   async (v) => {
     if (!v) {
+      clearTimers()
       await nextTick()
-      setTimeout(setup, 120)
+      timer1 = setTimeout(setup, 120)
     }
   }
 )

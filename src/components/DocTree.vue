@@ -170,7 +170,7 @@ function arrange(nodes, q) {
       const kids = arrange(n.children, q)
       // 空目录也留着（磁盘上有就显示），搜索时才把没命中的目录收掉
       if (kids.length || !q) out.push({ ...n, children: kids })
-    } else if (!q || n.name.toLowerCase().includes(q)) {
+    } else if (!q || n.name.toLowerCase().includes(q) || String(n.file || '').toLowerCase().includes(q)) {
       out.push(n)
     }
   }

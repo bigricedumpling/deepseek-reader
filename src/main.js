@@ -24,6 +24,7 @@ import './style.css'
 import './styles/shapes.css'
 import './styles/surfaces.css'
 import { resolveEntry } from './utils/routes'
+import { storageGet, storageRemove } from './utils/storage'
 import { installTooltips } from './utils/tooltips'
 
 // 首页按身份进入当前工作区；旧 /edit 与 /onlyread 的书签仍按原路由兼容。
@@ -42,10 +43,10 @@ window.fetch = (input, init = {}) => {
 }
 // 迁移本机曾保存的管理凭据，之后使用 HttpOnly 会话，不再发送明文密码头。
 async function start() {
-  const old = localStorage.getItem('reader_pass')
+  const old = storageGet('reader_pass')
   if (old) {
     await fetch(BASE_PATH + '/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: old }) }).catch(() => {})
-    localStorage.removeItem('reader_pass')
+    storageRemove('reader_pass')
   }
   for (const key of ['reader_mode', 'reader_pass', 'reader_token']) document.cookie = key + '=; path=/; Max-Age=0'
   const me = await fetch(BASE_PATH + '/api/me').then(r => r.json()).catch(() => null)
@@ -57,7 +58,7 @@ async function start() {
     if (window.__readerMode === 'owner') {
       next = '/doc/'
       let recent = ''
-      try { recent = JSON.parse(localStorage.getItem('reader.library-switcher:' + BASE_PATH) || '{}').recent?.[0] || '' } catch {}
+      try { recent = JSON.parse(storageGet('reader.library-switcher:' + BASE_PATH) || '{}').recent?.[0] || '' } catch {}
       if (!new URLSearchParams(query).get('lib')) query = recent ? '?lib=' + encodeURIComponent(recent) : '?choose=1'
     }
     location.replace(resolveEntry(BASE_PATH + next, query, BASE_PATH))
