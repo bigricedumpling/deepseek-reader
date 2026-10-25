@@ -3,7 +3,10 @@
     <!-- 顶部工具条：左侧是打开的文档，右侧是各功能入口 -->
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
-      <DocTabs v-if="tabItems.length" class="mr-auto" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" />
+      <div class="topbar-left mr-auto flex min-w-0 items-center gap-2">
+        <InstanceBadge />
+        <DocTabs v-if="tabItems.length" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" />
+      </div>
       <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原抽屉"><PhClockCounterClockwise :size="12" />恢复副本</span>
       <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
@@ -283,6 +286,7 @@ import SelectMenu from '../components/SelectMenu.vue'
 import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
+import InstanceBadge from '../components/InstanceBadge.vue'
 import ConflictDialog from '../components/ConflictDialog.vue'
 import VersionHistory from '../components/VersionHistory.vue'
 import DocumentInfo from '../components/DocumentInfo.vue'
