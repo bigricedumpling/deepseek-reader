@@ -398,12 +398,11 @@
       </nav>
       <div v-if="!isGuest" class="workspace-history-footer">
         <button class="workspace-history-link" :title="`在 DSH 用 ${BRAND_NAME} 打开过的 Markdown`" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
-        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="footerTools=false;settingsOpen=true"><PhGearSix :size="16"/>设置</button><button @click="openActivity"><PhGitDiff :size="16"/>Agent 改动<span v-if="activityUnread" class="activity-count">{{ activityUnread }}</span></button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
+        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="openActivity"><PhGitDiff :size="16"/>Agent 改动<span v-if="activityUnread" class="activity-count">{{ activityUnread }}</span></button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
       </div>
     </template>
     </aside>
 
-    <ProductSettings v-if="settingsOpen" @close="closeSettings" />
     <RecoveryPanel :initial-tab="recoveryTab" :open="recoveryOpen" @close="closeRecovery" @restored="onRecovered" />
     <ActivityPanel :open="activityOpen" @close="closeActivity" @select="onActivitySelect" />
     <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false;managerOpen=true" />
@@ -427,7 +426,6 @@
 <script setup>
 import { BRAND_NAME } from '../../brand.mjs'
 import SelectMenu from './SelectMenu.vue'
-import ProductSettings from './ProductSettings.vue'
 import PublicSharing from './PublicSharing.vue'
 import {setFavicon} from '../utils/favicon'
 
@@ -440,7 +438,7 @@ import { resizePanel } from '../utils/panel-resize'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, provide } from 'vue'
 // 菜单里的图标：树的操作、分组与排序
 import {
-  PhGearSix, PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
+  PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
   PhSquaresFour, PhUserCircle, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
   PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise, PhGitDiff,
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
@@ -610,8 +608,6 @@ async function confirmTransfer() {
   } catch (error) { transfer.error = String(error.message || error) }
   finally { transfer.busy = false }
 }
-const settingsOpen=ref(false)
-async function closeSettings(){settingsOpen.value=false;await nextTick();toolsTrigger.value?.focus()}
 const footerTools=ref(false),recoveryTab=ref('trash'),toolsTrigger=ref(null),toolsPanel=ref(null)
 async function toggleFooterTools(){footerTools.value=!footerTools.value;if(footerTools.value){await nextTick();toolsPanel.value?.querySelector('button')?.focus();loadActivityUnread()}}
 async function closeRecovery(){recoveryOpen.value=false;await nextTick();toolsTrigger.value?.focus()}

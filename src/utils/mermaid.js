@@ -42,7 +42,7 @@ function configure(mermaid) {
     theme: 'base',
     securityLevel: 'strict',
     htmlLabels: false,
-    fontFamily: '"Weixin", "PingFang SC", -apple-system, sans-serif',
+    fontFamily: '"HarmonyOS Sans SC", "Noto Sans SC", sans-serif',
     themeVariables: {
       primaryColor: t.primaryColor,
       primaryBorderColor: t.primaryBorderColor,

@@ -44,14 +44,7 @@ code, pre, kbd { font-family: var(--font-mono); }
   border-radius: 2px;
 }
 
-/* 微信字体（仅用于品牌与少量标签）*/
-@font-face {
-  font-family: 'Weixin';
-  src: local('Weixin'); /* Optional installed font; not redistributed in the product package. */
-  font-display: swap;
-}
-/* 界面字体由设置中的 --font-sans 控制，默认沿用微信体。 */
-.font-weixin,
+/* 界面字体固定为鸿蒙黑体，见 styles/tokens.css。 */
 .ui-font {
   font-family: var(--font-sans);
 }
