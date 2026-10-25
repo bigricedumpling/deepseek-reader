@@ -205,24 +205,23 @@
         </button>
       </div>
 
-    <!-- 新建：文档是主操作，文件夹同排但更紧凑 -->
-    <div v-if="currentLibEditable" class="px-3 pt-2 pb-3 flex items-stretch gap-2">
-      <button
-        class="newdoc-btn flex-1 min-w-0 h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
-        title="在根目录新建文档"
-        @click="emit('create-doc', currentLib || '')"
-      >
-        <PhPlus :size="13" weight="bold" />
-        新建文档
-      </button>
-      <button class="newfolder-btn" title="在根目录新建文件夹" aria-label="新建文件夹" @click="emit('create-category', currentLib || '')">
-        <PhFolderSimplePlus :size="14" />
-        <span>文件夹</span>
-      </button>
-    </div>
-
-    <!-- 工具条 -->
-    <div class="px-3 pb-2 flex items-center gap-0.5 shrink-0">
+    <!-- 一行操作：新建文档主位，文件夹、搜索、排序收成图标 -->
+    <div class="px-3 pt-2 pb-2 flex items-center gap-1.5 shrink-0">
+      <template v-if="currentLibEditable">
+        <button
+          class="newdoc-btn flex-1 min-w-0 h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
+          :class="{ 'is-narrow': brandNarrow }"
+          title="在根目录新建文档"
+          aria-label="新建文档"
+          @click="emit('create-doc', currentLib || '')"
+        >
+          <PhPlus :size="13" weight="bold" />
+          <span class="newdoc-label">新建文档</span>
+        </button>
+        <button class="newfolder-btn" title="在根目录新建文件夹" aria-label="新建文件夹" @click="emit('create-category', currentLib || '')">
+          <PhFolderSimplePlus :size="16" />
+        </button>
+      </template>
       <span class="ml-auto flex items-center gap-0.5">
         <button
           class="icon-btn"
@@ -1969,8 +1968,10 @@ onMounted(loadActivityUnread)
   place-items: center;
 }
 /* 文件夹和新建文档同排；文档占主位，文件夹保持紧凑。 */
-.newfolder-btn { display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;height:36px;padding:0 10px;border-radius:var(--radius-control);background:var(--c-field);color:var(--c-sub);font-size:12px;white-space:nowrap; }
+.newfolder-btn { display:inline-flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;padding:0;border-radius:var(--radius-control);background:var(--c-field);color:var(--c-sub); }
 .newfolder-btn:hover { background:var(--c-hover);color:var(--c-ink); }
+.newdoc-btn.is-narrow .newdoc-label { display:none; }
+.newdoc-btn.is-narrow { gap:0; }
 .batch-bar{display:flex;align-items:center;gap:5px;color:var(--c-sub);font-size:12px}
 .batch-bar span{flex:1;min-width:0}
 .batch-bar button{padding:5px 7px;border-radius:var(--radius-control);white-space:nowrap}
