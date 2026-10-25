@@ -9,6 +9,7 @@
     "dev": "vite",
     "dev:sandbox": "node scripts/dev-sandbox.mjs",
     "release:local": "node scripts/release-local.mjs",
+    "release:plugin": "node scripts/release-plugin.mjs",
     "snapshot": "node scripts/snapshot-library.mjs",
     "snapshot:install": "node scripts/snapshot-service.mjs install",
     "snapshot:status": "node scripts/snapshot-service.mjs status",

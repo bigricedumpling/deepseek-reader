@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = 8090
 const LABEL = 'com.quchengzang.reader.local'
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
@@ -38,8 +37,12 @@ if (failures.length) {
 }
 console.log('服务端语法检查通过。')
 
-/* 2. 构建 */
-const build = spawnSync(npm, ['run', 'build'], { cwd: ROOT, stdio: 'inherit' })
+/*
+ * 2. 构建，同时刷新插件自带的 runtime。
+ * 只 build 仓库的 dist 不够：8090 不在时 DSH 会回退到插件 runtime，
+ * 那里如果是旧页面，用户会以为新改动丢了。
+ */
+const build = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'prepare-plugin.mjs')], { cwd: ROOT, stdio: 'inherit', env: process.env })
 if (build.status !== 0) {
   console.error('构建失败，服务保持原样。')
   process.exit(build.status || 1)

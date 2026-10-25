@@ -60,6 +60,8 @@ npm run dev
 
 开发时可设置 `DOCS_ROOT` 指向独立数据目录。构建使用 `npm run build`；基础检查使用 `npm run check` 和 `npm run typecheck`。
 
+交付到本机自用实例使用 `npm run release:local`：它会检查服务端语法、构建前端、同步插件自带运行时并重启本机服务。生成可安装的插件包使用 `npm run release:plugin`，产物在 `.dist-plugin/`。
+
 项目使用 Vue 3、Vite、Milkdown、Node.js 和 SQLite。参与开发可阅读 [工程说明](docs/ENGINEERING.md) 与 [存储架构](docs/数据与扩展架构.md)；独立网站维护者可阅读 [服务器部署](docs/DEPLOYMENT.md)。
 
 ## 许可
