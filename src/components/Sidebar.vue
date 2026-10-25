@@ -157,7 +157,6 @@
     -->
     <div v-if="collapsed" class="reader-rail">
       <button class="brand-logo sm" title="展开侧栏" @click.stop="onRailLogo"><ContentIcon :value="logo" /></button>
-      <RailToc />
     </div>
 
     <!-- 展开态 -->
@@ -377,6 +376,7 @@
 
       </nav>
       <div v-if="!isGuest" class="workspace-tools-footer">
+        <InstanceBadge />
         <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="openActivity"><PhGitDiff :size="16"/>Agent 改动<span v-if="activityUnread" class="activity-count">{{ activityUnread }}</span></button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
       </div>
     </template>
@@ -411,6 +411,7 @@ import {setFavicon} from '../utils/favicon'
 import AgentSettings from './AgentSettings.vue'
 import RecoveryPanel from './RecoveryPanel.vue'
 import ActivityPanel from './ActivityPanel.vue'
+import InstanceBadge from './InstanceBadge.vue'
 import ContentIcon from './ContentIcon.vue'
 import IconPicker from './IconPicker.vue'
 import { resizePanel } from '../utils/panel-resize'
@@ -424,7 +425,6 @@ import {
   PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight
 } from '@phosphor-icons/vue'
 import {useDialogFocus} from '../composables/useDialogFocus'
-import RailToc from './RailToc.vue'
 import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
 import AppDialog from './AppDialog.vue'
@@ -2148,7 +2148,7 @@ onMounted(loadActivityUnread)
 <style scoped>.lib-icon-edit{display:grid;place-items:center;padding:5px;border-radius:var(--radius-control);margin-left:-5px}.lib-icon-edit:not(:disabled):hover{background:var(--c-hover)}.lib-icon-edit:disabled{cursor:default}.workspace-footer .manage-entry{gap:10px;padding:10px 8px}.workspace-footer .manage-entry:hover{background:var(--c-hover)}</style>
 
 <style scoped>
-.workspace-tools-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:16px 12px 12px;border:0}.workspace-tools{position:relative}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}.workspace-tools-menu .activity-count{margin-left:auto;font-size:11px;color:var(--c-faint);font-variant-numeric:tabular-nums}
+.workspace-tools-footer{display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:16px 12px 12px;border:0}.workspace-tools{position:relative;margin-left:auto}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}.workspace-tools-menu .activity-count{margin-left:auto;font-size:11px;color:var(--c-faint);font-variant-numeric:tabular-nums}
 </style>
 
 <style scoped>

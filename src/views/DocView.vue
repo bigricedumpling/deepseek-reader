@@ -4,7 +4,6 @@
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
       <div class="topbar-left mr-auto flex min-w-0 items-center gap-2">
-        <InstanceBadge />
         <DocTabs v-if="tabItems.length" :items="tabItems" :active="docId" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" />
       </div>
       <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原抽屉"><PhClockCounterClockwise :size="12" />恢复副本</span>
@@ -147,15 +146,6 @@
         <PhTranslate v-else :size="15" />
       </button>
 
-      <!-- 目录开关 -->
-      <button
-        class="btn-icon"
-        :class="{ 'is-active': reader.tocOpen }"
-        title="目录"
-        @click="reader.tocOpen = !reader.tocOpen"
-      >
-        <PhListDashes :size="15" />
-      </button>
       <a v-if="embedded" class="btn-icon open-in-browser" :href="browserUrl" target="_blank" rel="noopener noreferrer" title="在浏览器打开当前文档" aria-label="在浏览器打开当前文档"><PhArrowSquareOut :size="17" /></a>
 
     </div>
@@ -284,7 +274,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 // 弹层里那些小图标：宽度 / 加粗斜体 / 段落 / 表格 / 主题 / 缩放 / 导出 / pdf 翻译
 import {
   PhMagnifyingGlass, PhTextAa, PhTextT, PhArrowsOutLineHorizontal,
-  PhExport, PhListDashes, PhArrowSquareOut, PhX, PhArrowUp, PhSpinnerGap, PhWarningCircle,
+  PhExport, PhArrowSquareOut, PhX, PhArrowUp, PhSpinnerGap, PhWarningCircle,
   PhCaretLeft, PhCaretRight, PhCircleHalf, PhPrinter, PhInfo, PhClockCounterClockwise,
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
@@ -298,7 +288,6 @@ import SelectMenu from '../components/SelectMenu.vue'
 import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
-import InstanceBadge from '../components/InstanceBadge.vue'
 import ConflictDialog from '../components/ConflictDialog.vue'
 import VersionHistory from '../components/VersionHistory.vue'
 import DocumentInfo from '../components/DocumentInfo.vue'

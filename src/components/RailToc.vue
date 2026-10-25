@@ -1,15 +1,19 @@
 <template>
   <nav v-if="items.length && !reader.tocOpen" class="rail-toc" aria-label="章节快捷导航" @mouseleave="hint = null" @keydown.esc="hint = null">
+    <button class="rail-toc-handle" title="展开完整目录" aria-label="展开完整目录" @click.stop="openToc">
+      <PhListDashes :size="14" />
+    </button>
     <button v-for="(item,i) in items" :key="i" class="rail-toc-stop" :class="{active:i===active}"
       :aria-label="item.title" :aria-current="i===active ? 'location' : undefined"
-      @mouseenter="showHint(item,$event)" @focus="showHint(item,$event)" @blur="hint=null" @click="go(i)">
+      @mouseenter="showHint(item,$event)" @focus="showHint(item,$event)" @blur="hint=null" @click.stop="go(i)">
       <span :style="{width:(item.level > 2 ? 9 : item.level === 2 ? 12 : 16)+'px'}" />
     </button>
-    <Teleport to="body"><div v-if="hint" class="rail-toc-hint ui-font" role="tooltip" :style="{top:hint.y+'px',left:hint.x+'px'}">{{ hint.title }}</div></Teleport>
+    <Teleport to="body"><div v-if="hint" class="rail-toc-hint ui-font" role="tooltip" :style="{top:hint.y+'px',right:hint.right+'px'}">{{ hint.title }}</div></Teleport>
   </nav>
 </template>
 <script setup>
 import {ref, computed, watch, onMounted, onBeforeUnmount, nextTick} from 'vue'
+import {PhListDashes} from '@phosphor-icons/vue'
 import {useDocsStore} from '../stores/docs'
 import {useReaderStore} from '../stores/reader'
 import {unfoldKeys, foldKey} from '../utils/toc-fold'
@@ -20,7 +24,7 @@ const pdf=computed(()=>store.currentNode?.type==='pdf')
 const items=computed(()=>pdf.value ? store.pdfToc : store.currentToc)
 let scroller=null, frame=0
 const headings=()=>Array.from(scroller?.querySelectorAll('.ProseMirror h1,.ProseMirror h2,.ProseMirror h3,.ProseMirror h4,.ProseMirror h5,.ProseMirror h6') || []).filter(el=>!el.closest('.reader-rich-block, .reader-columns, .reader-raw-block'))
-function showHint(item,e){const r=e.currentTarget.getBoundingClientRect();hint.value={title:item.title,x:r.right+5,y:Math.max(24,Math.min(innerHeight-24,r.top+r.height/2))}}
+function showHint(item,e){const r=e.currentTarget.getBoundingClientRect();hint.value={title:item.title,right:Math.max(12,innerWidth-r.left+6),y:Math.max(24,Math.min(innerHeight-24,r.top+r.height/2))}}
 function sync(){
   if(pdf.value){active.value=Math.max(0,items.value.findLastIndex(t=>t.page<=store.pdfPage));return}
   const top=scroller?.getBoundingClientRect().top || 0
@@ -53,13 +57,17 @@ async function go(i){
   }
   active.value=i
 }
+function openToc(){reader.tocOpen=true}
 watch(()=>[store.currentPath,store.currentRaw,store.currentLoaded,store.pdfPage,reader.tocOpen],()=>{hint.value=null;bind()},{flush:'post'})
 onMounted(bind)
 onBeforeUnmount(()=>{scroller?.removeEventListener('scroll',onScroll);cancelAnimationFrame(frame)})
 </script>
 <style scoped>
-.rail-toc{position:absolute;top:50%;left:6px;transform:translateY(-50%);width:32px;max-height:60vh;overflow-y:auto;scrollbar-width:none;padding:4px 0}
+.rail-toc{position:absolute;top:50%;right:6px;z-index:5;transform:translateY(-50%);width:32px;max-height:60vh;overflow-y:auto;scrollbar-width:none;padding:4px 0}
 .rail-toc::-webkit-scrollbar{display:none}
+.rail-toc-handle{position:sticky;top:0;z-index:1;display:flex;justify-content:center;align-items:center;width:32px;height:24px;margin-bottom:2px;border-radius:6px;background:var(--c-surface);color:var(--c-faint);opacity:.4;transition:opacity .15s,background .15s,color .15s}
+.rail-toc:hover .rail-toc-handle{opacity:.85}
+.rail-toc-handle:hover,.rail-toc-handle:focus-visible{opacity:1;background:var(--c-hover);color:var(--c-accent)}
 .rail-toc-stop{display:flex;justify-content:center;align-items:center;width:32px;height:15px;outline-offset:-2px}
 .rail-toc-stop span{height:1.5px;flex-shrink:0;border-radius:2px;background:var(--c-faint);opacity:.26;transition:opacity .15s,background .15s}
 .rail-toc-stop.active span{opacity:.85;background:var(--c-ink)}

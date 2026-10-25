@@ -53,6 +53,7 @@
         @create-doc="askCreateDocInCurrentLib"
         @reload="store.reload()"
       />
+      <RailToc />
     </main>
 
     <TocPanel
@@ -103,6 +104,7 @@ const pageLoadedAt = Date.now()
 import Sidebar from './components/Sidebar.vue'
 import DocView from './views/DocView.vue'
 import TocPanel from './components/TocPanel.vue'
+import RailToc from './components/RailToc.vue'
 import AppDialog from './components/AppDialog.vue'
 import { useDocsStore } from './stores/docs'
 import { useReaderStore } from './stores/reader'
