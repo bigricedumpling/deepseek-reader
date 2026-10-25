@@ -336,9 +336,8 @@ try {
   await sleep(600)
 
   r = await ev(`const s=window.__reader
-    const btn=[...document.querySelectorAll('button')].find(b=>b.title==='查找当前文档')
-    if(!btn) return { err:'没有查找按钮' }
-    btn.click(); await new Promise(x=>setTimeout(x,300))
+    document.dispatchEvent(new KeyboardEvent('keydown',{key:'f',metaKey:true,bubbles:true,cancelable:true}))
+    await new Promise(x=>setTimeout(x,300))
     const inp=document.querySelector('input[placeholder="查找当前文档"]')
     if(!inp) return { err:'没有查找输入框' }
     const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set

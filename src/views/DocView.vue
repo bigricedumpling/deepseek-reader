@@ -9,145 +9,76 @@
       <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原抽屉"><PhClockCounterClockwise :size="12" />恢复副本</span>
       <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
-      <div v-if="!isPreview" ref="searchWrap" class="doc-search-wrap" :style="{ '--search-available': searchPanelWidth + 'px' }">
-        <button class="btn-icon" title="查找当前文档" aria-label="查找当前文档" :aria-expanded="searchOpen" @click="toggleDocSearch"><PhMagnifyingGlass :size="15" /></button>
-        <transition name="pop">
-        <div v-if="searchOpen" class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
-          <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.enter.prevent="results[0]?.hits[0] && onResultClick(results[0], results[0].hits[0])" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
-          <div v-if="keyword.trim()" class="doc-search-results">
-            <p v-if="!results.length" class="search-scope">没有匹配</p>
-            <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r, h)"><span v-html="highlight(h.text, keyword)" /><small>第 {{ h.line }} 行{{ h.occurrence > 1 ? `，本行第 ${h.occurrence} 处` : '' }}</small></button></template>
-          </div>
-        </div>
-        </transition>
-      </div>
-
-      <!-- 阅读偏好仅用于 Markdown；PDF 使用自己的阅读控件 -->
-      <div v-if="!isPreview" class="relative">
-        <button
-          class="btn-icon"
-          :class="{ 'is-active': open === 'type' }"
-          title="排版"
-          @click="toggle('type')"
-        >
-          <PhTextT :size="15" />
-        </button>
-        <transition name="pop">
-          <div v-if="open === 'type'" class="pop-menu is-panel type-panel">
-
-            <div class="type-tabs" role="tablist" aria-label="排版设置">
-              <button v-for="section in [{id:'text',label:'常用'},{id:'advanced',label:'更多'}]" :key="section.id" role="tab" :aria-selected="typeSection===section.id" :class="{'is-on':typeSection===section.id}" @click="typeSection=section.id">{{section.label}}</button>
-            </div>
-            <div v-if="typeSection==='text'" class="type-groups">
-              <section class="type-group"><p class="type-label">正文宽度</p><div class="type-row columns-3"><button v-for="w in WIDTHS" :key="w.value" class="type-chip" :class="{'is-on':reader.measure===w.value}" @click="reader.measure=w.value">{{w.label}}</button></div></section>
-              <section class="type-group"><p class="type-label">字号</p><div class="type-row columns-4"><button v-for="size in SIZES" :key="size.value" class="type-chip" :class="{'is-on':reader.size===size.value}" @click="reader.size=size.value">{{size.label}}</button></div></section>
-              <section class="type-group"><p class="type-label">字体</p><SelectMenu v-model="reader.font" :options="FONTS.map(f=>({value:f.id,label:f.label}))" label="字体" /></section>
-              <section class="type-group"><p class="type-label"><span>行距</span><span class="tabular-nums">{{reader.leading.toFixed(2)}}</span></p><div class="type-row columns-3"><button v-for="pace in PACE_OPTIONS" :key="pace.id" class="type-chip" :class="{'is-on':Math.abs(reader.leading-pace.lh)<.02}" @click="reader.leading=pace.lh">{{pace.label}}</button></div><input class="type-range" type="range" aria-label="行距" min="1.4" max="2.4" step=".05" :value="reader.leading" @input="reader.leading=Number($event.target.value)" /></section>
-            </div>
-            <div v-else class="type-groups">
-              <section class="type-group"><p class="type-label">段落样式</p><div class="type-row columns-2"><button v-for="para in PARA_STYLES" :key="para.id" class="type-chip" :class="{'is-on':reader.paraStyle===para.id}" @click="reader.paraStyle=para.id">{{para.label}}</button></div></section>
-              <section class="type-group"><p class="type-label">中文加粗</p><div class="type-row columns-2"><button v-for="face in STRONG_FACES" :key="face.id" class="type-chip" :class="{'is-on':reader.strongFace===face.id}" @click="reader.strongFace=face.id">{{face.label}}</button></div></section>
-              <section class="type-group"><p class="type-label">中文斜体</p><div class="type-row columns-2"><button v-for="face in ITALIC_FACES" :key="face.id" class="type-chip" :class="{'is-on':reader.italicFace===face.id}" @click="reader.italicFace=face.id">{{face.label}}</button></div></section>
-              <section class="type-group"><p class="type-label"><span>字间距</span><span class="tabular-nums">{{reader.tracking.toFixed(2)}} em</span></p><input class="type-range" type="range" aria-label="字间距" min="-.02" max=".12" step=".01" :value="reader.tracking" @input="reader.tracking=Number($event.target.value)" /></section>
-              <section class="type-group"><p class="type-label">表格宽度</p><div class="type-row columns-2"><button v-for="width in TABLE_WIDTHS" :key="width.id" class="type-chip" :class="{'is-on':reader.tableWidth===width.id}" @click="reader.tableWidth=width.id">{{width.label}}</button></div></section>
-              <section class="type-group"><p class="type-label">表格对齐</p><div class="type-row columns-3"><button v-for="align in TABLE_ALIGNS" :key="align.id" class="type-chip" :class="{'is-on':reader.tableAlign===align.id}" @click="reader.tableAlign=align.id">{{align.label}}</button></div></section>
-            </div>
-          </div>
-        </transition>
-      </div>
-
-      <!-- 外观：主题、缩放 -->
-      <div class="relative">
-        <button
-          class="btn-icon"
-          :class="{ 'is-active': open === 'look' }"
-          title="外观"
-          @click="toggle('look')"
-        >
-          <PhCircleHalf :size="15" />
-        </button>
-        <transition name="pop">
-          <div v-if="open === 'look'" class="pop-menu is-panel look-panel">
-
-            <p class="type-label"><span class="label-main"><component :is="PhCircleHalf" :size="12" class="label-icon" />主题</span></p>
-            <div class="type-row columns-2">
-              <button
-                v-for="t in THEMES"
-                :key="t.id"
-                class="type-chip"
-                :class="{ 'is-on': reader.theme === t.id }"
-                @click="reader.theme = t.id"
-              >
-                <component v-if="t.icon" :is="t.icon" :size="13" class="chip-icon" />
-                {{ t.label }}
-              </button>
-            </div>
-
-            <p v-if="!isPreview" class="type-label">
-              <span class="label-main"><PhMagnifyingGlass :size="12" class="label-icon" />Markdown 阅读缩放</span>
-              <span class="tabular-nums text-[var(--c-faint)]">{{ reader.zoom }}%</span>
-            </p>
-            <div v-if="!isPreview" class="type-row columns-3">
-              <button
-                v-for="z in ZOOMS"
-                :key="z.value"
-                class="type-chip"
-                :class="{ 'is-on': reader.zoom === z.value }"
-                @click="reader.zoom = z.value"
-              >
-                <component v-if="z.icon" :is="z.icon" :size="13" class="chip-icon" />
-                {{ z.label }}
-              </button>
-            </div>
-          </div>
-        </transition>
-      </div>
+      <span v-if="transientSaveText" class="doc-save-state ui-font" :class="saveStateClass">
+        <PhSpinnerGap v-if="saving" :size="12" class="spin" />
+        {{ transientSaveText }}
+      </span>
 
       <div v-if="docId" class="relative">
-        <button ref="exportButton" class="btn-icon" title="文档操作" aria-label="文档操作" :aria-expanded="['access', 'visibility'].includes(open)" :class="{ 'is-active': ['access', 'visibility'].includes(open) }" @click="toggle('access')"><PhDotsThree :size="18" weight="bold" /></button>
+        <button ref="moreButton" class="btn-icon" title="更多" aria-label="更多" :aria-expanded="!!open" :class="{ 'is-active': !!open }" @click="toggle('more')"><PhDotsThree :size="18" weight="bold" /></button>
         <transition name="pop">
-        <div v-if="open === 'access'" class="pop-menu is-panel document-actions">
-          <template v-if="!store.isGuest">
-            <button ref="visibilityEntry" class="pop-item" @click="showVisibility"><component :is="meta.shared === false ? PhEyeSlash : PhEye" :size="15" /><span>{{ meta.shared === false ? '仅自己可见' : '已纳入分享范围' }}</span><PhCaretRight :size="13" class="menu-tail" /></button>
+          <div v-if="open === 'more'" class="pop-menu is-panel document-actions more-menu">
+            <button v-if="!isPreview" class="pop-item" @click.stop="openSearch"><PhMagnifyingGlass :size="15" /><span>查找当前文档</span><kbd class="menu-shortcut">⌘F</kbd></button>
+            <button v-if="!isPreview" class="pop-item" @click="open = 'reading'"><PhTextT :size="15" /><span>阅读设置</span><PhCaretRight :size="13" class="menu-tail" /></button>
             <div class="doc-options-divider" />
-          </template>
-          <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="15" /> {{ fileManagerLabel() }}</button>
-          <button v-if="!store.isGuest" class="pop-item" @click="open='';infoOpen=true"><PhInfo :size="15" /> 文档信息</button>
-          <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open=''; historyOpen=true"><PhClockCounterClockwise :size="15" /> 历史版本</button>
-          <div class="doc-options-divider" />
-          <p class="menu-section-label">导出</p>
-          <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="15" /> Markdown 文件</button>
-          <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
-          <button v-if="!isPreview" class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
-          <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener" @click="open=''"><PhArrowSquareOut :size="15" />打开原文件</a>
-        </div>
-        <div v-else-if="open === 'visibility'" class="pop-menu is-panel document-actions">
-          <button ref="visibilityBack" class="pop-item" @click="backToActions"><PhCaretLeft :size="15" />分享范围</button>
-          <div class="doc-options-divider" />
-          <button class="doc-state" role="switch" :aria-checked="meta.shared !== false" aria-label="纳入分享范围" @click="changeAccess('shared')"><PhEye :size="15" /><span>纳入分享范围</span><span class="state-switch" :class="{on:meta.shared !== false}" /></button>
-          <p class="settings-scope">{{ meta.shared === false ? '仅自己可见。' : '此设置不生成或更新分享链接。' }}</p>
-          <template v-if="meta.shared !== false">
-            <button v-if="!isPreview" class="doc-state" role="switch" :aria-checked="!!meta.locked" :disabled="!!meta.lockedAt && meta.lockedAt !== docId" aria-label="访客只读" @click="changeAccess('locked')"><PhLock :size="15" /><span>访客只读</span><span class="state-switch" :class="{on:meta.locked}" /></button>
-            <p class="settings-scope">{{ meta.lockedAt && meta.lockedAt !== docId ? '由上级设为只读。' : '访客视角权限；分享副本始终只读。' }}</p>
-          </template>
-        </div>
+            <button v-if="!store.isGuest" ref="visibilityEntry" class="pop-item" @click="showVisibility"><component :is="meta.shared === false ? PhEyeSlash : PhEye" :size="15" /><span>{{ meta.shared === false ? '仅自己可见' : '已纳入分享范围' }}</span><PhCaretRight :size="13" class="menu-tail" /></button>
+            <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="15" /> {{ fileManagerLabel() }}</button>
+            <button v-if="!store.isGuest" class="pop-item" @click="open = ''; infoOpen = true"><PhInfo :size="15" /> 文档信息</button>
+            <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open = ''; historyOpen = true"><PhClockCounterClockwise :size="15" /> 历史版本</button>
+            <button v-if="isPdf && !store.isGuest && (store.pdfTranslationAvailable || store.pdfTranslate.status === 'done')" class="pop-item" :disabled="store.pdfTranslate.status === 'running'" @click="onTranslate(); open = ''">
+              <PhTranslate :size="15" />
+              <span>{{ store.pdfTranslate.status === 'running' ? '翻译中' : store.pdfTranslate.status === 'done' ? (store.pdfView === 'translated' ? '回到原文' : '查看译文') : '翻译 PDF' }}</span>
+              <span v-if="store.pdfTranslate.status === 'running'" class="menu-tail tabular-nums">{{ store.pdfTranslate.progress }}%</span>
+            </button>
+            <div class="doc-options-divider" />
+            <button class="pop-item" @click="open = 'export'"><PhExport :size="15" /><span>导出</span><PhCaretRight :size="13" class="menu-tail" /></button>
+            <a v-if="embedded" class="pop-item" :href="browserUrl" target="_blank" rel="noopener noreferrer" @click="open = ''"><PhArrowSquareOut :size="15" /> 在浏览器打开</a>
+            <div class="doc-options-divider" />
+            <div class="more-stats ui-font">
+              <template v-if="isH5"><span>H5</span><span v-if="meta.size">· {{ (meta.size / 1024).toFixed(0) }} KB</span></template>
+              <template v-else-if="isPdf"><span>{{ pdfPages ? pdfPages + ' 页' : 'PDF' }}</span><span v-if="meta.size">· {{ (meta.size / 1024 / 1024).toFixed(1) }} MB</span><span v-if="store.pdfTranslate.status === 'running'">· 翻译中 {{ store.pdfTranslate.progress }}%</span></template>
+              <template v-else><span>{{ stats.total }} 字</span><span>·</span><span>{{ stats.lines }} 行</span></template>
+            </div>
+            <p v-if="saveStateText && !error" class="more-save ui-font">{{ saveStateText }}</p>
+            <button v-if="!isPdf" class="pop-item" :disabled="!showTop" @click="goTop"><PhArrowUp :size="15" /><span>回到顶部</span><kbd class="menu-shortcut">T</kbd></button>
+          </div>
+          <div v-else-if="open === 'reading'" class="pop-menu is-panel reading-panel">
+            <ReadingSettings @close="open = 'more'" />
+          </div>
+          <div v-else-if="open === 'export'" class="pop-menu is-panel document-actions export-menu">
+            <button class="pop-item" @click="open = 'more'"><PhCaretLeft :size="15" />导出</button>
+            <div class="doc-options-divider" />
+            <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="15" /> Markdown 文件</button>
+            <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
+            <button v-if="!isPreview" class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
+            <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener" @click="open = ''"><PhArrowSquareOut :size="15" />打开原文件</a>
+          </div>
+          <div v-else-if="open === 'visibility'" class="pop-menu is-panel document-actions">
+            <button ref="visibilityBack" class="pop-item" @click="backToActions"><PhCaretLeft :size="15" />分享范围</button>
+            <div class="doc-options-divider" />
+            <button class="doc-state" role="switch" :aria-checked="meta.shared !== false" aria-label="纳入分享范围" @click="changeAccess('shared')"><PhEye :size="15" /><span>纳入分享范围</span><span class="state-switch" :class="{ on: meta.shared !== false }" /></button>
+            <p class="settings-scope">{{ meta.shared === false ? '仅自己可见。' : '此设置不生成或更新分享链接。' }}</p>
+            <template v-if="meta.shared !== false">
+              <button v-if="!isPreview" class="doc-state" role="switch" :aria-checked="!!meta.locked" :disabled="!!meta.lockedAt && meta.lockedAt !== docId" aria-label="访客只读" @click="changeAccess('locked')"><PhLock :size="15" /><span>访客只读</span><span class="state-switch" :class="{ on: meta.locked }" /></button>
+              <p class="settings-scope">{{ meta.lockedAt && meta.lockedAt !== docId ? '由上级设为只读。' : '访客视角权限；分享副本始终只读。' }}</p>
+            </template>
+          </div>
         </transition>
       </div>
 
-      <!-- pdf 翻译：没翻过就起任务，翻好了就是看译文 / 看原文的开关 -->
-      <button
-        v-if="isPdf && !store.isGuest && (store.pdfTranslationAvailable || store.pdfTranslate.status==='done')"
-        class="btn-icon"
-        :class="{ 'is-active': store.pdfView === 'translated' }"
-        :title="translateTip"
-        @click="onTranslate"
-      >
-        <PhSpinnerGap v-if="store.pdfTranslate.status === 'running'" :size="15" class="spin" />
-        <PhTranslate v-else :size="15" />
-      </button>
-
-      <a v-if="embedded" class="btn-icon open-in-browser" :href="browserUrl" target="_blank" rel="noopener noreferrer" title="在浏览器打开当前文档" aria-label="在浏览器打开当前文档"><PhArrowSquareOut :size="17" /></a>
-
+      <Teleport to="body">
+        <transition name="pop">
+          <div v-if="searchOpen" class="doc-search-wrap doc-search-floating" @mousedown.stop>
+            <div class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
+              <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.enter.prevent="results[0]?.hits[0] && onResultClick(results[0], results[0].hits[0])" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
+              <div v-if="keyword.trim()" class="doc-search-results">
+                <p v-if="!results.length" class="search-scope">没有匹配</p>
+                <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r, h)"><span v-html="highlight(h.text, keyword)" /><small>第 {{ h.line }} 行{{ h.occurrence > 1 ? `，本行第 ${h.occurrence} 处` : '' }}</small></button></template>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </Teleport>
     </div>
 
     <!-- 斜杠菜单里插入文档用的选择器 -->
@@ -223,44 +154,6 @@
       <p v-else-if="!isPreview" class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">正在读取…</p>
     </div>
 
-    <!-- 底栏 -->
-    <div
-      v-if="docId"
-      class="reader-bottombar h-8 px-8 flex items-center gap-3 text-[11.5px] text-[var(--c-faint)] shrink-0"
-    >
-      <!-- h5 没有页数可数，只报体积 -->
-      <template v-if="isH5">
-        <span class="ui-font tabular-nums">H5</span>
-        <span v-if="meta.size" class="ui-font tabular-nums">{{ (meta.size / 1024).toFixed(0) }} KB</span>
-      </template>
-      <!-- pdf 没有正文可数，显示页数和体积 -->
-      <template v-else-if="isPdf">
-        <span class="ui-font tabular-nums">{{ pdfPages ? pdfPages + ' 页' : 'PDF' }}</span>
-        <span v-if="meta.size" class="ui-font tabular-nums">{{ (meta.size / 1024 / 1024).toFixed(1) }} MB</span>
-        <span v-if="store.pdfTranslate.status === 'running'" class="ui-font tabular-nums text-[var(--c-accent)]">
-          翻译中 {{ store.pdfTranslate.progress }}%
-        </span>
-        <button
-          v-else-if="store.pdfTranslate.status === 'done'"
-          class="ui-font underline text-[var(--c-accent)]"
-          @click="onTranslate"
-        >
-          {{ store.pdfView === 'translated' ? '正在看译文，点回原文' : '译文已就绪，点看译文' }}
-        </button>
-      </template>
-      <template v-else>
-        <span class="ui-font tabular-nums" :title="stats.tip">{{ stats.total }} 字</span>
-        <span class="ui-font tabular-nums">{{ stats.lines }} 行</span>
-      </template>
-      <span class="ui-font ml-auto flex items-center gap-1.5">
-        <span v-if="store.currentReadonly" class="ui-font text-[var(--c-faint)]">只读</span>
-        <PhSpinnerGap v-if="saving" :size="12" class="spin" />
-        <span :class="saveStateClass">{{ saveStateText }}</span>
-      </span>
-      <button v-if="!isPdf" class="status-to-top" :disabled="!showTop" title="回到顶部 T" @click="scrollTop"><PhArrowUp :size="15"/></button>
-    </div>
-
-
 
   </div>
   <DocumentInfo :open="infoOpen" :path="docId" @close="infoOpen=false" />
@@ -284,10 +177,10 @@ import {
 import { highlight } from '../utils/markdown'
 import PdfPreview from '../components/PdfPreview.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
-import SelectMenu from '../components/SelectMenu.vue'
-import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS } from '../stores/reader'
+import { useReaderStore } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
+import ReadingSettings from '../components/ReadingSettings.vue'
 import ConflictDialog from '../components/ConflictDialog.vue'
 import VersionHistory from '../components/VersionHistory.vue'
 import DocumentInfo from '../components/DocumentInfo.vue'
@@ -302,10 +195,10 @@ import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../
 const reader = useReaderStore()
 // pdf 翻译任务的状态住在 docs store 里，不必再经 App 转一手
 const infoOpen=ref(false)
-const historyOpen=ref(false),exportButton=ref(null),visibilityEntry=ref(null),visibilityBack=ref(null)
+const historyOpen=ref(false),moreButton=ref(null),visibilityEntry=ref(null),visibilityBack=ref(null)
 async function showVisibility(){open.value='visibility';await nextTick();visibilityBack.value?.focus()}
-async function backToActions(){open.value='access';await nextTick();visibilityEntry.value?.focus()}
-async function closeHistory(){historyOpen.value=false;await nextTick();exportButton.value?.focus()}
+async function backToActions(){open.value='more';await nextTick();visibilityEntry.value?.focus()}
+async function closeHistory(){historyOpen.value=false;await nextTick();moreButton.value?.focus()}
 const restoredEpoch=ref(0)
 function restoreContent(text){emit('input',text);restoredEpoch.value++}
 const store = useDocsStore()
@@ -439,102 +332,9 @@ function onPdfPageChange(page) {
   store.pdfPage = store.pdfView === 'translated' ? Math.ceil(page / 2) : page
 }
 
-/* 宽度三档定义在 reader store 里，那边算阅读宽度时也要用同一份 */
-const WIDTHS = WIDTH_OPTIONS.map((w, i) => ({
-  ...w,
-  icon: [PhArrowsInLineHorizontal, PhArrowsOutLineHorizontal, PhArrowsHorizontal][i]
-}))
-
-const SIZES = [
-  { value: 14, label: '小' },
-  { value: 15.5, label: '中' },
-  { value: 17, label: '大' },
-  { value: 18.5, label: '特大' }
-]
-
-const FONTS = [
-  {
-    id: 'serif',
-    label: '衬线',
-    stack: '"TeX Gyre Pagella", "Noto Serif SC", "Songti SC", serif'
-  },
-  {
-    id: 'sans',
-    label: '无衬线',
-    stack: '"Noto Sans SC", "Heiti SC", -apple-system, sans-serif'
-  },
-  { id: 'harmony', label: '鸿蒙黑体', hint: 'HarmonyOS Sans SC', stack: '"HarmonyOS Sans SC", "Noto Sans SC", sans-serif' },
-  { id: 'kai', label: '楷体', stack: '"ChillKai", "Kaiti SC", STKaiti, serif' },
-  { id: 'ping', label: '苹方', stack: '"PingFang SC", "Hiragino Sans GB", sans-serif' }
-]
-
-/* 中文加粗面：中文排版传统里强调靠换更重的字面，不是加大字号 */
-const STRONG_FACES = [
-  { id: 'black', label: '特黑', weight: 900 },
-  { id: 'bold', label: '标准加粗', weight: 600 }
-]
-
-/* 中文斜体面：中文的斜体不做倾斜变形，换楷体是传统做法 */
-const ITALIC_FACES = [
-  { id: 'kai', label: '楷体替代' },
-  { id: 'none', label: '保留字形' }
-]
-
-const ZOOMS = [
-  { value: 80, label: '80%' },
-  { value: 90, label: '90%' },
-  { value: 100, label: '100%' },
-  { value: 115, label: '115%' },
-  { value: 130, label: '130%' },
-  { value: 150, label: '150%' }
-]
-
-const THEMES = [
-  { id: 'auto', label: '跟随系统', icon: PhCircleHalf },
-  { id: 'light', label: '浅色', icon: PhSun },
-  { id: 'sepia', label: '护眼', icon: PhCoffee },
-  { id: 'dark', label: '深色', icon: PhMoon }
-]
-
-/* 表格宽度：默认用满可用宽度，宽表才不会被压得每列都很窄 */
-const TABLE_WIDTHS = [
-  { id: 'full', label: '铺满页面', icon: PhArrowsOutSimple },
-  { id: 'measure', label: '跟随正文', icon: PhArrowsInSimple }
-]
-
-const TABLE_ALIGNS = [
-  { id: 'left', label: '左', icon: PhTextAlignLeft },
-  { id: 'center', label: '中', icon: PhTextAlignCenter },
-  { id: 'right', label: '右', icon: PhTextAlignRight }
-]
-
-const PARA_STYLES = [
-  { id: 'space', label: '段间距', icon: PhParagraph },
-  { id: 'indent', label: '首行缩进', icon: PhTextIndent }
-]
-
 const scroller = ref(null)
 const searchInput = ref(null)
-const searchWrap = ref(null)
-const searchPanelWidth = ref(360)
-let searchResizeObserver
-function updateSearchPanelWidth() {
-  const wrap = searchWrap.value?.getBoundingClientRect()
-  const main = searchWrap.value?.closest('main')?.getBoundingClientRect()
-  if (!wrap || !main) return
-  searchPanelWidth.value = Math.max(120, Math.min(360, Math.floor(wrap.right - main.left - 12)))
-}
-/* 窄屏下搜索先收成图标，点了才展开——顶栏在手机上放不下一个常驻输入框 */
-const mobileSearchOpen = ref(false)
-function openMobileSearch() {
-  mobileSearchOpen.value = true
-  nextTick(() => searchInput.value?.focus())
-}
-function closeMobileSearch() {
-  mobileSearchOpen.value = false
-}
 const open = ref('')
-const typeSection = ref('text')
 const searchOpen = ref(false)
 
 
@@ -569,10 +369,14 @@ const stats = computed(() => {
   }
 })
 
-const saveStateText = computed(() => {
+const transientSaveText = computed(() => {
   if (props.error) return { save: '保存失败', load: '打开失败' }[store.errorKind] || '操作失败'
   if (props.saving) return '保存中'
   if (props.dirty) return '待保存'
+  return ''
+})
+const saveStateText = computed(() => {
+  if (transientSaveText.value) return transientSaveText.value
   if (props.savedAt) {
     const d = new Date(props.savedAt)
     const hh = String(d.getHours()).padStart(2, '0')
@@ -592,12 +396,17 @@ function changeAccess(key) {
   const value = key === 'shared' ? props.meta.shared === false : !props.meta.locked
   store.requestAccess(props.docId, { [key]: value }, key === 'shared' ? (value ? '纳入分享范围' : '仅自己可见') : (value ? '设为访客只读' : '允许访客编辑'))
 }
-function toggleDocSearch() {
-  searchOpen.value = !searchOpen.value
-  if (searchOpen.value) nextTick(() => { updateSearchPanelWidth(); searchInput.value?.focus() })
+function openSearch() {
+  open.value = ''
+  searchOpen.value = true
+  nextTick(() => searchInput.value?.focus())
 }
 function toggle(name) {
-  open.value = open.value === name || (name === 'access' && open.value === 'visibility') ? '' : name
+  open.value = open.value === name ? '' : name
+}
+function goTop() {
+  open.value = ''
+  scrollTop()
 }
 function pickWidth(v) {
   reader.measure = v
@@ -615,7 +424,6 @@ function pickExport(kind) {
 }
 function closeSearch() {
   searchOpen.value = false
-  mobileSearchOpen.value = false
   searchInput.value?.blur()
 }
 function clearSearch() {
@@ -646,11 +454,11 @@ function onDocClick(e) {
   if (open.value && !e.target.closest('.pop-menu, .btn-icon')) open.value = ''
   if (searchOpen.value && !e.target.closest('.doc-search-wrap')) closeSearch()
 }
-function onFindKey(e) { if(e.key==='Escape' && open.value){ e.preventDefault();if(open.value==='visibility')backToActions();else{open.value='';exportButton.value?.focus()}return } if (!isPreview.value && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); searchOpen.value = true; nextTick(() => { updateSearchPanelWidth(); searchInput.value?.focus() }) } }
+function onFindKey(e) { if(e.key==='Escape' && open.value){ e.preventDefault();if(open.value==='visibility')backToActions();else{open.value='';moreButton.value?.focus()}return } if (!isPreview.value && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openSearch() } }
 function onOverlayOpen() { open.value = ''; closeSearch() }
 watch(() => props.docId, () => { open.value=''; closeSearch(); emit('update:keyword', '') })
-onMounted(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onFindKey); window.addEventListener('reader-overlay-open', onOverlayOpen); window.addEventListener('resize', updateSearchPanelWidth); searchResizeObserver = new ResizeObserver(updateSearchPanelWidth); if (searchWrap.value) searchResizeObserver.observe(searchWrap.value.closest('main')); updateSearchPanelWidth() })
-onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onFindKey); window.removeEventListener('reader-overlay-open', onOverlayOpen); window.removeEventListener('resize', updateSearchPanelWidth); searchResizeObserver?.disconnect() })
+onMounted(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onFindKey); window.addEventListener('reader-overlay-open', onOverlayOpen) })
+onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onFindKey); window.removeEventListener('reader-overlay-open', onOverlayOpen) })
 </script>
 
 <style scoped>
@@ -869,7 +677,16 @@ onBeforeUnmount(() => { document.removeEventListener('click', onDocClick); docum
     transform: rotate(360deg);
   }
 }
-.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
+.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}
+.document-actions.more-menu{width:min(300px,calc(100vw - 24px))}
+.reading-panel{width:min(344px,calc(100vw - 24px));max-height:calc(100dvh - 68px);overflow-y:auto;scrollbar-width:thin}
+.doc-save-state{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;white-space:nowrap;padding:0 4px}
+.more-stats{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:10px 11px 3px;font-size:11px;color:var(--c-faint)}
+.more-save{margin:0;padding:1px 11px 8px;font-size:11px;color:var(--c-faint)}
+.menu-shortcut{margin-left:auto;font:11px var(--font-sans);color:var(--c-faint)}
+.doc-search-wrap.doc-search-floating{position:fixed;top:56px;right:16px;left:auto;z-index:140;width:min(360px,calc(100vw - 32px))}
+.doc-search-floating .doc-search-panel{position:static;width:100%}
+.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
 <style scoped>
