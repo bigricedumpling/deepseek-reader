@@ -24,6 +24,7 @@ import { workspace, digest, fault } from './storage/workspace.js'
 import { resources } from './services/resources.js'
 import { publicSession } from './services/public-session.js'
 import { documentRoutes } from './services/documents.js'
+import { activityService } from './services/activity.js'
 import { recordSource } from './services/sources.js'
 
 // 用文件自身位置推导，不依赖启动时的工作目录
@@ -442,6 +443,7 @@ async function readPdfToc(rel) {
  */
 const backups = backupService(repo)
 const trash = trashService(repo, { safeResolve, assets, share, registry: readRegistry, saveRegistry: writeRegistry })
+const activity = activityService(repo)
 function moveToTrash(rel) { return trash.move(rel) }
 
 /** 同一目录下不覆盖已有文件，重名就加序号。ext 默认 .md，pdf 要原样带上自己的扩展名。 */
@@ -973,6 +975,19 @@ const routes = {
     return { ok: true, data: { product: 'reader', protocol: 1, identity: digest(DOCS_ROOT).slice(0, 24), platform: process.platform, dataDirectory: DOCS_ROOT, profile: process.env.READER_PROFILE === 'dev' ? 'dev' : 'prod', name: path.basename(DOCS_ROOT) } }
   },
   ...documentRoutes(repo,{share,assertFile,assertMd,assertVisible}),
+  /* Agent 改动收件箱：列出、看差异、标记已读。只给本机管理者看。 */
+  'GET /activity': async (_body, url, ctx) => {
+    if (ctx.role !== 'owner') throw fault('FORBIDDEN', '仅本机或管理者可查看改动记录', 403)
+    return { ok: true, data: activity.list({ limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset'), all: url.searchParams.get('all') === '1' }) }
+  },
+  'GET /activity/diff': async (_body, url, ctx) => {
+    if (ctx.role !== 'owner') throw fault('FORBIDDEN', '仅本机或管理者可查看改动记录', 403)
+    return { ok: true, data: activity.diff(url.searchParams.get('id')) }
+  },
+  'POST /activity/review': async (body, _url, ctx) => {
+    if (ctx.role !== 'owner') throw fault('FORBIDDEN', '仅本机或管理者可查看改动记录', 403)
+    return { ok: true, data: body.all ? activity.reviewAll() : activity.review(body.id, body.reviewed !== false) }
+  },
   /** 这次请求算谁：我 还是 别人。前端靠它决定要不要露出编辑相关的东西 */
   'GET /me': async (_body, _url, ctx) => ({ ok: true, data: { role: ctx.role, pdfTranslationAvailable: ctx.role === 'owner' && !!pdf2zhBin(), restoredCopy: ctx.role === 'owner' && process.env.READER_RESTORED_COPY === '1' } }),
   'GET /agent-libs': async (_body, _url, ctx) => {
@@ -1719,6 +1734,21 @@ function verifyPassword(req, password) {
   }
   loginAttempts.delete(ip)
 }
+/**
+ * 操作记录只留“动的是谁”，不把正文、图片 base64 或整段元数据写进审计。
+ * 这些定位字段足够把一次写入对上文档、版本和路径。
+ */
+function operationSubject(body) {
+  if (!body || typeof body !== 'object') return undefined
+  const subject = {}
+  for (const field of ['path', 'file', 'id', 'from', 'to', 'dir', 'name']) {
+    const value = body[field]
+    if (value === undefined || value === null || typeof value === 'object') continue
+    subject[field] = String(value).slice(0, 500)
+  }
+  return Object.keys(subject).length ? subject : undefined
+}
+
 export async function handleApi(req, res, ctx = {}) {
   const url = new URL(req.url, 'http://127.0.0.1')
   if (url.pathname.startsWith('/api/')) url.pathname = url.pathname.slice(4)
@@ -1766,7 +1796,7 @@ export async function handleApi(req, res, ctx = {}) {
       return send(res, 200, { ok: true })
     }
     const id=body.id||url.searchParams.get('id')
-    if(id && !key.includes('agent-keys') && !key.includes('workspace-preview')) {
+    if(id && !key.includes('agent-keys') && !key.includes('workspace-preview') && !key.includes('/activity')) {
       const n=repo.byId(id);if(!n)throw fault('NOT_FOUND','文档不存在',404)
       if(req.method==='GET')url.searchParams.set('path',n.path);else body.path=n.path
     }
@@ -1799,7 +1829,7 @@ export async function handleApi(req, res, ctx = {}) {
       return send(res, 200, { ok: true, data: { ...data, busy: false } })
     }
     if (key.includes('/trash') && role !== 'owner') throw fault('FORBIDDEN', '回收站仅供管理者使用', 403)
-    if(['GET /agent-keys','POST /agent-keys','DELETE /agent-keys','GET /audit','GET /metadata-export','GET /reconcile','POST /reconcile','GET /history'].includes(key)&&role!=='owner')throw fault('FORBIDDEN','需要管理身份',403)
+    if(['GET /agent-keys','POST /agent-keys','DELETE /agent-keys','GET /audit','GET /activity','GET /activity/diff','POST /activity/review','GET /metadata-export','GET /reconcile','POST /reconcile','GET /history'].includes(key)&&role!=='owner')throw fault('FORBIDDEN','需要管理身份',403)
     if (key.endsWith('/sources') && role !== 'owner') throw fault('FORBIDDEN', '来源记录仅供管理者查看', 403)
     if ((key.startsWith('GET /workspace-preview') || key === 'GET /icon-history') && role !== 'owner') throw fault('FORBIDDEN', '私人资料仅供管理者使用', 403)
 
@@ -1857,7 +1887,9 @@ export async function handleApi(req, res, ctx = {}) {
     for (const field of ['path','file','lib']) { const v=url.searchParams.get(field);if(v)url.searchParams.set(field,repo.resolve(v)) }
     const handler = routes[key]
     if (!handler) return send(res, 404, { ok: false, error: '接口不存在' })
-    if (req.method !== 'GET' && !key.includes('agent-keys') && key!=='POST /reconcile') checkWrite(key, body, role)
+    /* 标记已读是收件箱自己的状态，不该再生成一条“操作”写进收件箱。 */
+    const activityReview = key === 'POST /activity/review'
+    if (req.method !== 'GET' && !key.includes('agent-keys') && key!=='POST /reconcile' && !activityReview) checkWrite(key, body, role)
     if (isGuest) {
       const rel = url.searchParams.get('path') || url.searchParams.get('lib') || url.searchParams.get('file') || ''
       if (rel && !share.isShared(rel)) throw new Error('内容不可访问')
@@ -1874,7 +1906,9 @@ export async function handleApi(req, res, ctx = {}) {
       if(requestId&&req.method!=='GET')repo.db.prepare('INSERT INTO retries VALUES (?,?,?)').run(retryKey,fingerprint,JSON.stringify(value))
       return value
     }
-    const out = req.method === 'GET' ? await run() : await repo.mutate(key,ctx.actor||role,run)
+    const out = req.method === 'GET' || activityReview
+      ? await run()
+      : await repo.mutate(key, ctx.actor || role, run, operationSubject(body))
     if (key === 'GET /tree' && out?.data?.nodes) out.data.nodes = share.decorate(isGuest ? share.filterTree(out.data.nodes) : out.data.nodes)
     send(res, 200, out)
   } catch (e) {

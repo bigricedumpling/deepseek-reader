@@ -32,6 +32,7 @@ export function workspace(root) {
     CREATE TABLE IF NOT EXISTS aliases (path TEXT PRIMARY KEY, id TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, owner TEXT NOT NULL, mime TEXT);
     CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, action TEXT, actor TEXT, at INTEGER, details TEXT);
+    CREATE TABLE IF NOT EXISTS operation_reviews (operation TEXT PRIMARY KEY, reviewedAt INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS retries (key TEXT PRIMARY KEY, fingerprint TEXT, result TEXT);
     CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, hash TEXT UNIQUE, name TEXT, scopes TEXT, permissions TEXT, expires INTEGER, revoked INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS versions (id TEXT PRIMARY KEY, node TEXT, revision TEXT, path TEXT, at INTEGER);
@@ -97,7 +98,7 @@ export function workspace(root) {
     mkdir(path.dirname(to))
     record({ type: 'move', from, to }); fs.renameSync(from, to)
   }
-  async function mutate(action, actor, fn) {
+  async function mutate(action, actor, fn, subject) {
     if (active) throw fault('BUSY', '另一个修改正在进行，请稍后重试', 409)
     const id = randomUUID(), dir = path.join(journalRoot, id)
     fs.mkdirSync(dir)
@@ -107,7 +108,9 @@ export function workspace(root) {
     try {
       atomicWrite(path.join(dir, 'journal.json'), JSON.stringify(j))
       const out = await fn()
-      db.prepare('INSERT INTO operations VALUES (?,?,?,?,?)').run(id, action, actor, Date.now(), JSON.stringify({ files: j.files.map(x => ({ type:x.type, path:x.path && path.relative(root,x.path), from:x.from && path.relative(root,x.from), to:x.to && path.relative(root,x.to) })) }))
+      const details = { files: j.files.map(x => ({ type:x.type, path:x.path && path.relative(root,x.path), from:x.from && path.relative(root,x.from), to:x.to && path.relative(root,x.to) })) }
+      if (subject && typeof subject === 'object' && Object.keys(subject).length) details.subject = subject
+      db.prepare('INSERT INTO operations VALUES (?,?,?,?,?)').run(id, action, actor, Date.now(), JSON.stringify(details))
       db.exec('COMMIT'); active = null
       try{fs.rmSync(dir, { recursive: true, force: true })}catch{}; return out
     } catch (error) {

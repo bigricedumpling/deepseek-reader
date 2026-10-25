@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { workspace, fault, digest } from '../storage/workspace.js'
 import {openRestoredReader} from './restore-viewer.js'
 import { resources } from './resources.js'
-const tables = ['nodes','aliases','assets','asset_aliases','settings','versions','sources','workspace_previews','workspace_preview_assets']
+const tables = ['nodes','aliases','assets','asset_aliases','settings','operations','operation_reviews','versions','sources','workspace_previews','workspace_preview_assets']
 const excluded = new Set(['state.sqlite','state.sqlite-wal','state.sqlite-shm','.admin-password','.分享.json','restore-viewer.json'])
 export function backupCopyFilter(file) {
   if (fs.lstatSync(file).isSymbolicLink()) throw fault('SYMLINK', '备份中存在符号链接，请先处理后重试')

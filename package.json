@@ -37,6 +37,7 @@
     "test:user-recovery": "node scripts/test-user-recovery.mjs",
     "test:upgrade": "node scripts/test-upgrade.mjs",
     "test:workflow": "node scripts/test-workflow.mjs",
+    "test:activity": "node scripts/test-activity.mjs",
     "measure:performance": "node scripts/measure-performance.mjs",
     "brand:sync": "node scripts/sync-brand.mjs",
     "brand:check": "node scripts/sync-brand.mjs --check",

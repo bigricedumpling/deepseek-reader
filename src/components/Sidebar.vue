@@ -398,13 +398,14 @@
       </nav>
       <div v-if="!isGuest" class="workspace-history-footer">
         <button class="workspace-history-link" :title="`在 DSH 用 ${BRAND_NAME} 打开过的 Markdown`" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
-        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="footerTools=false;settingsOpen=true"><PhGearSix :size="16"/>设置</button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
+        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="footerTools=false;settingsOpen=true"><PhGearSix :size="16"/>设置</button><button @click="openActivity"><PhGitDiff :size="16"/>Agent 改动<span v-if="activityUnread" class="activity-count">{{ activityUnread }}</span></button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
       </div>
     </template>
     </aside>
 
     <ProductSettings v-if="settingsOpen" @close="closeSettings" />
     <RecoveryPanel :initial-tab="recoveryTab" :open="recoveryOpen" @close="closeRecovery" @restored="onRecovered" />
+    <ActivityPanel :open="activityOpen" @close="closeActivity" @select="onActivitySelect" />
     <AgentSettings v-if="agentSettings" :library="currentLib" @close="agentSettings=false;managerOpen=true" />
     <IconPicker v-if="iconPicking" :save="saveLibIcon" :anchor="libIconAnchor" @close="iconPicking=false" />
     <!-- 新建 / 删除抽屉的确认框：用站内统一那套，不用浏览器原生弹窗 -->
@@ -432,6 +433,7 @@ import {setFavicon} from '../utils/favicon'
 
 import AgentSettings from './AgentSettings.vue'
 import RecoveryPanel from './RecoveryPanel.vue'
+import ActivityPanel from './ActivityPanel.vue'
 import ContentIcon from './ContentIcon.vue'
 import IconPicker from './IconPicker.vue'
 import { resizePanel } from '../utils/panel-resize'
@@ -440,7 +442,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, p
 import {
   PhGearSix, PhSidebarSimple, PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
   PhSquaresFour, PhUserCircle, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
-  PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise,
+  PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise, PhGitDiff,
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
   PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight, PhArrowLeft, PhFileText
 } from '@phosphor-icons/vue'
@@ -611,7 +613,7 @@ async function confirmTransfer() {
 const settingsOpen=ref(false)
 async function closeSettings(){settingsOpen.value=false;await nextTick();toolsTrigger.value?.focus()}
 const footerTools=ref(false),recoveryTab=ref('trash'),toolsTrigger=ref(null),toolsPanel=ref(null)
-async function toggleFooterTools(){footerTools.value=!footerTools.value;if(footerTools.value){await nextTick();toolsPanel.value?.querySelector('button')?.focus()}}
+async function toggleFooterTools(){footerTools.value=!footerTools.value;if(footerTools.value){await nextTick();toolsPanel.value?.querySelector('button')?.focus();loadActivityUnread()}}
 async function closeRecovery(){recoveryOpen.value=false;await nextTick();toolsTrigger.value?.focus()}
 function openRecovery(tab){recoveryTab.value=tab;footerTools.value=false;recoveryOpen.value=true}
 const publicSharingOpen = ref(false)
@@ -973,6 +975,18 @@ async function onBrandEdited(i, value) {
 /** 换某个抽屉的图标 */
 const recoveryOpen=ref(false)
 async function onRecovered(){await loadLibs();await store.loadTree()}
+const activityOpen=ref(false), activityUnread=ref(0)
+async function loadActivityUnread(){
+  if(isGuest.value) return
+  try {
+    const response=await fetch(API_BASE+'/api/activity?limit=1')
+    const result=await response.json()
+    if(result.ok) activityUnread.value=result.data.unread||0
+  } catch { /* 收件箱读不到不影响主界面 */ }
+}
+function openActivity(){footerTools.value=false;activityOpen.value=true}
+async function closeActivity(){activityOpen.value=false;await nextTick();toolsTrigger.value?.focus();await loadActivityUnread()}
+async function onActivitySelect(path){await closeActivity();emit('select',path)}
 const agentSettings=ref(false), iconPicking=ref(false)
 const libIconTarget = ref(null), libIconAnchor=ref(null)
 function pickLibIcon(lib,event) { libIconAnchor.value=event?.currentTarget;libIconTarget.value=lib;iconPicking.value=true }
@@ -1829,6 +1843,7 @@ onMounted(() => document.addEventListener('keydown', onLibEscape))
 onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 onMounted(() => window.addEventListener('reader-access-updated', loadLibs))
 onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLibs))
+onMounted(loadActivityUnread)
 </script>
 
 <style scoped>
@@ -2207,7 +2222,7 @@ onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLi
 <style scoped>.lib-icon-edit{display:grid;place-items:center;padding:5px;border-radius:var(--radius-control);margin-left:-5px}.lib-icon-edit:not(:disabled):hover{background:var(--c-hover)}.lib-icon-edit:disabled{cursor:default}.workspace-footer .manage-entry{gap:10px;padding:10px 8px}.workspace-footer .manage-entry:hover{background:var(--c-hover)}</style>
 
 <style scoped>
-.workspace-history-footer{display:flex;align-items:center;gap:8px;padding:16px 12px 12px;border:0}.workspace-history-link{flex:1;min-width:0;padding:8px 6px;font-size:12px;color:var(--c-sub)}.workspace-history-link svg{display:none}.workspace-tools{position:relative}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}
+.workspace-history-footer{display:flex;align-items:center;gap:8px;padding:16px 12px 12px;border:0}.workspace-history-link{flex:1;min-width:0;padding:8px 6px;font-size:12px;color:var(--c-sub)}.workspace-history-link svg{display:none}.workspace-tools{position:relative}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}.workspace-tools-menu .activity-count{margin-left:auto;font-size:11px;color:var(--c-faint);font-variant-numeric:tabular-nums}
 </style>
 
 <style scoped>
