@@ -10,7 +10,9 @@ export interface ActivityItem {
   actorId: string
   docId: string
   path: string
+  currentPath: string
   name: string
+  available: boolean
   hasDiff: boolean
   reviewed: boolean
 }

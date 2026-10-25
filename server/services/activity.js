@@ -58,12 +58,19 @@ function docPathFrom(details, action) {
   const subject = details?.subject || {}
   const files = fileList(details)
   const ordered = []
-  if (action === 'PATCH /doc' || action === 'PUT /move/doc') ordered.push(subject.to)
-  if (subject.path) ordered.push(subject.path)
-  if (subject.file) ordered.push(subject.file)
-  if (action === 'DELETE /doc') {
-    for (const file of files) ordered.push(file.from)
+  if (action === 'PATCH /doc' || action === 'PUT /move/doc') {
+    /*
+     * 改名/移动的 body 里只有旧路径，新路径在文件操作的 to 里。
+     * 必须让 to 排在 subject.path 前面，否则列表会一直显示旧名字。
+     */
+    ordered.push(subject.to)
+    for (const file of files) ordered.push(file.to, file.path, file.from)
+    ordered.push(subject.path, subject.file)
+  } else if (action === 'DELETE /doc') {
+    ordered.push(subject.path, subject.file)
+    for (const file of files) ordered.push(file.from, file.path, file.to)
   } else {
+    ordered.push(subject.path, subject.file)
     for (const file of files) ordered.push(file.to, file.path, file.from)
   }
   for (const value of ordered) {
@@ -131,7 +138,10 @@ function item(repo, row) {
   const subject = details.subject || {}
   const node = resolveNode(repo, details, row.action)
   const current = currentNode(repo, node)
-  const docPath = current?.path || docPathFrom(details, row.action)
+  /* 历史条目要显示“当时在哪”，而不是它后来被移到回收站后的路径。 */
+  const historical = docPathFrom(details, row.action)
+  const docPath = historical || current?.path || ''
+  const available = !!current && !current.path.startsWith('.回收站/') && fs.existsSync(path.join(repo.root, current.path))
   return {
     id: row.id,
     at: row.at,
@@ -141,8 +151,10 @@ function item(repo, row) {
     actorKind: actor.kind,
     actorId: actor.id,
     docId: current?.id || String(subject.id || ''),
-    path: docPath || '',
+    path: docPath,
+    currentPath: available ? current.path : '',
     name: docPath ? path.basename(docPath) : String(subject.name || ''),
+    available,
     hasDiff: diffActions.has(row.action),
     reviewed: !!row.reviewedAt
   }
@@ -152,7 +164,7 @@ function diffFor(repo, row) {
   const details = parse(row.details)
   const node = resolveNode(repo, details, row.action)
   const current = currentNode(repo, node)
-  const docPath = current?.path || docPathFrom(details, row.action)
+  const docPath = docPathFrom(details, row.action) || current?.path || ''
   const base = { id: row.id, action: row.action, actionLabel: labels[row.action] || row.action, path: docPath, name: docPath ? path.basename(docPath) : '' }
 
   if (!contentActions.has(row.action)) return { ...base, kind: 'meta', before: '', after: '' }

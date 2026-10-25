@@ -58,9 +58,12 @@ try {
   assert.equal(updateItem.actionLabel, '修改')
   assert.equal(updateItem.hasDiff, true)
   assert.equal(updateItem.reviewed, false)
+  assert.equal(updateItem.path, 'Research/Activity.md')
+  assert.equal(updateItem.currentPath, 'Research/Activity renamed.md')
   const renameItem = list.items.find(item => item.action === 'PATCH /doc')
   assert.equal(renameItem.actionLabel, '重命名')
   assert.equal(renameItem.name, 'Activity renamed.md')
+  assert.equal(renameItem.currentPath, 'Research/Activity renamed.md')
   const createItem = list.items.find(item => item.action === 'POST /doc')
   assert.equal(createItem.actionLabel, '新建')
 
@@ -68,7 +71,7 @@ try {
   assert.equal(updateDiff.kind, 'update')
   assert.equal(updateDiff.before, '# Activity\n\nfirst line')
   assert.equal(updateDiff.after, '# Activity\n\nfirst line\n\nagent edit')
-  assert.equal(updateDiff.path, 'Research/Activity renamed.md')
+  assert.equal(updateDiff.path, 'Research/Activity.md')
   const createDiff = await must('GET', 'activity/diff?id=' + encodeURIComponent(createItem.id))
   assert.equal(createDiff.kind, 'create')
   assert.equal(createDiff.before, '')
@@ -98,7 +101,22 @@ try {
   const older = await must('GET', 'activity?limit=2&offset=2&all=1')
   assert.equal(older.items.length, 2)
 
-  console.log('PASS: Agent activity inbox, exact before/after diff, metadata entry, read state, owner-only access')
+  /* 文档后来被删掉，历史条目仍要显示当时的路径，而不是回收站路径。 */
+  await must('DELETE', 'doc', { path: 'Research/Activity renamed.md' })
+  const afterDelete = await must('GET', 'activity')
+  const historical = afterDelete.items.find(item => item.id === updateItem.id)
+  assert.equal(historical.path, 'Research/Activity.md')
+  assert.equal(historical.currentPath, '')
+  assert.equal(historical.available, false)
+  const renamedHistorical = afterDelete.items.find(item => item.id === renameItem.id)
+  assert.equal(renamedHistorical.path, 'Research/Activity renamed.md')
+  assert.equal(renamedHistorical.currentPath, '')
+  assert.equal(renamedHistorical.available, false)
+  const stillDiff = await must('GET', 'activity/diff?id=' + encodeURIComponent(updateItem.id))
+  assert.equal(stillDiff.before, '# Activity\n\nfirst line')
+  assert.equal(stillDiff.after, '# Activity\n\nfirst line\n\nagent edit')
+
+  console.log('PASS: Agent activity inbox, exact before/after diff, metadata entry, read state, historical paths, owner-only access')
 } finally {
   clearTimeout(timer)
   if (child.exitCode === null) {

@@ -9,7 +9,7 @@
               <p class="activity-sub">{{ unread ? `${unread} 条未读` : '都看过了' }}</p>
             </div>
             <div class="activity-head-actions">
-              <button v-if="showAll ? items.length : unread" class="activity-text-btn" :disabled="busy" @click="markAll">全部已读</button>
+              <button v-if="unread" class="activity-text-btn" :disabled="busy" @click="markAll">全部已读</button>
               <button class="activity-text-btn" :disabled="busy" @click="toggleAll">{{ showAll ? '只看 Agent' : '包含我的改动' }}</button>
               <button ref="closeButton" class="btn-icon" title="关闭" aria-label="关闭" @click="close"><PhX :size="18" /></button>
             </div>
@@ -49,16 +49,22 @@
                     <p>{{ selected.actor }} · {{ selected.actionLabel }} · {{ time(selected.at) }}</p>
                   </div>
                   <div class="activity-detail-actions">
-                    <button v-if="selected.path" class="activity-text-btn" @click="openDoc">打开文档</button>
+                    <button v-if="selected.path && selected.available && selected.action !== 'DELETE /doc'" class="activity-text-btn" @click="openDoc">打开文档</button>
                     <button v-if="!selected.reviewed" class="activity-text-btn" :disabled="busy" @click="markRead(selected)">标记已读</button>
                   </div>
                 </div>
+                <p v-if="!selected.available && selected.action !== 'DELETE /doc'" class="activity-note">这篇文档现在不在抽屉里，可能是之后被删除或移动了。</p>
+                <p v-else-if="selected.currentPath && selected.currentPath !== selected.path" class="activity-note">现在位置：{{ selected.currentPath }}</p>
                 <p v-if="diffError" class="reader-error" role="alert">{{ diffError }}</p>
                 <p v-else-if="diffLoading" class="activity-empty">正在读取差异…</p>
                 <template v-else-if="diff">
                   <p v-if="diff.kind === 'delete'" class="activity-note">这篇文档已被删除，可以在回收站找回。</p>
                   <p v-else-if="diff.kind === 'rename'" class="activity-note">重命名或移动，正文没有变化。</p>
                   <p v-else-if="diff.kind === 'meta'" class="activity-note">页面设置发生变化，正文没有变化。</p>
+                  <template v-else-if="diff.kind === 'create'">
+                    <p class="activity-note">新建文档，下面是初始内容。</p>
+                    <pre class="activity-created">{{ diff.after }}</pre>
+                  </template>
                   <TextComparison v-else :before="diff.before" :after="diff.after" />
                 </template>
               </template>
@@ -164,8 +170,9 @@ async function toggleAll() {
 }
 
 function openDoc() {
-  if (!selected.value?.path) return
-  emit('select', selected.value.path)
+  const path = selected.value?.currentPath || selected.value?.path
+  if (!path) return
+  emit('select', path)
   emit('close')
 }
 
@@ -210,6 +217,7 @@ watch(() => props.open, async visible => {
 .activity-detail-head p { margin: 5px 0 0; font-size: 12px; color: var(--c-sub); }
 .activity-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .activity-note { margin: 0; padding: 16px; border-radius: 10px; background: var(--c-field); color: var(--c-sub); font-size: 13px; line-height: 1.7; }
+.activity-created { margin: 0; padding: 14px; border-radius: 10px; background: var(--c-field); color: var(--c-ink); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 monospace; }
 .activity-detail :deep(.text-comparison) { flex: 1; min-height: 0; }
 @media (max-width: 720px) {
   .activity-panel { height: calc(100dvh - 24px); }
