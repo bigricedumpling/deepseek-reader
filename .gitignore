@@ -14,3 +14,6 @@ plugins/reader-workspace/runtime/
 dist-demo/
 public/shots/
 public/lib-*.svg
+
+# macOS custom folder icon
+Icon?
