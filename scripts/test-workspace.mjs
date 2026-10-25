@@ -99,8 +99,8 @@ try{
  assert.equal((await request('GET','/api/doc?path=External/two.md',null,'guest')).status,403)
  share.setShared('External/legacy.md',false)
  assert.equal((await request('GET',oldURL,null,'guest')).status,403)
- const preview=(await request('POST','/api/workspace-preview',{reference:'dsh-resource://file/session/test/draft.md',sourcePath:'/workspace/draft.md',title:'draft.md',content:'![image](./draft.png)',assets:[{reference:'./draft.png',mime:'image/png',base64:bytes.toString('base64')}]})).json.data
- assert.equal((await request('GET','/api/workspace-preview?id='+preview.id)).json.data.sourcePath,'/workspace/draft.md')
+ const imported=(await request('POST','/api/import-workspace-doc',{dir:'External',name:'draft',content:'# Draft',reference:'dsh-resource://file/session/test/draft.md',workspace:'test'})).json.data
+ assert.equal((await request('GET','/api/sources?path='+encodeURIComponent(imported.file))).json.data.sources[0].reference,'dsh-resource://file/session/test/draft.md')
  // An isolated backup restores body, stable IDs, ownership, aliases and metadata.
  const backup=root+'-backup',restored=root+'-restored'
  try{
@@ -113,9 +113,6 @@ try{
   assert.equal(fs.readFileSync(path.join(restored,'External/two.md'),'utf8'),'saved')
   assert.equal(restoredRepo.db.prepare('SELECT count(*) n FROM credentials').get().n,0)
   assert.ok(restoredRepo.db.prepare('SELECT id FROM asset_aliases WHERE path=?').get(legacyFile))
-  assert.equal(restoredRepo.db.prepare('SELECT title FROM workspace_previews WHERE id=?').get(preview.id).title,'draft.md')
-  assert.equal(restoredRepo.db.prepare('SELECT source_path FROM workspace_previews WHERE id=?').get(preview.id).source_path,'/workspace/draft.md')
-  assert.ok(fs.readdirSync(path.join(restored,'.reader/previews',preview.id)).length)
   restoredRepo.db.close()
  }finally{fs.rmSync(backup,{recursive:true,force:true});fs.rmSync(restored,{recursive:true,force:true})}
  // A revoked token is unusable.

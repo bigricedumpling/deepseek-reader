@@ -93,58 +93,39 @@
 
     <PublicSharing v-if="publicSharingOpen && !isGuest" @close="publicSharingOpen=false;managerOpen=true" />
     <Teleport to="body">
-      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭抽屉管理'" @click="managerOpen=false" /></transition>
+      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" aria-label="关闭抽屉管理" @click="managerOpen=false" /></transition>
       <transition name="lib-manager">
-        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" :class="{'history-panel':managerSection==='previews'}" role="dialog" aria-modal="true" :aria-label="managerSection === 'previews' ? '工作区浏览记录' : isGuest ? '浏览抽屉' : '管理抽屉'">
-          <header class="lib-manager-head"><div class="lib-manager-navigation"><button v-if="managerSection === 'previews' && selectedPreview" class="lib-manager-back" title="返回工作区浏览记录" aria-label="返回工作区浏览记录" @click="selectedPreview=null"><PhArrowLeft :size="18" /></button><h2>{{ selectedPreview ? selectedPreview.title : managerSection === 'previews' ? '工作区浏览记录' : '抽屉' }}</h2></div><span class="lib-manager-head-actions"><button v-if="managerSection==='libs' && !isGuest" class="icon-btn" aria-label="新建抽屉" @click="createLib"><PhPlus :size="18" /></button><button class="icon-btn" :aria-label="managerSection === 'previews' ? '关闭工作区浏览记录' : '关闭抽屉管理'" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
-          <p v-if="managerSection === 'libs' && !isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收录到抽屉，也可以直接新建文档。</p>
-          <div v-if="managerSection === 'libs' || managerSection === 'previews' && !selectedPreview" class="lib-manager-tools">
+        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="isGuest ? '浏览抽屉' : '管理抽屉'">
+          <header class="lib-manager-head"><div class="lib-manager-navigation"><h2>抽屉</h2></div><span class="lib-manager-head-actions"><button v-if="!isGuest" class="icon-btn" aria-label="新建抽屉" @click="createLib"><PhPlus :size="18" /></button><button class="icon-btn" aria-label="关闭抽屉管理" @click="managerOpen=false"><PhX :size="18" /></button></span></header>
+          <p v-if="!isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收进抽屉，也可以直接新建文档。</p>
+          <div class="lib-manager-tools">
             <div class="lib-manager-search-row">
-              <input v-if="managerSection === 'libs'" v-model.trim="libQuery" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus />
-              <input v-else v-model.trim="previewQuery" type="search" placeholder="搜索浏览记录" aria-label="搜索工作区浏览记录" />
-              <SelectMenu v-if="managerSection === 'libs'" v-model="libSort" :options="libSortOptions" label="抽屉排序" />
-              <SelectMenu v-else :model-value="previewArchived ? 'hidden' : 'recent'" :options="[{value:'recent',label:'最近浏览'},{value:'hidden',label:'已隐藏'}]" label="浏览记录筛选" @update:model-value="setPreviewFilter" />
+              <input v-model.trim="libQuery" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus />
+              <SelectMenu v-model="libSort" :options="libSortOptions" label="抽屉排序" />
             </div>
-            <div v-if="managerSection === 'libs' && !isGuest" class="lib-manager-filter-row">
+            <div v-if="!isGuest" class="lib-manager-filter-row">
               <div class="lib-manager-filters" role="group" aria-label="筛选抽屉">
                 <button v-for="filter in [{value:'all',label:'全部'},{value:'public',label:'分享范围'},{value:'private',label:'仅自己'}]" :key="filter.value" :class="{ 'is-on': managerFilter === filter.value }" :aria-pressed="managerFilter === filter.value" @click="managerFilter=filter.value">{{ filter.label }}</button>
               </div>
             </div>
           </div>
-          <div v-if="managerSection === 'libs'" class="lib-manager-grid">
+          <div class="lib-manager-grid">
             <div v-for="lib in managerLibs" :key="lib.path" class="lib-manager-card" @contextmenu="libContext($event,lib)" :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }">
               <button class="lib-manager-card-main" @click="goLib(lib); managerOpen=false"><ContentIcon :value="lib.icon || siteIcon" class="lib-manager-icon" /><strong>{{ lib.name }}</strong><span class="lib-card-meta"><span>{{ lib.docs }} 篇</span><span class="lib-card-status"><component :is="isGuest ? store.canEdit(lib) ? PhPencilSimple : PhLock : lib.shared ? lib.locked ? PhLock : PhPencilSimple : PhEyeSlash" :size="13" weight="regular" />{{ isGuest ? store.canEdit(lib) ? '可编辑' : '只读' : lib.shared ? lib.locked ? '访客只读' : '访客可编辑' : '仅自己' }}</span></span></button>
               <button v-if="!isGuest" class="lib-manager-card-more icon-btn xs" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" weight="bold" /></button>
             </div>
             <p v-if="!managerLibs.length" class="lib-empty">没有匹配的抽屉</p>
           </div>
-          <footer v-if="managerSection === 'libs' && !isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="regular" />分享只读副本</button><button title="允许 Agent 访问指定抽屉" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="regular" />Agent 访问</button></footer>
-          <div v-if="managerSection === 'previews'" class="lib-manager-previews">
-            <div v-if="!selectedPreview" class="preview-list">
-              <p v-if="previewLoading" class="lib-empty" role="status">正在读取…</p>
-              <div v-for="item in filteredPreviews" :key="item.id" class="preview-list-row">
-                <button class="preview-list-main" :data-preview-id="item.id" @click="selectPreview(item.id)"><PhFileText :size="18" weight="regular" /><span><strong>{{ item.title }}</strong><small>{{ item.sourceState === 'missing' ? '来源已失效' : item.sourceState === 'changed' ? '源文件已更新' : new Date(item.updated).toLocaleString('zh-CN') }}</small></span></button>
-                <div class="preview-list-actions">
-                  <button v-if="fileManagerAvailable()" :disabled="!canRevealItem(item)" :title="canRevealItem(item) ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager(item)"><PhFolderSimple :size="15" />{{ fileManagerLabel() }}</button>
-                  <button v-else-if="canResolvePreviewInDsh(item)" @click="openPreviewInDsh(item)"><PhFolderSimple :size="15" />在 DSH 打开</button>
-                  <button :disabled="item.incomplete" :title="item.incomplete ? '部分图片未加载，请在 DSH 中重新打开' : '收录副本'" @click="collectPreviewFromList(item)">收录副本</button>
-                </div>
-              </div>
-              <p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p>
-              <p v-if="!previewLoading && !previewActionError && !filteredPreviews.length" class="lib-empty">{{ previewQuery ? '没有匹配的记录' : previewArchived ? '没有隐藏的记录' : '还没有浏览记录' }}</p>
-            </div>
-            <div v-if="selectedPreview" class="lib-preview-detail"><div class="lib-preview-detail-head"><span>{{ selectedPreview.incomplete ? '部分图片未加载' : selectedPreview.sourceState === 'missing' ? '来源已失效' : selectedPreview.sourceState === 'changed' ? '源文件已更新' : '来自工作区' }}</span></div><p class="lib-preview-source" :title="selectedPreview.reference">{{ previewSourceLabel(selectedPreview.reference) }}</p><div class="lib-preview-body" v-html="selectedPreviewHtml" @click="onPreviewLink" /><p v-if="previewActionError" class="transfer-error" role="alert">{{ previewActionError }}</p><div class="lib-preview-actions"><button v-if="fileManagerAvailable()" :disabled="!canRevealPreview" :title="canRevealPreview ? fileManagerLabel() : '原文件位置尚未记录，请在 DSH 中重新打开'" @click="showPreviewInFileManager()"><PhFolderSimple :size="14" />{{ fileManagerLabel() }}</button><button v-else-if="canOpenPreviewInDsh" @click="openPreviewInDsh()"><PhFolderSimple :size="14" />在 DSH 打开原文件</button><button @click="archivePreview(selectedPreview.id, !previewArchived)">{{ previewArchived ? '恢复显示' : '隐藏记录' }}</button><button :disabled="selectedPreview.incomplete" @click="openTransfer('collect','preview',selectedPreview.id)">收录副本</button></div></div>
-          </div>
+          <footer v-if="!isGuest" class="lib-manager-footer"><button @click="managerOpen=false;publicSharingOpen=true"><PhEye :size="16" weight="regular" />分享只读副本</button><button title="允许 Agent 访问指定抽屉" @click="managerOpen=false;agentSettings=true"><PhUserCircle :size="16" weight="regular" />Agent 访问</button></footer>
         </section>
       </transition>
     </Teleport>
 
     <Teleport to="body">
       <Transition name="overlay" appear><div v-if="transfer.open" class="transfer-backdrop" @click.self="transfer.open=false">
-        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉'">
-          <h2>{{ transfer.mode === 'collect' ? '收录副本' : transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉' }}</h2>
-          <p class="transfer-source">{{ transfer.mode === 'collect' ? selectedPreview?.title : transfer.path }}</p>
-          <label v-if="transfer.mode === 'collect'">文档名称<input v-model="transfer.name" maxlength="160" /></label>
+        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉'">
+          <h2>{{ transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉' }}</h2>
+          <p class="transfer-source">{{ transfer.path }}</p>
           <div class="transfer-library-head"><span>目标抽屉</span><input v-model.trim="transferSearch" type="search" placeholder="搜索抽屉" aria-label="搜索目标抽屉" /></div>
           <div class="transfer-library-grid" role="group" aria-label="选择目标抽屉">
             <button v-for="lib in transferLibs" :key="lib.name" type="button" :class="{ 'is-on': transfer.lib === lib.name, 'is-draft': lib.name === '草稿' }" :aria-pressed="transfer.lib === lib.name" @click="onTransferLibSelect(lib.name)"><ContentIcon :value="lib.icon || siteIcon" :size="20" /><span>{{ lib.name }}</span><small>{{ lib.docs }} 篇</small></button>
@@ -152,7 +133,7 @@
           </div>
           <div v-if="transfer.lib && transfer.folders.length > 1" class="transfer-field"><span>目标位置</span><SelectMenu v-model="transfer.dir" :options="transfer.folders.map(folder => ({ value: folder.path, label: folder.label }))" label="目标位置" /></div>
           <p v-if="transfer.error" class="transfer-error" role="alert">{{ transfer.error }}</p>
-          <div class="transfer-actions"><button @click="transfer.open=false">{{ transfer.mode === 'collect' ? '返回预览' : '取消' }}</button><button :disabled="transfer.busy || !transfer.dir" @click="confirmTransfer">{{ transfer.busy ? '处理中…' : transfer.mode === 'collect' ? '收录副本' : '确定' }}</button></div>
+          <div class="transfer-actions"><button @click="transfer.open=false">取消</button><button :disabled="transfer.busy || !transfer.dir" @click="confirmTransfer">{{ transfer.busy ? '处理中…' : '确定' }}</button></div>
         </section>
       </div></Transition>
     </Teleport>
@@ -396,8 +377,7 @@
       </template>
 
       </nav>
-      <div v-if="!isGuest" class="workspace-history-footer">
-        <button class="workspace-history-link" :title="`在 DSH 用 ${BRAND_NAME} 打开过的 Markdown`" @click="openPreviews"><PhClockCounterClockwise :size="17" /><span>工作区浏览记录</span></button>
+      <div v-if="!isGuest" class="workspace-tools-footer">
         <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="openActivity"><PhGitDiff :size="16"/>Agent 改动<span v-if="activityUnread" class="activity-count">{{ activityUnread }}</span></button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></div>
       </div>
     </template>
@@ -442,10 +422,9 @@ import {
   PhSquaresFour, PhUserCircle, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
   PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise, PhGitDiff,
   PhLock, PhLockOpen, PhEye, PhEyeSlash, PhImage, PhStack, PhCaretLeft, PhCaretRight,
-  PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight, PhArrowLeft, PhFileText
+  PhCaretDown, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight
 } from '@phosphor-icons/vue'
 import {useDialogFocus} from '../composables/useDialogFocus'
-import {useWorkspaceHistory} from '../composables/useWorkspaceHistory'
 import RailToc from './RailToc.vue'
 import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
@@ -507,25 +486,12 @@ const libIconInput = ref(null)
 
 const libPanel = reactive({ open: false, libs: [], busy: '' })
 const managerOpen = ref(false)
-const managerSection = ref('libs')
-const {tempPreviews,previewQuery,filteredPreviews,selectedPreview,previewActionError,previewArchived,canResolvePreviewInDsh,canRevealItem,canRevealPreview,canOpenPreviewInDsh,selectedPreviewHtml,previewSourceLabel,onPreviewLink,loadPreviews,openPreviews,setPreviewFilter,previewLoading,selectPreview,collectPreviewFromList,showPreviewInFileManager,openPreviewInDsh,archivePreview}=useWorkspaceHistory({store,libPanel,managerOpen,managerSection,openTransfer})
 const libQuery = ref('')
 const managerFilter = ref('all')
 const transferSearch = ref('')
-const transfer = reactive({ open: false, mode: 'copy', kind: 'doc', path: '', name: '', lib: '', dir: '', folders: [], busy: false, error: '' })
+const transfer = reactive({ open: false, mode: 'copy', kind: 'doc', path: '', lib: '', dir: '', folders: [], busy: false, error: '' })
 const managerDialog = ref(null), transferDialog = ref(null)
-watch(selectedPreview, async (preview, previous) => {
-  if (!managerOpen.value || managerSection.value !== 'previews') return
-  await nextTick()
-  const panel = managerDialog.value
-  if (preview) panel?.querySelector('.lib-manager-back')?.focus()
-  else if (previous) {
-    const row = [...(panel?.querySelectorAll('[data-preview-id]') || [])]
-      .find(el => el.dataset.previewId === String(previous.id))
-    ;(row || panel?.querySelector('input[type="search"]'))?.focus()
-  }
-})
-useDialogFocus(managerOpen, managerDialog, () => { if(selectedPreview.value) selectedPreview.value=null; else managerOpen.value=false })
+useDialogFocus(managerOpen, managerDialog, () => { managerOpen.value=false })
 useDialogFocus(() => transfer.open, transferDialog, () => { if(!transfer.busy) transfer.open=false })
 const transferToast = reactive({ message: '', lib: '', file: '' })
 async function viewTransferResult() {
@@ -556,7 +522,6 @@ async function openTransfer(mode, kind, source) {
   transfer.mode = mode
   transfer.kind = kind
   transfer.path = source
-  transfer.name = mode === 'collect' ? selectedPreview.value?.title.replace(/\.(md|markdown)$/i, '') || '' : ''
   transfer.error = ''
   transferSearch.value = ''
   if (!libPanel.libs.length) await loadLibs()
@@ -564,7 +529,7 @@ async function openTransfer(mode, kind, source) {
   transfer.lib = ''
   transfer.dir = ''
   transfer.folders = []
-  if (mode !== 'collect') managerOpen.value = false
+  managerOpen.value = false
   libPanel.open = false
   transfer.open = true
 }
@@ -576,32 +541,19 @@ async function confirmTransfer() {
   transfer.error = ''
   try {
     let result
-    if (mode === 'collect') {
-      const response = await fetch(API_BASE + '/api/collect-workspace-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: source, dir, name: transfer.name }) })
-      const json = await response.json()
-      if (!json.ok) throw Error(json.error || '收录失败')
-      result = json.data
-      selectedPreview.value = null
-      await loadPreviews()
-    } else if (kind === 'folder') {
+    if (kind === 'folder') {
       result = mode === 'copy' ? await store.copyCategory(source, dir) : await store.moveCategory(source, dir)
     } else result = mode === 'copy' ? await store.copyDoc(source, dir) : await store.moveDoc(source, dir)
     transfer.open = false
     await loadLibs()
     const targetLib = dir.split('/')[0]
-    if (mode === 'collect') {
-      managerOpen.value = false
-      await goLib({ name: targetLib, path: targetLib })
-      await store.loadTree()
-      if (result?.file) await store.select(result.file)
-      if (isMobileLibView() && !props.collapsed) emit('toggle-collapse')
-    } else if (mode === 'move' && targetLib !== currentLib.value) {
+    if (mode === 'move' && targetLib !== currentLib.value) {
       await goLib({ name: targetLib, path: targetLib })
       await store.loadTree()
       if (result?.file) await store.select(result.file)
       if (isMobileLibView() && !props.collapsed) emit('toggle-collapse')
     } else {
-      transferToast.message = mode === 'collect' ? '已收录到 ' + dir : mode === 'copy' ? '已复制到 ' + dir : '已移动到 ' + dir
+      transferToast.message = mode === 'copy' ? '已复制到 ' + dir : '已移动到 ' + dir
       transferToast.lib = targetLib
       transferToast.file = result?.file || ''
     }
@@ -802,7 +754,6 @@ function openLibPanel() {
 function openManager() {
   window.dispatchEvent(new Event('reader-overlay-open'))
   libPanel.open = false
-  managerSection.value = 'libs'
   managerOpen.value = true
   libQuery.value = ''
   managerFilter.value = 'all'
@@ -1814,7 +1765,7 @@ function relTime(ms) {
 /* ---------- 点外面关菜单 ---------- */
 
 function onDocClick(e) {
-  if(!e.target.closest('.workspace-history-footer'))footerTools.value=false
+  if(!e.target.closest('.workspace-tools-footer'))footerTools.value=false
   if (!e.target.closest('.side-menu, .icon-btn')) menuOpen.value = false
 }
 function onLibEscape(e) {
@@ -2206,10 +2157,7 @@ onMounted(loadActivityUnread)
 @media(max-width:520px){.transfer-dialog{padding:20px}.transfer-library-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.transfer-library-head{display:block}.transfer-library-head input{margin-top:8px}}
 @media(max-width:520px){.lib-manager{width:calc(100vw - 16px);max-height:calc(100dvh - 24px);border-radius:28px}.lib-manager-head{padding:20px 20px 14px}.lib-manager-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding-inline:20px}.lib-manager-tools{padding-inline:20px}.lib-manager-search-row :deep(.select-menu-trigger){width:105px}.lib-manager-filters button{padding-inline:8px}.lib-manager-footer{padding-inline:20px}.lib-preview-detail{max-height:calc(100dvh - 130px);margin:0 14px 14px;padding:14px}.lib-preview-actions{flex-wrap:wrap}.lib-preview-actions button{flex:1;white-space:nowrap}}
 @media(max-width:520px){.preview-list{padding-inline:20px}.preview-list-row{align-items:stretch;flex-direction:column;gap:7px}.preview-list-actions{justify-content:flex-end;flex-wrap:wrap}}
-.workspace-history-footer{flex:none;padding:7px 10px 12px;border:0}
-.workspace-history-link{display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:7px 10px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left;white-space:nowrap}
-.workspace-history-link:hover{background:var(--c-field);color:var(--c-ink)}
-.workspace-history-link svg{flex:none}
+.workspace-tools-footer{flex:none;padding:7px 10px 12px;border:0}
 </style>
 
 <style scoped>
@@ -2218,7 +2166,7 @@ onMounted(loadActivityUnread)
 <style scoped>.lib-icon-edit{display:grid;place-items:center;padding:5px;border-radius:var(--radius-control);margin-left:-5px}.lib-icon-edit:not(:disabled):hover{background:var(--c-hover)}.lib-icon-edit:disabled{cursor:default}.workspace-footer .manage-entry{gap:10px;padding:10px 8px}.workspace-footer .manage-entry:hover{background:var(--c-hover)}</style>
 
 <style scoped>
-.workspace-history-footer{display:flex;align-items:center;gap:8px;padding:16px 12px 12px;border:0}.workspace-history-link{flex:1;min-width:0;padding:8px 6px;font-size:12px;color:var(--c-sub)}.workspace-history-link svg{display:none}.workspace-tools{position:relative}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}.workspace-tools-menu .activity-count{margin-left:auto;font-size:11px;color:var(--c-faint);font-variant-numeric:tabular-nums}
+.workspace-tools-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:16px 12px 12px;border:0}.workspace-tools{position:relative}.workspace-tools-menu{position:absolute;top:auto;bottom:40px;right:0;width:160px;padding:6px}.workspace-tools-menu button{display:flex;gap:9px;align-items:center;width:100%;padding:10px;border-radius:8px;text-align:left;font-size:12px}.workspace-tools-menu button:hover{background:var(--c-hover)}.workspace-tools-menu .activity-count{margin-left:auto;font-size:11px;color:var(--c-faint);font-variant-numeric:tabular-nums}
 </style>
 
 <style scoped>

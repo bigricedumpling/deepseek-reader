@@ -44,12 +44,6 @@ const repo = workspace(DOCS_ROOT)
 const assets = resources(repo)
 const share = createShare(DOCS_ROOT)
 const publicSharing = publicSession(repo, share)
-function previewSourceState(reference, updated) {
-  if (!path.isAbsolute(reference)) return 'unknown'
-  try { const stat = fs.statSync(reference); return !stat.isFile() ? 'missing' : stat.mtimeMs > updated + 1000 ? 'changed' : 'present' }
-  catch { return 'missing' }
-}
-
 const TRASH = '.回收站'
 /** 译文放这里（点号开头，不进文档树）；只有读文件时放行，写/删一律不放 */
 const TRANSLATE_DIR = '.翻译'
@@ -1268,7 +1262,6 @@ const routes = {
     return { ok: true, data: { file, id: node.id, revision: digest(content), images: imported.length } }
   },
 
-  'GET /workspace-previews': async (_body, url) => ({ ok: true, data: repo.db.prepare('SELECT id,reference,source_path AS sourcePath,title,updated,incomplete,archived FROM workspace_previews WHERE archived=? ORDER BY updated DESC LIMIT 100').all(url.searchParams.get('archived') === '1' ? 1 : 0).map(row => ({ ...row, sourceState: previewSourceState(row.sourcePath || row.reference, row.updated) })) }),
   'GET /icon-history': async () => {
     const saved = repo.getJSON('customIconHistory', [])
     const inUse = [
@@ -1291,94 +1284,6 @@ const routes = {
     repo.setJSON('customIconHistory', next)
     return { ok: true, data: next }
   },
-  'GET /workspace-preview': async (_body, url) => {
-    const row = repo.db.prepare('SELECT id,reference,source_path AS sourcePath,title,content,updated,incomplete,archived FROM workspace_previews WHERE id=?').get(String(url.searchParams.get('id') || ''))
-    if (!row) throw fault('NOT_FOUND', '浏览记录不存在', 404)
-    return { ok: true, data: { ...row, sourceState: previewSourceState(row.sourcePath || row.reference, row.updated) } }
-  },
-  'POST /workspace-preview': async body => {
-    const reference = String(body.reference || '')
-    const title = String(body.title || '').slice(0, 200)
-    const content = String(body.content || '')
-    const sourcePath = String(body.sourcePath || '').slice(0, 2000)
-    if (sourcePath && (!path.isAbsolute(sourcePath) || !/\.(md|markdown)$/i.test(sourcePath))) throw fault('INVALID_PREVIEW', '原文件路径无效')
-    if (!reference || reference.length > 2000 || !title || content.length > 5 * 1024 * 1024) throw fault('INVALID_PREVIEW', '预览来源或内容无效')
-    const id = digest(reference).slice(0, 32)
-    if (!repo.db.prepare('SELECT id FROM workspace_previews WHERE reference=?').get(reference) && repo.db.prepare('SELECT count(*) AS n FROM workspace_previews WHERE archived=0').get().n >= 500) throw fault('PREVIEW_LIMIT', '工作区浏览记录已达 500 篇，请归档旧记录')
-    const images = Array.isArray(body.assets) ? body.assets : []
-    if (images.length > 24) throw fault('TOO_MANY_IMAGES', '预览图片超过 24 张')
-    let snapshot = content
-    for (const image of images) {
-      const ref = String(image.reference || '')
-      const mime = String(image.mime || '')
-      const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }[mime]
-      if (!ref || ref.length > 600 || !content.includes(ref) || !ext) throw fault('INVALID_IMAGE', '预览图片无效')
-      const encoded = String(image.base64 || '')
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length > 14 * 1024 * 1024) throw fault('INVALID_IMAGE', '图片内容无效')
-      const bytes = Buffer.from(encoded, 'base64')
-      if (bytes.length > 10 * 1024 * 1024 || !bytes.length) throw fault('INVALID_IMAGE', '图片超过 10 MB')
-      const valid = mime === 'image/png' ? bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
-        : mime === 'image/jpeg' ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
-        : mime === 'image/gif' ? ['GIF87a','GIF89a'].includes(bytes.toString('ascii',0,6))
-        : bytes.toString('ascii',0,4) === 'RIFF' && bytes.toString('ascii',8,12) === 'WEBP'
-      if (!valid) throw fault('INVALID_IMAGE', '图片格式与内容不符')
-      const imageId = digest(bytes).slice(0, 32)
-      repo.write(path.join(DOCS_ROOT, '.reader/previews', id, imageId + ext), bytes)
-      repo.db.prepare('INSERT OR REPLACE INTO workspace_preview_assets VALUES (?,?,?)').run(id, imageId, mime)
-      snapshot = snapshot.split(ref).join('/api/workspace-preview-asset?id=' + id + '&asset=' + imageId)
-    }
-    const currentImages = new Set([...snapshot.matchAll(/\/api\/workspace-preview-asset\?id=[a-f0-9]{32}&asset=([a-f0-9]{32})/g)].map(match => match[1]))
-    for (const old of repo.db.prepare('SELECT id,mime FROM workspace_preview_assets WHERE preview=?').all(id)) {
-      if (currentImages.has(old.id)) continue
-      const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }[old.mime]
-      if (ext) repo.remove(path.join(DOCS_ROOT, '.reader/previews', id, old.id + ext))
-      repo.db.prepare('DELETE FROM workspace_preview_assets WHERE preview=? AND id=?').run(id, old.id)
-    }
-    repo.db.prepare('INSERT INTO workspace_previews (id,reference,source_path,title,content,updated,incomplete,archived) VALUES (?,?,?,?,?,?,?,0) ON CONFLICT(reference) DO UPDATE SET source_path=CASE WHEN excluded.source_path<>\'\' THEN excluded.source_path ELSE workspace_previews.source_path END,title=excluded.title,content=excluded.content,updated=excluded.updated,incomplete=excluded.incomplete,archived=0').run(id, reference, sourcePath, title, snapshot, Date.now(), Number(Boolean(body.incomplete)))
-    return { ok: true, data: { id } }
-  },
-  'DELETE /workspace-preview': async body => {
-    const id = String(body.id || '')
-    const row = repo.db.prepare('SELECT id FROM workspace_previews WHERE id=?').get(id)
-    if (!row) throw fault('NOT_FOUND', '浏览记录不存在', 404)
-    repo.db.prepare('UPDATE workspace_previews SET archived=1 WHERE id=?').run(id)
-    return { ok: true, data: { archived: true } }
-  },
-  'PUT /workspace-preview/archive': async body => {
-    const id = String(body.id || '')
-    if (!repo.db.prepare('SELECT id FROM workspace_previews WHERE id=?').get(id)) throw fault('NOT_FOUND', '浏览记录不存在', 404)
-    repo.db.prepare('UPDATE workspace_previews SET archived=? WHERE id=?').run(body.archived ? 1 : 0, id)
-    return { ok: true, data: { archived: Boolean(body.archived) } }
-  },
-  'POST /collect-workspace-preview': async body => {
-    const id = String(body.id || '')
-    const row = repo.db.prepare('SELECT * FROM workspace_previews WHERE id=?').get(id)
-    if (!row) throw fault('NOT_FOUND', '浏览记录不存在', 404)
-    if (row.incomplete) throw fault('INCOMPLETE_PREVIEW', '部分图片未能读取，请回到 DSH 重新打开源文件后收录')
-    const dir = assertDir(body.dir)
-    if (!dir || !fs.existsSync(safeResolve(dir))) throw fault('NOT_FOUND', '目标抽屉或目录不存在', 404)
-    const name = safeName(body.name || row.title.replace(/\.(md|markdown)$/i, ''))
-    if (!name) throw fault('INVALID_NAME', '文档名不能为空')
-    const file = uniqueFile(dir, name)
-    let content = row.content
-    repo.write(safeResolve(file), content)
-    const node = repo.node(file)
-    for (const match of [...content.matchAll(/\/api\/workspace-preview-asset\?id=([a-f0-9]{32})&asset=([a-f0-9]{32})/g)]) {
-      if (match[1] !== id) continue
-      const item = repo.db.prepare('SELECT mime FROM workspace_preview_assets WHERE preview=? AND id=?').get(id, match[2])
-      if (!item) throw fault('INVALID_IMAGE', '临时图片缺失，收录已取消')
-      const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }[item.mime]
-      const image = fs.readFileSync(path.join(DOCS_ROOT, '.reader/previews', id, match[2] + ext))
-      const saved = assets.upload(file, item.mime, image.toString('base64'))
-      content = content.replaceAll(match[0], saved.url)
-    }
-    repo.write(safeResolve(file), content)
-    recordSource(repo, node.id, { kind: 'workspace-file', workspace: '', reference: row.reference, note: '从工作区浏览记录收录' })
-    share.setShared(file, false)
-    // 收录只复制到知识库；工作区浏览记录仍是历史，之后还可回看源文件。
-    return { ok: true, data: { file } }
-  },
-
   /** 改名 = 改文件名 */
   'PATCH /doc': async (body) => {
     const absOld = assertFile(body.path)
@@ -1692,11 +1597,6 @@ function checkWrite(key, body, role) {
     return
   }
   const source = body.path || body.file
-  if (key === 'POST /workspace-preview' || key === 'DELETE /workspace-preview' || key === 'PUT /workspace-preview/archive' || key === 'POST /collect-workspace-preview' || key === 'POST /icon-history') {
-    if (role !== 'owner') throw fault('FORBIDDEN', '工作区浏览记录仅供管理者使用', 403)
-    if (key === 'POST /collect-workspace-preview') canWrite(body.dir, role)
-    return
-  }
   if (key === 'POST /copy/doc' || key === 'POST /copy/category') {
     if (role !== 'owner') throw fault('FORBIDDEN', '复制资料需要管理身份', 403)
     canWrite(source, role, key === 'POST /copy/category')
@@ -1765,38 +1665,23 @@ export async function handleApi(req, res, ctx = {}) {
       if (origin && new URL(origin).host !== req.headers.host && new URL(origin).host !== req.headers['x-forwarded-host']) throw new Error('请求来源不匹配')
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) throw new Error('仅接受 JSON 请求')
     }
-    const body = req.method === 'GET' ? {} : await readBody(req, key === 'POST /asset' ? 15 * 1024 * 1024 : ['POST /import-workspace-doc','POST /workspace-preview'].includes(key) ? 20 * 1024 * 1024 : undefined)
+    const body = req.method === 'GET' ? {} : await readBody(req, key === 'POST /asset' ? 15 * 1024 * 1024 : key === 'POST /import-workspace-doc' ? 20 * 1024 * 1024 : undefined)
     if(credential && !agent)throw fault('UNAUTHORIZED','Agent 凭据无效或已过期',401)
     if (key === 'POST /reveal') {
       if (role !== 'owner' || agent || !localFileManagerRequest(req)) throw fault('FORBIDDEN', '仅可在本机管理界面打开文件位置', 403)
-      let abs
-      if (body.previewId) {
-        const row = repo.db.prepare('SELECT reference,source_path AS sourcePath FROM workspace_previews WHERE id=?').get(String(body.previewId))
-        if (!row) throw fault('NOT_FOUND', '浏览记录不存在', 404)
-        const suppliedPath = String(body.sourcePath || '')
-        if (suppliedPath && !row.reference.startsWith('dsh-resource://file/session/')) throw fault('INVALID_PATH', '来源地址不匹配', 400)
-        const original = suppliedPath || row.sourcePath || row.reference
-        if (!path.isAbsolute(original)) throw fault('SOURCE_UNAVAILABLE', '这条记录没有本机文件路径', 404)
-        abs = path.resolve(original)
-        if (inReader(abs)) throw fault('FORBIDDEN', '无法打开阅读器内部文件', 403)
-        try { if (fs.lstatSync(abs).isSymbolicLink()) throw fault('FORBIDDEN', '不打开符号链接', 403) }
-        catch (error) { if (error.code === 'ENOENT') throw fault('NOT_FOUND', '原文件已不存在', 404); throw error }
-      } else {
-        const rel = repo.resolve(String(body.path || ''))
-        if (!rel) throw fault('INVALID_PATH', '请选择文档或目录', 400)
-        assertVisible(rel)
-        abs = safeResolve(rel)
-        if (inReader(abs)) throw fault('FORBIDDEN', '无法打开阅读器内部文件', 403)
-      }
+      const rel = repo.resolve(String(body.path || ''))
+      if (!rel) throw fault('INVALID_PATH', '请选择文档或目录', 400)
+      assertVisible(rel)
+      const abs = safeResolve(rel)
+      if (inReader(abs)) throw fault('FORBIDDEN', '无法打开阅读器内部文件', 403)
       let stat
       try { stat = fs.statSync(abs) } catch { throw fault('NOT_FOUND', '文件已不存在', 404) }
       if (!stat.isDirectory() && (!stat.isFile() || !/\.(md|pdf|html?)$/i.test(abs))) throw fault('INVALID_PATH', '只能定位文档或目录', 400)
       await revealInFileManager(abs, stat.isDirectory())
-      if (body.previewId && body.sourcePath) repo.db.prepare('UPDATE workspace_previews SET source_path=? WHERE id=?').run(abs, String(body.previewId))
       return send(res, 200, { ok: true })
     }
     const id=body.id||url.searchParams.get('id')
-    if(id && !key.includes('agent-keys') && !key.includes('workspace-preview') && !key.includes('/activity')) {
+    if(id && !key.includes('agent-keys') && !key.includes('/activity')) {
       const n=repo.byId(id);if(!n)throw fault('NOT_FOUND','文档不存在',404)
       if(req.method==='GET')url.searchParams.set('path',n.path);else body.path=n.path
     }
@@ -1831,7 +1716,7 @@ export async function handleApi(req, res, ctx = {}) {
     if (key.includes('/trash') && role !== 'owner') throw fault('FORBIDDEN', '回收站仅供管理者使用', 403)
     if(['GET /agent-keys','POST /agent-keys','DELETE /agent-keys','GET /audit','GET /activity','GET /activity/diff','POST /activity/review','GET /metadata-export','GET /reconcile','POST /reconcile','GET /history'].includes(key)&&role!=='owner')throw fault('FORBIDDEN','需要管理身份',403)
     if (key.endsWith('/sources') && role !== 'owner') throw fault('FORBIDDEN', '来源记录仅供管理者查看', 403)
-    if ((key.startsWith('GET /workspace-preview') || key === 'GET /icon-history') && role !== 'owner') throw fault('FORBIDDEN', '私人资料仅供管理者使用', 403)
+    if (key === 'GET /icon-history' && role !== 'owner') throw fault('FORBIDDEN', '私人资料仅供管理者使用', 403)
 
     if (key === 'DELETE /session') {
       res.setHeader('Set-Cookie', 'reader_session=; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=0')
@@ -1858,15 +1743,6 @@ export async function handleApi(req, res, ctx = {}) {
       return send(res, 200, { ok: true, data: share.status(rel) })
     }
     if (isGuest && ['GET /share', 'GET /build'].includes(key)) throw new Error('请先验证管理密码')
-    if (key === 'GET /workspace-preview-asset') {
-      const id = String(url.searchParams.get('id') || '')
-      const asset = String(url.searchParams.get('asset') || '')
-      if (!/^[a-f0-9]{32}$/.test(id) || !/^[a-f0-9]{32}$/.test(asset)) throw fault('INVALID_IMAGE', '图片地址无效')
-      const item = repo.db.prepare('SELECT mime FROM workspace_preview_assets WHERE preview=? AND id=?').get(id, asset)
-      if (!item || !repo.db.prepare('SELECT id FROM workspace_previews WHERE id=?').get(id)) throw fault('NOT_FOUND', '图片不存在', 404)
-      const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }[item.mime]
-      return sendFile(req, res, '.reader/previews/' + id + '/' + asset + ext, { allowStorage: true })
-    }
     if (key === 'GET /file') {
       let rel=url.searchParams.get('path')||''
       let resource=assets.find(rel,url.searchParams.get('asset'))

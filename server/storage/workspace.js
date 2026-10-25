@@ -36,6 +36,7 @@ export function workspace(root) {
     CREATE TABLE IF NOT EXISTS retries (key TEXT PRIMARY KEY, fingerprint TEXT, result TEXT);
     CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, hash TEXT UNIQUE, name TEXT, scopes TEXT, permissions TEXT, expires INTEGER, revoked INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS versions (id TEXT PRIMARY KEY, node TEXT, revision TEXT, path TEXT, at INTEGER);
+    /* 旧版工作区预览缓存。新版在预览页直接收进抽屉，不再写入；保留表以兼容旧备份和旧数据。 */
     CREATE TABLE IF NOT EXISTS workspace_previews (id TEXT PRIMARY KEY, reference TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, updated INTEGER NOT NULL, incomplete INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0);
     CREATE INDEX IF NOT EXISTS workspace_previews_updated ON workspace_previews(updated DESC);
     CREATE TABLE IF NOT EXISTS workspace_preview_assets (preview TEXT NOT NULL, id TEXT NOT NULL, mime TEXT NOT NULL, PRIMARY KEY(preview,id));`)

@@ -2,7 +2,7 @@
   <main class="preview-shell">
     <header class="preview-header">
       <div class="preview-identity"><span class="preview-kicker">工作区文件</span><span class="preview-filename" :title="filePath">{{ title || 'Markdown 预览' }}</span></div>
-      <button v-if="ready" class="collect-button" type="button" @click="openPicker">收录副本到抽屉</button>
+      <button v-if="ready" class="collect-button" type="button" @click="openPicker">收进抽屉</button>
     </header>
     <div v-if="!ready" class="preview-state">正在读取工作区文件…</div>
     <div v-else class="preview-reader" @click="onArticleClick">
@@ -10,8 +10,8 @@
       <article class="preview-image-probe" aria-hidden="true" v-html="html" />
     </div>
     <div v-if="picker" class="picker-mask" @click.self="picker=false">
-      <section class="picker" role="dialog" aria-modal="true" aria-label="收录副本到抽屉" @keydown.esc="picker=false">
-        <div class="picker-heading">收录副本到抽屉<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
+      <section class="picker" role="dialog" aria-modal="true" aria-label="收进抽屉" @keydown.esc="picker=false">
+        <div class="picker-heading">收进抽屉<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
         <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus /><SelectMenu v-model="libFilter" :options="[{value:'all',label:'全部'},{value:'private',label:'未公开'},{value:'public',label:'公开'}]" label="筛选抽屉" /></div>
         <div class="picker-grid">
           <button v-for="lib in filteredLibraries" :key="lib.name" type="button" class="picker-card" :class="{ selected: destination === lib.name, draft: lib.name === DRAFT_NAME }" @click="destination=lib.name">
@@ -23,7 +23,7 @@
         </div>
         <label>文档名称<input v-model="newName" maxlength="160" /></label>
         <p v-if="pickerError" class="picker-error">{{ pickerError }}</p>
-        <div class="picker-actions"><button type="button" @click="picker=false">取消</button><button type="button" :disabled="busy || !destination || !newName.trim()" @click="collect">{{ busy ? '正在收录…' : '收录' }}</button></div>
+        <div class="picker-actions"><button type="button" @click="picker=false">取消</button><button type="button" :disabled="busy || !destination || !newName.trim()" @click="collect">{{ busy ? '正在收进…' : '收进' }}</button></div>
       </section>
     </div>
   </main>
@@ -80,11 +80,7 @@ const imageVersion = ref(0)
 const sourceVersion = ref(0)
 const imageFailures = new Map()
 const requests = new Map()
-let snapshotReady = false
-let snapshotSaving = false
-let snapshotWrite = Promise.resolve()
-let lastSnapshot = ''
-let lastAssetCount = -1
+let contentComplete = false
 let fullRequestedFor = ''
 let parentOrigin = ''
 let nextRequestId = 0
@@ -129,26 +125,6 @@ function scanImages() {
     window.parent.postMessage({ type: 'dsh-reader-preview:asset-request', requestId, reference }, parentOrigin || '*')
   }
   notifyHeight()
-  if (pendingImages.value === 0) saveSnapshot()
-}
-async function saveSnapshot() {
-  // 自动暂存只写本机阅读器；远程阅读器必须由用户主动收录。
-  if (!['localhost', '127.0.0.1'].includes(location.hostname)) return
-  if (!snapshotReady || snapshotSaving || busy.value || !filePath.value || !source.value || pendingImages.value) return
-  if (lastSnapshot === source.value && lastAssetCount === imageData.size) return
-  snapshotSaving = true
-  snapshotWrite = (async () => {
-    const response = await fetch(API_BASE + '/api/workspace-preview', {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reference: filePath.value, sourcePath: sourcePath.value, title: title.value, content: source.value,
-        incomplete: imageFailures.size > 0,
-        assets: [...imageData].map(([reference, image]) => ({ reference, ...image })) })
-    })
-    if (response.ok) { lastSnapshot = source.value; lastAssetCount = imageData.size }
-  })()
-  try { await snapshotWrite }
-  catch { /* 预览本身继续可用；访客不会写入工作区浏览记录。 */ }
-  finally { snapshotSaving = false }
 }
 watch(html, async () => { await nextTick(); scanImages() }, { flush: 'post' })
 
@@ -160,14 +136,14 @@ function onMessage(event) {
   if (data.type === 'dsh-reader-preview:update') {
     parentOrigin = event.origin
     const changed = filePath.value && filePath.value !== String(data.filePath || '')
-    if (changed) { imageData.clear(); imageFailures.clear(); requests.clear(); pendingImages.value = 0; lastSnapshot = ''; lastAssetCount = -1; fullRequestedFor = ''; newName.value = '' }
+    if (changed) { imageData.clear(); imageFailures.clear(); requests.clear(); pendingImages.value = 0; fullRequestedFor = ''; newName.value = '' }
     title.value = String(data.title || '').slice(0, 200)
     filePath.value = String(data.filePath || '').slice(0, 2000)
     sourcePath.value = String(data.sourcePath || '').slice(0, 2000)
     source.value = String(data.text || '')
     sourceVersion.value++
-    snapshotReady = data.eof === true
-    if (!snapshotReady && !busy.value && fullRequestedFor !== filePath.value) {
+    contentComplete = data.eof === true
+    if (!contentComplete && !busy.value && fullRequestedFor !== filePath.value) {
       fullRequestedFor = filePath.value
       window.parent.postMessage({ type: 'dsh-reader-preview:full-request' }, parentOrigin)
     }
@@ -182,18 +158,16 @@ function onMessage(event) {
     else if (data.mime && data.base64) { imageData.set(reference, { mime: data.mime, base64: data.base64 }); if (pendingImages.value === 0) imageVersion.value++ }
     scanImages()
     if (pendingImages.value === 0 && imageData.size > 0 && !imageVersion.value) imageVersion.value++
-    saveSnapshot()
     if (awaitingImages && pendingImages.value === 0) { awaitingImages = false; commitCollect() }
   } else if (data.type === 'dsh-reader-preview:full-content') {
     if (data.error) { if (busy.value) { pickerError.value = String(data.error); busy.value = false }; return }
     source.value = String(data.text || '')
     sourceVersion.value++
-    snapshotReady = true
+    contentComplete = true
     nextTick(() => {
       scanImages()
       if (pendingImages.value && busy.value) awaitingImages = true
       else if (busy.value) commitCollect()
-      saveSnapshot()
     })
   }
 }
@@ -229,11 +203,10 @@ function collect() {
   if (busy.value || !destination.value || !newName.value.trim()) return
   busy.value = true
   pickerError.value = ''
-  if (snapshotReady) { nextTick(() => { scanImages(); if (pendingImages.value) awaitingImages = true; else commitCollect() }) }
+  if (contentComplete) { nextTick(() => { scanImages(); if (pendingImages.value) awaitingImages = true; else commitCollect() }) }
   else window.parent.postMessage({ type: 'dsh-reader-preview:full-request' }, parentOrigin || '*')
 }
 async function commitCollect() {
-  await snapshotWrite.catch(() => {})
   const references = [...new Set([...document.querySelectorAll('.preview-image-probe img[data-workspace-src]')].map(img => img.getAttribute('data-workspace-src')))]
   const missing = references.find(ref => !imageData.has(ref))
   if (missing) {

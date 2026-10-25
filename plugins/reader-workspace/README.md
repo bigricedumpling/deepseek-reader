@@ -18,7 +18,7 @@ macOS 默认抽屉目录是 `~/Library/Application Support/Reader/知识库`。�
 
 ## 工作区 Markdown 与 Agent
 
-工作区 Markdown 预览只读。相对链接继续打开工作区文件，相对图片从当前工作区读取；预览不会移动原文件。本机预览历史保存在「工作区浏览记录」，可选择收录为抽屉中的独立副本。访客分享采用只读快照，手动更新才替换快照；这不是多人协作编辑。
+工作区 Markdown 预览只读。相对链接继续打开工作区文件，相对图片从当前工作区读取；预览不会移动原文件。想保留时在预览页直接「收进抽屉」，生成抽屉中的独立副本；不收录就不保留浏览记录。访客分享采用只读快照，手动更新才替换快照；这不是多人协作编辑。
 
 阅读器与 Markdown 预览安装后即可用。Agent 查找和写入抽屉是可选高级功能：在 Typocket 的「管理抽屉 → Agent 访问」生成限范围令牌，再给 DSH 启动环境设置 `READER_URL`、`READER_TOKEN` 并重启。未配置令牌时，不注册会失败的 Agent 工具。令牌不要写进仓库。
 
@@ -29,7 +29,7 @@ macOS 默认抽屉目录是 `~/Library/Application Support/Reader/知识库`。�
 - 0.2.0-preview.5 是 DSH 桌面端的 Preview 版本，安装包已在 macOS、Windows 和 Linux 的自动检查中完成构建与运行测试。macOS 另使用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）的官方安装链验收了自动启动和阅读器入口；Windows 和 Linux 的原生 DSH 桌面安装与交互仍待验收。iOS 不作为 DSH 插件平台。
 - Agent 工具仍需单独授权；客户端连接地址不会自动配置 Agent 令牌。
 - 临时访客链接依赖 `cloudflared` 与网络；真实外部设备的端到端连通性尚未完成验收。
-- 工作区预览是快照，收录后为独立副本，不提供双向同步或多人协作。
+- 工作区文件与抽屉副本独立，不提供双向同步或多人协作。
 - 同库双消费者与重启已通过实际服务测试；两个原生 DSH 桌面窗口的人工验收仍未完成。
 
 源代码采用 [MIT License](LICENSE)。随包鸿蒙黑体由 Huawei Device Co., Ltd. 授权，使用与再分发须遵守独立字体许可。许可原文在安装包的 `runtime/dist/fonts/HarmonyOS-Sans-LICENSE.txt`，也可在[源码仓库](https://github.com/bigricedumpling/deepseek-reader/blob/main/public/fonts/HarmonyOS-Sans-LICENSE.txt)查看。其他第三方资产见[许可清单](https://github.com/bigricedumpling/deepseek-reader/blob/main/docs/THIRD-PARTY-ASSETS.md)。

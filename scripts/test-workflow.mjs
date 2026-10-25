@@ -14,8 +14,7 @@ try{
  const url=await new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Server startup timeout')),15000);child.once('error',reject);child.once('exit',()=>reject(Error('Server exited')));child.on('message',message=>{if(message.port){clearTimeout(timer);resolve(`http://127.0.0.1:${message.port}/`)}})})
  async function owner(method,route,body){const response=await fetch(url+'api/'+route,{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const result=await response.json();assert.equal(result.ok,true,result.error);return result.data}
  await owner('POST','lib',{name:'Research'});await owner('POST','lib',{name:'Private'})
- const preview=await owner('POST','workspace-preview',{reference:source,title:'Research',content:text})
- const saved=await owner('POST','collect-workspace-preview',{id:preview.id,dir:'Research',name:'Finding'})
+ const saved=await owner('POST','import-workspace-doc',{dir:'Research',name:'Finding',content:text,reference:source,workspace:path.dirname(source),assets:[]})
  const doc=await owner('GET','doc?path='+encodeURIComponent(saved.file))
  await owner('POST','category',{parent:'Research',name:'Archive'})
  await owner('PUT','move/doc',{file:saved.file,dir:'Research/Archive'})
@@ -29,6 +28,5 @@ try{
  assert.equal((await callTool('reader_update',{id:doc.id,revision:read.data.revision,content:'stale',requestId:'stale'})).code,'CONFLICT')
  assert.equal((await callTool('reader_tree',{lib:'Private'})).ok,false)
  assert.equal(fs.readFileSync(source,'utf8'),text,'collection and Agent edits never write back to source')
- assert.equal((await owner('GET','workspace-previews')).length,1,'collection keeps browsing record')
- console.log('PASS: actual HTTP workspace preview → private copy → folder → search → scoped Agent source/read/update; original preserved and stale update rejected')
+ console.log('PASS: actual HTTP workspace import → private copy → folder → search → scoped Agent source/read/update; original preserved and stale update rejected')
 }finally{clearTimeout(timer);if(child.exitCode===null){child.kill();await new Promise(resolve=>child.once('exit',resolve));}fs.rmSync(temporary,{recursive:true,force:true})}
