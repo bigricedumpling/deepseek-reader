@@ -205,21 +205,22 @@
         </button>
       </div>
 
-    <!-- 一行操作：新建文档主位，文件夹、搜索、排序收成图标 -->
-    <div class="px-3 pt-2 pb-2 flex items-center gap-1.5 shrink-0">
+    <!-- 一行操作：左侧新建动作只占内容宽度，空间不够时文字向左收进图标 -->
+    <div class="px-3 pt-2 pb-2 flex items-center gap-1 shrink-0">
       <template v-if="currentLibEditable">
         <button
-          class="newdoc-btn flex-1 min-w-0 h-9 flex items-center justify-center gap-1.5 ui-round-control text-[13px] text-[var(--c-ink)]"
-          :class="{ 'is-narrow': brandNarrow }"
+          class="create-action text-[var(--c-ink)]"
+          :class="{ 'is-narrow': actionsNarrow }"
           title="在根目录新建文档"
           aria-label="新建文档"
           @click="emit('create-doc', currentLib || '')"
         >
           <PhPlus :size="13" weight="bold" />
-          <span class="newdoc-label">新建文档</span>
+          <span class="create-label">新建文档</span>
         </button>
-        <button class="newfolder-btn" title="在根目录新建文件夹" aria-label="新建文件夹" @click="emit('create-category', currentLib || '')">
+        <button class="create-action" :class="{ 'is-narrow': actionsNarrow }" title="在根目录新建文件夹" aria-label="新建文件夹" @click="emit('create-category', currentLib || '')">
           <PhFolderSimplePlus :size="16" />
+          <span class="create-label">文件夹</span>
         </button>
       </template>
       <span class="ml-auto flex items-center gap-0.5">
@@ -466,6 +467,7 @@ const currentLibEditable = computed(() => store.canEdit(libPanel.libs.find(l => 
  */
 const brandTitle = ref('')
 const brandNarrow = computed(() => props.width < 210)
+const actionsNarrow = computed(() => props.width < 232)
 watch(brandNarrow, narrow => {
   if (narrow && document.activeElement?.classList.contains('brand-input')) document.activeElement.blur()
 })
@@ -1967,22 +1969,18 @@ onMounted(loadActivityUnread)
   display: grid;
   place-items: center;
 }
-/* 文件夹和新建文档同排；文档占主位，文件夹保持紧凑。 */
-.newfolder-btn { display:inline-flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;padding:0;border-radius:var(--radius-control);background:var(--c-field);color:var(--c-sub); }
-.newfolder-btn:hover { background:var(--c-hover);color:var(--c-ink); }
-.newdoc-btn.is-narrow .newdoc-label { display:none; }
-.newdoc-btn.is-narrow { gap:0; }
+/* 左侧两个新建动作只占内容宽度；窄栏时文字向左收，图标贴左。 */
+.create-action { display:inline-flex;align-items:center;justify-content:flex-start;flex:none;gap:6px;height:32px;padding:0 4px;border:0;border-radius:var(--radius-control);background:transparent;color:var(--c-sub);font-size:13px;white-space:nowrap;transition:background .14s ease,color .14s ease,gap .18s ease; }
+.create-action:hover { background:var(--c-hover);color:var(--c-ink); }
+.create-action.is-narrow { gap:0; }
+.create-label { display:inline-block;max-width:160px;overflow:hidden;opacity:1;transform:translateX(0);transition:max-width .18s ease,opacity .16s ease,transform .18s ease; }
+.create-action.is-narrow .create-label { max-width:0;opacity:0;transform:translateX(-4px); }
 .batch-bar{display:flex;align-items:center;gap:5px;color:var(--c-sub);font-size:12px}
 .batch-bar span{flex:1;min-width:0}
 .batch-bar button{padding:5px 7px;border-radius:var(--radius-control);white-space:nowrap}
 .batch-bar button:hover{background:var(--c-hover)}
 .batch-bar .batch-delete{color:#c8403b}
 .batch-bar .batch-delete:disabled{opacity:.4;cursor:default}
-.newdoc-btn { transition: transform .12s ease; }
-.newdoc-btn:active {
-  transform: scale(0.985);
-}
-
 .rail-btn {
   display: inline-flex;
   align-items: center;
