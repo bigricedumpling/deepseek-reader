@@ -1,7 +1,7 @@
 <template>
   <nav v-if="items.length && !reader.tocOpen" class="rail-toc" aria-label="章节快捷导航" @mouseleave="hint = null" @keydown.esc="hint = null">
     <button class="rail-toc-handle" title="展开完整目录" aria-label="展开完整目录" @click.stop="openToc">
-      <PhListDashes :size="14" />
+      <PhCaretLeft :size="14" weight="bold" />
     </button>
     <button v-for="(item,i) in items" :key="i" class="rail-toc-stop" :class="{active:i===active}"
       :aria-label="item.title" :aria-current="i===active ? 'location' : undefined"
@@ -13,7 +13,7 @@
 </template>
 <script setup>
 import {ref, computed, watch, onMounted, onBeforeUnmount, nextTick} from 'vue'
-import {PhListDashes} from '@phosphor-icons/vue'
+import {PhCaretLeft} from '@phosphor-icons/vue'
 import {useDocsStore} from '../stores/docs'
 import {useReaderStore} from '../stores/reader'
 import {unfoldKeys, foldKey} from '../utils/toc-fold'
@@ -63,9 +63,8 @@ onMounted(bind)
 onBeforeUnmount(()=>{scroller?.removeEventListener('scroll',onScroll);cancelAnimationFrame(frame)})
 </script>
 <style scoped>
-.rail-toc{position:absolute;top:50%;right:6px;z-index:5;transform:translateY(-50%);width:32px;max-height:60vh;overflow-y:auto;scrollbar-width:none;padding:4px 0}
-.rail-toc::-webkit-scrollbar{display:none}
-.rail-toc-handle{position:sticky;top:0;z-index:1;display:flex;justify-content:center;align-items:center;width:32px;height:24px;margin-bottom:2px;border-radius:6px;background:var(--c-surface);color:var(--c-faint);opacity:.4;transition:opacity .15s,background .15s,color .15s}
+.rail-toc{position:absolute;top:50%;right:6px;z-index:5;transform:translateY(-50%);width:32px;max-height:60vh;overflow:hidden;overflow:clip;padding:4px 0}
+.rail-toc-handle{display:flex;justify-content:center;align-items:center;width:32px;height:24px;margin-bottom:2px;border-radius:6px;background:var(--c-surface);color:var(--c-faint);opacity:.4;transition:opacity .15s,background .15s,color .15s}
 .rail-toc:hover .rail-toc-handle{opacity:.85}
 .rail-toc-handle:hover,.rail-toc-handle:focus-visible{opacity:1;background:var(--c-hover);color:var(--c-accent)}
 .rail-toc-stop{display:flex;justify-content:center;align-items:center;width:32px;height:15px;outline-offset:-2px}
