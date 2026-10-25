@@ -182,7 +182,7 @@
     <div
       id="main-scroll-container"
       ref="scroller"
-      class="flex-1 min-h-0 overflow-y-auto print-area"
+      class="flex-1 min-h-0 overflow-y-auto no-scrollbar print-area"
       :style="pageStyle"
     >
       <!--
