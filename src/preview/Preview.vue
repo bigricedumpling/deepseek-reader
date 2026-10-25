@@ -1,10 +1,13 @@
 <template>
   <main class="preview-shell">
-    <header class="preview-header">
-      <div class="preview-identity"><span class="preview-kicker">工作区文件</span><span class="preview-filename" :title="filePath">{{ title || 'Markdown 预览' }}</span></div>
-      <button v-if="ready" class="collect-button" type="button" @click="openPicker">收进抽屉</button>
+    <header v-if="ready" class="preview-header">
+      <button class="collect-button" type="button" @click="openPicker">收进抽屉</button>
     </header>
-    <div v-if="!ready" class="preview-state">正在读取工作区文件…</div>
+    <div v-if="!ready" class="preview-state">
+      <template v-if="!embedded">这个页面需要在 DSH 的工作区 Markdown 预览中打开。</template>
+      <template v-else-if="receiveTimedOut">没有收到工作区文件。请回到 DSH 重新打开这篇 Markdown。</template>
+      <template v-else>正在读取工作区文件…</template>
+    </div>
     <div v-else class="preview-reader" @click="onArticleClick">
       <MarkdownEditor :key="readerVersion" :value="readerRaw" :readonly="true" :doc-id="filePath" />
       <article class="preview-image-probe" aria-hidden="true" v-html="html" />
@@ -57,11 +60,14 @@ md.renderer.rules.link_open = (tokens, index, options, env, self) => {
   return linkRule(tokens, index, options, env, self)
 }
 
+const embedded = window.parent !== window
 const title = ref('')
 const filePath = ref('')
 const sourcePath = ref('')
 const source = ref('')
 const ready = ref(false)
+const receiveTimedOut = ref(false)
+let receiveTimer = null
 const picker = ref(false)
 const pickerError = ref('')
 const busy = ref(false)
@@ -135,6 +141,8 @@ function onMessage(event) {
   const data = event.data || {}
   if (data.type === 'dsh-reader-preview:update') {
     parentOrigin = event.origin
+    clearTimeout(receiveTimer)
+    receiveTimedOut.value = false
     const changed = filePath.value && filePath.value !== String(data.filePath || '')
     if (changed) { imageData.clear(); imageFailures.clear(); requests.clear(); pendingImages.value = 0; fullRequestedFor = ''; newName.value = '' }
     title.value = String(data.title || '').slice(0, 200)
@@ -178,10 +186,16 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(notifyHeight)
   resizeObserver.observe(document.body)
   window.parent.postMessage({ type: 'dsh-reader-preview:ready' }, '*')
+  if (embedded) {
+    receiveTimer = setTimeout(() => {
+      if (!ready.value) receiveTimedOut.value = true
+    }, 8000)
+  }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('message', onMessage)
   window.removeEventListener('resize', notifyHeight)
+  clearTimeout(receiveTimer)
   resizeObserver?.disconnect()
 })
 
@@ -234,14 +248,11 @@ async function commitCollect() {
 * { box-sizing: border-box; }
 body { margin: 0; }
 .preview-shell { min-height: 100vh; background: var(--c-surface); }
-.preview-header { display: flex; align-items: center; gap: 12px; justify-content: space-between; min-height: 52px; padding: 10px clamp(18px,5vw,44px); background: var(--c-surface); }
-.preview-identity { min-width: 0; display: flex; align-items: baseline; gap: 9px; }
-.preview-kicker { font-size: 11px; color: var(--c-faint); white-space: nowrap; }
-.preview-filename { font-size: 12px; color: var(--c-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-header { display: flex; align-items: center; justify-content: flex-end; min-height: 44px; padding: 8px clamp(18px,5vw,44px); background: var(--c-surface); }
 .collect-button,.picker-actions button { border: 0; border-radius: var(--radius-control); corner-shape: superellipse(2); background: var(--c-field); color: var(--c-text); padding: 8px 12px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .collect-button:hover,.picker-actions button:hover { background: var(--c-hover); }
 .preview-state { padding: 30px; color: var(--c-faint); font-size: 13px; }
-.preview-reader { min-height: calc(100vh - 52px); padding: 16px 0 80px; }
+.preview-reader { min-height: calc(100vh - 44px); padding: 8px 0 80px; }
 .preview-reader .editor-shell { max-width: var(--measure,850px); margin: auto; }
 .preview-image-probe { display: none; }
 .picker-mask { position: fixed; inset: 0; z-index: 10; background: var(--c-overlay); display: grid; place-items: center; padding: 16px; }
