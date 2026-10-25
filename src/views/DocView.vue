@@ -1,5 +1,5 @@
 <template>
-  <div class="h-screen flex flex-col overflow-hidden">
+  <div class="document-shell h-screen flex flex-col overflow-hidden">
     <!-- 顶部工具条：左侧是打开的文档，右侧是各功能入口 -->
     <div class="reader-topbar h-[52px] px-8 flex items-center justify-end gap-1.5 flex-shrink-0">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->

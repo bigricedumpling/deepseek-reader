@@ -370,12 +370,18 @@ export function normalizeMarkdown(input, original, { spacing = true } = {}) {
   // 编辑器会省略文末的空白段落。初始化往返检查时保留原来的占位，
   // 避免仅因最后一个 <br /> 就把完整图文降级为源码；实际编辑不恢复已删空行。
   if (spacing && original) {
-    const originalLines = String(original).split('\n')
-    let removedBreak = false
-    while (originalLines.length && (!originalLines.at(-1).trim() || /^\s*<br\s*\/?>\s*$/i.test(originalLines.at(-1)))) {
-      if (originalLines.pop().trim()) removedBreak = true
+    const trailing = value => {
+      const lines = String(value).split('\n')
+      let breaks = 0
+      while (lines.length && (!lines.at(-1).trim() || /^\s*<br\s*\/?>\s*$/i.test(lines.at(-1)))) {
+        if (lines.pop().trim()) breaks++
+      }
+      return { body: lines.join('\n').trimEnd(), breaks }
     }
-    if (removedBreak && originalLines.join('\n').trimEnd() === text.trimEnd()) return String(original)
+    const before = trailing(original), after = trailing(text)
+    // Crepe may drop only the final blank paragraph, leaving earlier <br /> blocks.
+    // Compare both bodies; never restore deleted blank lines on an actual save.
+    if (before.breaks > after.breaks && before.body === after.body) return String(original)
   }
   const tail = original ? (String(original).match(/\n+$/) || [''])[0] : '\n'
   return text + tail

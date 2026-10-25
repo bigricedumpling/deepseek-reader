@@ -2,7 +2,7 @@
   <!--
     桌面端横向排抽屉栏与文档树；手机端抽屉列表改为弹窗。
   -->
-  <div class="flex h-screen flex-shrink-0">
+  <div class="app-sidebar flex h-screen flex-shrink-0">
     <!-- 手机端切换列表才用遮罩；桌面保留并排的抽屉列表。 -->
     <transition name="lib-backdrop">
       <button
