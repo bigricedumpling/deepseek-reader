@@ -24,7 +24,7 @@ const plist = `<?xml version="1.0" encoding="UTF-8"?>
   <key>Label</key><string>${label}</string>
   <key>ProgramArguments</key><array><string>${escapeXml(process.execPath)}</string><string>${escapeXml(path.join(root, 'server', 'serve.js'))}</string></array>
   <key>WorkingDirectory</key><string>${escapeXml(root)}</string>
-  <key>EnvironmentVariables</key><dict><key>PORT</key><string>8090</string></dict>
+  <key>EnvironmentVariables</key><dict><key>PORT</key><string>8090</string>${process.env.DOCS_ROOT ? `<key>DOCS_ROOT</key><string>${escapeXml(path.resolve(process.env.DOCS_ROOT))}</string>` : ''}</dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ThrottleInterval</key><integer>10</integer>
