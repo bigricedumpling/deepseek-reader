@@ -53,6 +53,7 @@ export default defineConfig(async ({ command }) => ({
   },
   server: {
     port: 8090,
+    strictPort: true,
     host: '127.0.0.1',
     open: false,
     watch: {

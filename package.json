@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "dev:sandbox": "node scripts/dev-sandbox.mjs",
+    "release:local": "node scripts/release-local.mjs",
     "build": "vite build",
     "preview": "vite preview --port 8090",
     "start:local": "PORT=8090 node server/serve.js",

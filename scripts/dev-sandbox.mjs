@@ -60,7 +60,8 @@ console.log('')
 
 const env = { ...process.env, DOCS_ROOT: SANDBOX, READER_PROFILE: 'dev' }
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-const child = spawn(npm, ['run', 'dev'], { cwd: ROOT, env, stdio: 'inherit' })
+/* 固定 8091 且禁掉端口漂移：8090 永远是自用库，开发实例绝不占用它 */
+const child = spawn(npm, ['run', 'dev', '--', '--port', '8091', '--strictPort'], { cwd: ROOT, env, stdio: 'inherit' })
 
 child.on('error', error => {
   console.error('启动 dev server 失败：' + error.message)
