@@ -72,7 +72,7 @@ export default defineConfig(async ({ command }) => ({
   },
   // 这三个都是动态引入或体积大的包，提前预构建，避免用着用着触发重新优化导致整页失效
   optimizeDeps: {
-    include: ['mermaid', '@milkdown/crepe', '@phosphor-icons/vue', 'markdown-it']
+    include: ['mermaid', '@milkdown/crepe', 'markdown-it']
   },
   build: {
     outDir: 'dist',

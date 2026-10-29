@@ -5,6 +5,23 @@
     于是切深色时只有编辑器内部变色，侧栏、工具条、目录、底栏全是白的。
   -->
   <div class="flex h-screen w-full overflow-hidden bg-[var(--c-surface)]">
+    <!--
+      知识库列表是整窗最左列：在顶栏和侧栏之外，占满高度。
+      这样它、顶栏、文档侧栏是三层，而不是把列表塞到顶栏下面。
+    -->
+    <div id="app-lib-panel-slot" class="lib-panel-slot"></div>
+
+    <div class="app-main-col relative flex-1 min-w-0 flex flex-col">
+    <!--
+      知识库列表在整窗最左列，这条顶栏从它右侧开始。
+      chrome 在顶栏时这一行才展开：侧栏 header 和文档标签都 Teleport 进来，
+      合成一条横跨文档区的顶栏。展开时高度为 0，header 归侧栏、标签归文档区。
+    -->
+    <header class="app-topbar" :class="{ 'is-open': chromeCollapsed }">
+      <div id="app-topbar-left" ref="topbarLeftEl" class="min-w-0" :style="topbarLeftStyle"></div>
+      <div id="app-topbar-main" class="flex-1 min-w-0 flex items-center"></div>
+    </header>
+    <div v-if="topbarReady" class="flex-1 min-h-0 flex">
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><filter id="reader-superellipse" x="-20%" y="-30%" width="140%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 12 -4"/></filter></defs></svg>
     <Sidebar
       ref="sidebarRef"
@@ -13,12 +30,13 @@
       :width="reader.navWidth"
       @update:width="reader.navWidth = $event"
       :collapsed="reader.navCollapsed"
+      :chrome-collapsed="chromeCollapsed"
+      :chrome-compact="chromeCompact"
+      :chrome-expanding="chromeExpanding"
       @select="onSelect"
-      @create-doc="askCreateDoc"
       @delete-doc="askDeleteDoc"
-      @create-category="askCreateCategory"
       @delete-category="askDeleteCategory"
-      @toggle-collapse="reader.navCollapsed = !reader.navCollapsed"
+      @toggle-collapse="toggleNav"
     />
 
     <main class="flex-1 flex flex-col h-full relative min-w-0">
@@ -28,13 +46,12 @@
       -->
       <DocView
         :doc-id="store.currentPath"
+        :chrome-collapsed="chromeCollapsed"
         :pdf-page="store.pdfPage"
         :pdf-pages="store.pdfPages"
         :meta="store.currentMeta"
-        :html="store.currentHtml"
         :raw="store.currentRaw"
         :toc="store.currentToc"
-        :scroll-top-signal="scrollTopSignal"
         :keyword="store.searchKeyword"
         :results="store.searchResults"
         :loaded="store.currentLoaded"
@@ -43,6 +60,7 @@
         @canonize="onCanonize"
         @close-tab="onCloseTab"
         @close-tabs="onCloseTabs"
+        @reorder="onReorderTabs"
         :dirty="store.isDirty"
         :saving="store.saving"
         :saved-at="store.savedAt"
@@ -66,9 +84,12 @@
       :width="reader.tocWidth"
       @update:collapsed="reader.tocOpen = !$event"
       @update:width="reader.tocWidth = $event"
-      @to-top="scrollTopSignal++"
+      @update:dragging="reader.tocDragging = $event"
       @go-page="store.pdfPage = $event"
     />
+
+    </div>
+    </div>
 
     <AppDialog
       :open="dialog.open"
@@ -98,7 +119,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 /* 页面加载时间：跟服务端的源码修改时间比对，判断手上这份页面是不是旧的 */
 const pageLoadedAt = Date.now()
 import Sidebar from './components/Sidebar.vue'
@@ -112,6 +133,8 @@ import { scrollToTarget } from './utils/scroll-target'
 import { foldedKeys, unfoldKeys } from './utils/toc-fold'
 
 const store = useDocsStore()
+const topbarReady = ref(false)
+onMounted(() => { topbarReady.value = true })
 /** 当前这篇是不是 pdf：右栏显示它的书签目录，点击跳页 */
 const isPdfDoc = computed(() => store.currentNode?.type === 'pdf')
 /*
@@ -120,9 +143,74 @@ const isPdfDoc = computed(() => store.currentNode?.type === 'pdf')
  */
 const reader = useReaderStore()
 
-/** 目录里的回顶按钮靠这个计数通知正文区 */
-const scrollTopSignal = ref(0)
-/** Cmd+K 要展开侧栏并聚焦文档搜索，因此拿到 Sidebar 的公开方法 */
+/*
+ * chrome 指侧栏 header + 文档标签这一条。
+ * 它和 navCollapsed 在动画期间会短暂分离：展开时先让侧栏宽度长出来，
+ * 再把这一条从顶栏交给侧栏/文档区，避免同一帧里位置和宽度同时硬跳。
+ */
+/* 顶栏常驻：侧栏展开/收起只改变左段宽度，不再把 header 和标签搬回文档区。 */
+const chromeCollapsed = ref(true)
+/** 收起的静止态：header 用内容宽度，不是整条侧栏宽度 */
+const chromeCompact = ref(reader.navCollapsed)
+/** 动画期间给 #app-topbar-left 的显式宽度；空表示按状态取 auto / 侧栏宽度 */
+const chromeWidth = ref('')
+const chromeExpanding = ref(false)
+const topbarLeftStyle = computed(() => ({
+  width: chromeWidth.value || (reader.navCollapsed ? 'auto' : reader.navWidth + 'px')
+}))
+const topbarLeftEl = ref(null)
+let chromeTimer = 0
+
+async function toggleNav() {
+  clearTimeout(chromeTimer)
+  if (reader.navCollapsed) {
+    /* 展开：左段和侧栏一起从 compact 内容宽长到侧栏宽，顶栏不换位置。 */
+    const start = topbarLeftEl.value?.getBoundingClientRect().width
+      || sidebarRef.value?.compactHeaderWidth?.() || reader.navWidth
+    chromeCompact.value = false
+    chromeExpanding.value = true
+    chromeWidth.value = start + 'px'
+    reader.navCollapsed = false
+    await nextTick()
+    /* 和侧栏同一帧开始过渡，避免顶栏先停一拍再追。 */
+    void topbarLeftEl.value?.offsetWidth
+    chromeWidth.value = reader.navWidth + 'px'
+    chromeTimer = window.setTimeout(() => {
+      chromeExpanding.value = false
+      chromeWidth.value = ''
+    }, 220)
+  } else {
+    /* 收起：左段和侧栏一起收窄，最后切回 compact 内容。 */
+    const start = topbarLeftEl.value?.getBoundingClientRect().width || reader.navWidth
+    const target = sidebarRef.value?.compactHeaderWidth?.() || reader.navWidth
+    /* 先保持展开布局，宽度收完再切 compact：右侧动作组始终贴着顶栏右缘，不会先跳回左边。 */
+    chromeCompact.value = false
+    chromeExpanding.value = false
+    chromeWidth.value = start + 'px'
+    reader.navCollapsed = true
+    await nextTick()
+    void topbarLeftEl.value?.offsetWidth
+    chromeWidth.value = target + 'px'
+    chromeTimer = window.setTimeout(() => {
+      chromeCompact.value = true
+      chromeWidth.value = ''
+    }, 240)
+  }
+}
+function collapseNavNow(immediate = false) {
+  if (immediate || reader.navCollapsed) {
+    clearTimeout(chromeTimer)
+    chromeCollapsed.value = true
+    chromeCompact.value = true
+    chromeWidth.value = ''
+    if (immediate) reader.navCollapsed = true
+    return
+  }
+  /* 光标拖窄窗口时也走同一套收起过渡，避免顶栏和标签先跳一下。 */
+  toggleNav()
+}
+
+/** 侧栏公开方法：搜索、新建与宽度测量 */
 const sidebarRef = ref(null)
 
 /* ---------- 弹窗 ---------- */
@@ -197,20 +285,6 @@ function ensureSafe() {
 
 /* ---------- 树结构操作 ---------- */
 
-function askCreateCategory(parent) {
-  const target = parent || ''
-  ask({
-    mode: 'prompt',
-    title: target ? '在' + target + '下新建文件夹' : '在根目录下新建文件夹',
-    placeholder: '文件夹名，例如 参考资料',
-    confirmText: '创建',
-    onConfirm: async (name) => {
-      dialog.open = false
-      await guard(() => store.createCategory(target, name))
-    }
-  })
-}
-
 function askDeleteCategory(folder) {
   ask({
     title: '删除目录' + folder.name + '',
@@ -225,27 +299,9 @@ function askDeleteCategory(folder) {
     }
   })
 }
-async function askCreateDoc(dir) {
-  // 目录从哪来：根部按钮传当前抽屉路径，目录行传它所在的目录。
-  // 没传参时也**默认根目录** —— 以前会悄悄落到"当前文档所在目录"，
-  // 于是按了根部的按钮、对话框里却写着在『笔试』下新建文档，很莫名其妙。
-  const target = dir == null ? '' : dir
-  // 先处理未保存的改动，再问名字，顺序反了会让人白填一次
-  if (!(await ensureSafe())) return
-  ask({
-    mode: 'prompt',
-    title: target ? '在' + target + '下新建文档' : '在根目录下新建文档',
-    placeholder: '文档名（就是文件名）',
-    confirmText: '创建',
-    onConfirm: async (name) => {
-      dialog.open = false
-      await guard(() => store.createDoc(target, name))
-    }
-  })
-}
-
 function askCreateDocInCurrentLib() {
-  return askCreateDoc(new URLSearchParams(location.search).get('lib') || '')
+  /* 空知识库里的“新建第一篇”也走侧栏就地输入，不弹命名框 */
+  return sidebarRef.value?.startCreate?.('doc')
 }
 
 function askDeleteDoc(doc) {
@@ -303,6 +359,10 @@ function onCanonize(text) {
 const docEpoch = ref(0)
 
 /* ---------- 切换与保存 ---------- */
+
+function onReorderTabs(files) {
+  store.reorderTabs(files)
+}
 
 async function onSelect(file) {
   if (file === store.currentPath) return
@@ -446,7 +506,7 @@ onMounted(async () => {
      * 三种认法，越往后越宽松：
      *   1. 完整路径（带扩展名）
      *   2. 不带扩展名的路径
-     *   3. 只按文件名 —— 分享出去的旧链接，在文件夹改名之后还能打开，
+     *   3. 只按文件名 —— 早先发出去的只读链接，在文件夹改名之后还能打开，
      *      不然"上周发给别人的链接"一改名就全废了。
      */
     const strip = (f) => f.replace(/\.(md|pdf|html?)$/i, '')
@@ -476,11 +536,11 @@ function fitViewport() {
   const w = window.innerWidth
   if (lastW === null) {
     if (w < 1180) reader.tocOpen = false
-    if (w < 900) reader.navCollapsed = true
+    if (w < 900) collapseNavNow(true)
   } else {
     const crossed = (px) => lastW >= px && w < px
     if (crossed(1180) && reader.tocOpen) reader.tocOpen = false
-    if (crossed(900) && !reader.navCollapsed) reader.navCollapsed = true
+    if (crossed(900) && !reader.navCollapsed) collapseNavNow()
   }
   lastW = w
 }
@@ -489,6 +549,7 @@ window.addEventListener('resize', fitViewport)
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', fitViewport)
+  clearTimeout(chromeTimer)
   clearInterval(staleTimer)
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('beforeunload', onBeforeUnload)
@@ -575,3 +636,49 @@ async function jumpTo(id, keyword, hit) {
   }
 }
 </script>
+
+<style scoped>
+.lib-panel-slot {
+  display: flex;
+  height: 100%;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.app-topbar {
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+}
+.app-topbar.is-open {
+  height: 48px;
+  pointer-events: none;
+  /* 左内边距保持 0：header 自己带 10px，和侧栏里的位置完全重合 */
+  padding: 0 10px 0 0;
+  overflow: visible;
+  /* 顶栏不占布局行：文档从窗口顶部开始，封面/正文从它下面滚过 */
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+}
+#app-topbar-left {
+  pointer-events: auto;
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  /* 宽度动画和侧栏同步，收起态宽度由内容撑开 */
+  transition: width 0.22s cubic-bezier(0,0,.2,1);
+}
+#app-topbar-main {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+</style>

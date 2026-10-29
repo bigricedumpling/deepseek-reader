@@ -32,8 +32,8 @@ export function apply(ctx) {
     path: '/api/reader-workspace/status', methods: ['GET'], requestBody: 'buffered',
     fetch: () => Promise.resolve(Response.json({ ...managed.status }, { headers: { 'cache-control': 'no-store' } }))
   })
-  // The browser entry works without Agent access. Do not expose tools that
-  // would fail every call until an authorized Typocket token is configured.
+  // 旧版 Agent 令牌仍可用于已有配置；新安装不再提供令牌入口。
+  // 没有令牌时不注册工具，避免每次调用都失败。
   if (!process.env.READER_TOKEN) return
   for (const [toolName, description, , , schema] of definitions) {
     ctx.tools.register({

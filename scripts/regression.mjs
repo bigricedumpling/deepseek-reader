@@ -258,14 +258,19 @@ try {
   let r = await ev(`return { dirty: window.__reader.isDirty, err: window.__reader.error }`)
   check('P0-2 写入失败时保持未保存并报错', r.dirty && /模拟写入失败/.test(r.err), r.err)
 
-  await ev(`const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='新建文档'); b.click(); return true`)
-  await sleep(700)
-  r = await ev(`return { dlg: !!document.querySelector('.fixed.inset-0'), path: window.__reader.currentPath }`)
-  check('P0-1 有未保存改动时新建文档会拦一下', r.dlg && r.path === boot.path, r.dlg ? '弹框了，没切走' : '直接切走了')
+  await ev(`const b=document.querySelector('.create-action[aria-label="新建文档"]'); b.click(); return true`)
+  await sleep(400)
+  r = await ev(`return { input: !!document.querySelector('.tree-create-input'), path: window.__reader.currentPath, dirty: window.__reader.isDirty }`)
+  check('P0-1 新建文档先进入命名，不离开当前文档', r.input && r.path === boot.path && r.dirty, r.input ? '已进入命名，当前文档没动' : '没有出现命名输入')
 
-  await clickText('保存并继续'); await sleep(1000)
-  r = await ev(`return { path: window.__reader.currentPath, dirty: window.__reader.isDirty }`)
-  check('P0-2 保存失败时停在原文档', r.path === boot.path && r.dirty)
+  await ev(`const inp=document.querySelector('.tree-create-input')
+    const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set
+    set.call(inp,'保存失败新建测试'); inp.dispatchEvent(new Event('input',{bubbles:true}))
+    inp.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))
+    return true`)
+  await sleep(1000)
+  r = await ev(`return { path: window.__reader.currentPath, dirty: window.__reader.isDirty, input: !!document.querySelector('.tree-create-input') }`)
+  check('P0-2 保存失败时不切走也不丢改动', r.path === boot.path && r.dirty, r.dirty ? '仍停在原文档' : '改动丢了')
   await ev(`window.fetch = window.__of; return true`)
 
   // 放行写入，让自动保存把改动落盘，后面的用例从干净状态开始
@@ -275,8 +280,9 @@ try {
 
 
   r = await ev(`window.__reader.setError('测试错误信息','load'); await new Promise(x=>setTimeout(x,400))
-    return { seen: [...document.querySelectorAll('span')].some(s=>s.textContent.includes('测试错误信息')),
-             btn: [...document.querySelectorAll('button')].some(b=>b.textContent.includes('重新读取')) }`)
+    const toast = document.querySelector('.doc-notice')
+    return { seen: !!toast && toast.textContent.includes('测试错误信息'),
+             btn: !!toast && [...toast.querySelectorAll('button')].some(b=>b.textContent.includes('重新读取')) }`)
   check('P0-4 错误显示在界面上', r.seen && r.btn)
   await ev(`window.__reader.clearError(); return true`)
 

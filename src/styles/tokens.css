@@ -6,7 +6,7 @@
   --c-accent: var(--accent-light, #303030);
   --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,var(--c-ink));
   --c-on-accent: #ffffff;
-  --c-selection: rgb(var(--accent-rgb-light, 48 48 48) / .18);
+  --c-selection: rgb(var(--accent-rgb-light, 48 48 48) / .22);
   --c-focus: var(--c-accent);
 
   /* --- 灰阶（正文层级全靠这个）--- */
@@ -38,7 +38,7 @@
   --reading-lh: 1.95;
   --reading-tracking: 0em;        /* 字间距 */
   --para-indent: 0em;             /* 段首缩进，缩进式排版才用 */
-  --para-gap: 1.15em;             /* 段间距，段距式排版才用 */
+  --para-gap: 0.6em;              /* 段间距，段距式排版才用 */
   --cjk-strong-weight: 900;       /* 中文加粗面：900 是宋体 Black */
   --reading-font: "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
 }
@@ -48,6 +48,10 @@ body[data-font="serif"] {
   --reading-font: "TeX Gyre Pagella", "Noto Serif SC", "Source Han Serif SC",
     "Songti SC", STSong, serif;
   --cjk-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
+}
+body[data-font="songti"] {
+  --reading-font: "Songti SC", "SimSun", "STSong", "Noto Serif SC", serif;
+  --cjk-family: "Songti SC", "SimSun", "STSong", "Noto Serif SC", serif;
 }
 body[data-font="sans"] {
   --reading-font: "Noto Sans SC", "Source Han Sans SC", "Heiti SC",
@@ -172,7 +176,18 @@ body[data-theme="dark"] {
   --color-accent: var(--c-accent);
   --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,white);
   --c-on-accent: #202020;
-  --c-selection: rgb(var(--accent-rgb-dark, 224 224 224) / .23);
+  --c-selection: rgb(var(--accent-rgb-dark, 224 224 224) / .27);
   --c-focus: var(--c-accent);
   color-scheme: dark;
+}
+
+/* 顶栏浮层：左右组块、标签和操作按钮共用同一块半透玻璃。 */
+body {
+  --topbar-glass-color: color-mix(in srgb, var(--c-ink) 1.5%, var(--c-pop));
+  --topbar-glass-bg: color-mix(in srgb, var(--c-ink) 1.5%, color-mix(in srgb, var(--c-pop) 60%, transparent));
+  --topbar-glass-bg-hover: color-mix(in srgb, var(--c-ink) 3%, color-mix(in srgb, var(--c-pop) 66%, transparent));
+  --topbar-chip-bg: var(--topbar-glass-bg);
+  --topbar-chip-bg-hover: var(--topbar-glass-bg-hover);
+  --topbar-glass-alpha: .60;
+  --topbar-glass-shadow: 0 0 0 1px rgb(0 0 0 / .02), 0 2px 8px rgb(0 0 0 / .035), 0 1px 2px rgb(0 0 0 / .02), 0 -1px 2px rgb(0 0 0 / .012), inset 0 1px 0 rgb(255 255 255 / .34), inset 0 -1px 0 rgb(0 0 0 / .012);
 }

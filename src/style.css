@@ -4,6 +4,10 @@
 /* --- 基础 --- */
 * { box-sizing: border-box; }
 
+/* Remix Icon 的门面统一走内联 SVG；保留 svg 根节点，现有按 svg 写的样式继续生效。 */
+.remix-icon { display: inline-block; flex: none; vertical-align: middle; }
+.remix-mirrored { transform: scaleX(-1); }
+
 html, body, #app { height: 100%; margin: 0; }
 
 body {
@@ -148,6 +152,7 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
 .btn-icon:hover { color: var(--c-ink); background: #f5f5f5; }
 .btn-icon:active { transform: scale(0.9); }
 .btn-icon.is-active { color: var(--c-accent); background: var(--c-active); }
+.btn-icon:hover:not(:active), .icon-btn:hover:not(:active) { transform: translateY(-1px); }
 
 .btn-text {
   display: inline-flex;
@@ -172,10 +177,10 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
 .view-enter-from { opacity: 0; transform: translateY(4px); }
 .view-leave-to { opacity: 0; }
 
-.pop-enter-active { transition: opacity .16s ease, transform .16s ease; }
-.pop-leave-active { transition: opacity .1s ease; }
-.pop-enter-from { opacity: 0; transform: translateY(6px) scale(.98); }
-.pop-leave-to { opacity: 0; }
+.pop-enter-active { transition: opacity .18s ease, transform .26s var(--motion-pop), filter .18s ease; }
+.pop-leave-active { transition: opacity .17s ease, transform .20s var(--motion-snap), filter .16s ease; }
+.pop-enter-from { opacity: 0; transform: translateY(8px) scale(.92,.9); filter: blur(2px); }
+.pop-leave-to { opacity: 0; transform: translateY(5px) scale(.95,.97); filter: blur(1px); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -284,6 +289,7 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
  */
 /* 目录行：折叠箭头 + 文件夹图标 + 名字，悬停时右侧浮出四个操作 */
 .cat-row {
+  position: relative;
   display: flex;
   align-items: center;
   height: 30px;
@@ -292,15 +298,35 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
   cursor: pointer;
   transition: background 0.15s ease;
 }
-.cat-row:hover {
+.cat-row:hover,
+.cat-row:focus-within {
   background: var(--c-hover);
 }
 .cat-name {
+  flex: 1;
+  min-width: 0;
   user-select: none;
   -webkit-user-select: none;
 }
-.cat-row.is-on .cat-name {
+.cat-row .cat-icon,
+.cat-row .cat-name {
+  transition: color 160ms ease;
+}
+.cat-row.is-on {
+  /* 只是“当前文档在它下面”，不是选中：整行底色会在深目录里连成一片。 */
+  background: transparent;
+}
+.cat-row.is-on:hover,
+.cat-row.is-on:focus-within {
+  background: var(--c-hover);
+}
+/* 只给直接包含当前文档的那一层加一个轻量标记，其余祖先只保留实心图标。 */
+.cat-row.is-parent .cat-name {
   color: var(--c-ink);
+  font-weight: 500;
+}
+.cat-row.is-parent .cat-icon {
+  color: var(--c-accent);
 }
 /* 拖拽落在目录上时整行高亮 */
 .cat-row.is-drop {
@@ -316,6 +342,7 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
   display: flex;
   align-items: center;
   height: 34px;
+  margin-top: 4px;
   padding-left: 26px;
   padding-right: 5px;
   border-radius: var(--radius-control);
@@ -339,6 +366,7 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
 .doc-row.is-on {
   background: var(--c-active);
 }
+.cat-row { margin-top: 4px; }
 .doc-title,
 .pdf-title {
   flex: 1;
@@ -615,18 +643,18 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
 
 /* Shared small dialogs for metadata, icons, and safe conflict resolution. */
 .reader-modal-shade{position:fixed;inset:0;background:var(--c-overlay);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
-.reader-dialog{width:460px;max-width:100%;max-height:90dvh;overflow:auto;background:var(--c-pop);color:var(--c-text);border:1px solid var(--c-line);border-radius:var(--radius-row);padding:22px;box-shadow:var(--c-pop-shadow);font-family:var(--font-sans);font-size:13px}
+.reader-dialog{width:460px;max-width:100%;max-height:90dvh;overflow:auto;background:var(--c-pop);color:var(--c-text);border:1px solid var(--c-line);border-radius:var(--radius-row);padding:18px;box-shadow:var(--c-pop-shadow);font-family:var(--font-sans);font-size:13px}
 .reader-dialog header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;font-size:16px}.reader-dialog header button{font-size:22px;padding:0 5px}.reader-dialog p{font-size:12px;color:var(--c-sub);line-height:1.7;margin:12px 0}.reader-dialog label{display:block;margin:12px 0}.reader-dialog input:not([type=checkbox]):not([type=file]):not([type=range]),.reader-dialog textarea,.reader-dialog select{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);margin-top:6px;outline:none}.reader-dialog textarea{min-height:70px;resize:vertical}.reader-dialog input[type=checkbox]{margin-right:8px}.reader-dialog footer{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:15px}.reader-dialog button{cursor:pointer}.reader-dialog button:disabled{opacity:.5;cursor:wait}.reader-button{display:inline-flex!important;align-items:center;justify-content:center;padding:8px 12px;border-radius:var(--radius-control);background:var(--c-active);color:var(--c-accent);cursor:pointer}.reader-dialog .reader-error{color:#c94c4c}
 @media print{.reader-modal-shade{display:none!important}}
 
-.reader-rich-block{position:relative;margin:1.2em 0;line-height:1.7;font-size:inherit}.reader-rich-block p:first-child{margin-top:0}.reader-rich-block p:last-child{margin-bottom:0}.reader-rich-callout{display:flex;align-items:flex-start;gap:14px;padding:18px 20px;background:var(--c-field);border-radius:11px}.rich-callout-icon{flex-shrink:0}.reader-rich-columns{display:grid;grid-template-columns:1fr 1fr;gap:28px}.reader-rich-columns>div{min-width:0}.reader-rich-figure figure{display:inline-block;margin:0}.reader-rich-figure img{display:block;width:100%;height:auto;border-radius:8px}.reader-rich-figure figcaption{font:12px var(--font-sans);color:var(--c-faint);margin-top:9px;line-height:1.6}.reader-rich-card{border:1px solid var(--c-line);border-radius:10px;padding:18px 20px}.reader-rich-card>a{font-weight:600;color:var(--c-ink);text-decoration:none}.reader-rich-card>div{color:var(--c-sub);font-size:13px;margin-top:6px}.reader-rich-block.ProseMirror-selectednode{outline:2px solid var(--c-focus);outline-offset:3px}@media(max-width:640px){.reader-rich-columns{grid-template-columns:1fr;gap:12px}}@media print{.reader-rich-columns{grid-template-columns:1fr}.reader-rich-block{break-inside:avoid}}
+.reader-rich-block{position:relative;margin:1.1em 0;line-height:1.7;font-size:inherit}.reader-rich-block p:first-child{margin-top:0}.reader-rich-block p:last-child{margin-bottom:0}.reader-rich-callout{display:flex;align-items:flex-start;gap:14px;padding:18px 20px;background:var(--c-field);border-radius:11px}.rich-callout-icon{flex-shrink:0}.reader-rich-columns{display:grid;grid-template-columns:1fr 1fr;gap:28px}.reader-rich-columns>div{min-width:0}.reader-rich-figure figure{display:inline-block;margin:0}.reader-rich-figure img{display:block;width:100%;height:auto;border-radius:0}.reader-rich-figure figcaption{font:12px var(--font-sans);color:var(--c-faint);margin-top:9px;line-height:1.6}.reader-rich-card{border:1px solid var(--c-line);border-radius:10px;padding:18px 20px}.reader-rich-card>a{font-weight:600;color:var(--c-ink);text-decoration:none}.reader-rich-card>div{color:var(--c-sub);font-size:13px;margin-top:6px}.reader-rich-block.ProseMirror-selectednode{outline:2px solid var(--c-focus);outline-offset:3px}@media(max-width:640px){.reader-rich-columns{grid-template-columns:1fr;gap:12px}}@media print{.reader-rich-columns{grid-template-columns:1fr}.reader-rich-block{break-inside:avoid}}
 
 /* The portfolio's SVG alpha shaping is applied to surfaces, never to text. */
 
 .doc-tab,.newdoc-btn,.reader-button{isolation:isolate}
 .doc-tab::before,.newdoc-btn::before,.reader-button::before{content:'';position:absolute;inset:1px;z-index:-1;background:var(--smooth-fill,transparent);border-radius:var(--radius-surface);filter:url(#reader-superellipse);pointer-events:none}
 .doc-tab{background:transparent!important;border:0!important;border-radius:var(--radius-row)!important}
-.doc-tab:hover{--smooth-fill:color-mix(in srgb,var(--c-ink) 6%,var(--c-surface))}.doc-tab.is-active{--smooth-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-surface))}
+.doc-tab:hover{--smooth-fill:color-mix(in srgb,var(--c-ink) 6%,transparent)}.doc-tab.is-active{--smooth-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-surface))}
 .newdoc-btn{position:relative;background:transparent!important;border:0!important;box-shadow:none!important;--smooth-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-panel))}.newdoc-btn:hover{--smooth-fill:color-mix(in srgb,var(--c-ink) 9%,var(--c-panel))}
 .reader-button{position:relative;background:transparent!important;--smooth-fill:color-mix(in srgb,var(--c-accent) 12%,var(--c-pop));border:0!important}
 .reader-dialog,.side-menu,.identity-menu,.reader-rich-card{border:0!important}
@@ -636,19 +664,28 @@ button:focus-visible{outline:2px solid var(--c-focus);outline-offset:3px}
 .reader-button:hover{--smooth-fill:color-mix(in srgb,var(--c-accent) 19%,var(--c-pop))}.reader-dialog{border-radius:var(--radius-dialog)}.ui-font button,.reader-dialog button{font-weight:400}.workspace-footer .manage-entry{background:var(--c-field)!important;border-radius:var(--radius-row)}.workspace-footer .manage-entry:hover{background:var(--c-chip-hover)!important}
 
 /* One motion system for popovers, dialogs and menus. */
-:root{--motion-enter:180ms;--motion-leave:140ms;--motion-ease:cubic-bezier(.22,1,.36,1)}
+:root{--motion-enter:200ms;--motion-leave:180ms;--motion-dialog:260ms;--motion-ease:cubic-bezier(.22,1,.36,1);--motion-snap:cubic-bezier(.2,.9,.25,1);--motion-pop:cubic-bezier(.16,1.06,.3,1)}
 .overlay-enter-active,.overlay-leave-active{transition:opacity var(--motion-enter) ease}
 .overlay-leave-active{transition-duration:var(--motion-leave)}
-.overlay-enter-active>.reader-dialog,.overlay-leave-active>.reader-dialog{transition:transform var(--motion-enter) var(--motion-ease),opacity var(--motion-enter) ease}
+.overlay-enter-active>.reader-dialog{transition:transform var(--motion-dialog) var(--motion-pop),opacity var(--motion-enter) ease,filter var(--motion-enter) ease}
+.overlay-leave-active>.reader-dialog{transition:transform 200ms var(--motion-snap),opacity var(--motion-leave) ease,filter 160ms ease}
 .overlay-enter-from,.overlay-leave-to{opacity:0}
-.overlay-enter-from>.reader-dialog,.overlay-leave-to>.reader-dialog{transform:translateY(5px) scale(.975);opacity:0}
-.pop-enter-active,.fade-enter-active{transition:opacity var(--motion-enter) ease,transform var(--motion-enter) var(--motion-ease)!important}
-.pop-leave-active,.fade-leave-active{transition:opacity var(--motion-leave) ease,transform var(--motion-leave) var(--motion-ease)!important}
+.overlay-enter-from>.reader-dialog,.overlay-leave-to>.reader-dialog{transform:translateY(12px) scale(.95);opacity:0;filter:blur(2.5px)}
+.editor-pop-enter-active { transition: opacity 120ms ease, transform 150ms var(--motion-snap); }
+.editor-pop-leave-active { transition: opacity 80ms ease, transform 100ms ease; }
+.editor-pop-enter-from { opacity: 0; transform: translateY(-3px) scale(.985); }
+.editor-pop-leave-to { opacity: 0; transform: translateY(-2px) scale(.99); }
+.pop-enter-active,.fade-enter-active{transition:opacity 180ms ease,transform 260ms var(--motion-pop),filter 180ms ease!important}
+.pop-leave-active,.fade-leave-active{transition:opacity 170ms ease,transform 200ms var(--motion-snap),filter 160ms ease!important}
 .doc-row,.cat-row{border-radius:var(--radius-row)!important}
 
 @media(prefers-reduced-motion:reduce){.overlay-enter-active,.overlay-leave-active,.overlay-enter-active>.reader-dialog,.overlay-leave-active>.reader-dialog,.pop-enter-active,.pop-leave-active,.fade-enter-active,.fade-leave-active{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.overlay-enter-from>.reader-dialog,.overlay-leave-to>.reader-dialog{filter:none!important}}
+.tree-menu.is-measuring{visibility:hidden!important;opacity:0!important;transition:none!important}
+:is(.icon-btn,.btn-icon,.lib-icon-btn,.lib-more,.lib-access-chip,.lib-manager-card-more,.type-chip,.cover-shapes button,.picker-tabs button,.cover-tabs button,.reading-tabs button,.type-tabs button,.lib-manager-filters button){transition:background 160ms var(--motion-snap),color 160ms ease,box-shadow 160ms ease,opacity 160ms ease,transform 160ms var(--motion-snap)}
+@keyframes icon-check-in{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:scale(1)}}
 
-.reader-tooltip{position:fixed;z-index:5000;width:max-content;max-width:min(320px,calc(100vw - 20px));padding:5px 9px;border:0;border-radius:10px;corner-shape:superellipse(2);background:rgba(30,30,30,.88);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;font:400 11px/1.45 var(--font-sans);text-align:center;white-space:nowrap;opacity:0;transform:translateY(2px);pointer-events:none;transition:opacity var(--motion-enter) ease,transform var(--motion-enter) var(--motion-ease)}
+.reader-tooltip{--tooltip-bg:#2f3036;position:fixed;z-index:5000;width:max-content;max-width:min(320px,calc(100vw - 20px));padding:8px 16px;border:0;border-radius:28px;corner-shape:superellipse(2.25);background:var(--tooltip-bg);color:#fff;font:400 11.5px/1.45 var(--font-sans);text-align:center;white-space:nowrap;opacity:0;transform:translateY(5px) scale(.9,.86);pointer-events:none;transition:opacity 180ms ease,transform 240ms var(--motion-pop)}
 .reader-tooltip.is-long{white-space:normal;text-wrap:balance;overflow-wrap:anywhere}
 .reader-tooltip.is-visible{opacity:1;transform:translateY(0) scale(1)}
 @media(prefers-reduced-motion:reduce){.reader-tooltip{transition:none}}
@@ -658,7 +695,8 @@ button:focus-visible{outline:2px solid var(--c-focus);outline-offset:3px}
 .doc-row::before,.lib-row::before{content:'';position:absolute;inset:1px;z-index:-1;pointer-events:none;background:var(--row-fill,transparent);filter:url(#reader-superellipse);border-radius:var(--radius-surface);transition:background var(--motion-enter) ease}
 .lib-row::before{border-radius:var(--radius-row)}
 .doc-row:hover,.lib-row:hover,.lib-row.is-current{--row-fill:color-mix(in srgb,var(--c-ink) 5%,var(--c-panel))}
-.doc-row.is-on{--row-fill:color-mix(in srgb,var(--c-accent) 10%,var(--c-panel))}
+.doc-row.is-on{--row-fill:transparent}
+.doc-row{z-index:1}
 .doc-row.is-batch-selected{--row-fill:color-mix(in srgb,var(--c-accent) 13%,var(--c-panel))}
 .cat-row.is-batch-selected{background:color-mix(in srgb,var(--c-accent) 13%,var(--c-panel))}
 .batch-check{display:inline-grid;place-items:center;flex:none;width:17px;height:17px;margin-right:7px;border:1px solid var(--c-faint);border-radius:5px;color:var(--c-on-accent)}
@@ -670,3 +708,32 @@ button:focus-visible{outline:2px solid var(--c-focus);outline-offset:3px}
 input[type="checkbox"],input[type="radio"],input[type="range"]{accent-color:var(--c-accent)}
 .md-body a,.crepe-host .milkdown .ProseMirror a,.lib-preview-body a{ text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px; }
 .md-body a:hover,.crepe-host .milkdown .ProseMirror a:hover{ text-decoration-color:currentColor; }
+
+/* 统一的 reduced-motion 收口：换库、目录、侧栏、封面、文件夹浮层 */
+@media (prefers-reduced-motion: reduce) {
+  .doc-topbar { transition: none !important; }
+  .doc-topbar .topbar-left,
+  .doc-topbar .topbar-left.is-lib-hidden { transition: none !important; transform: none !important; opacity: 1 !important; }
+  .doc-content.is-ready { animation: none !important; }
+  .toc-panel { transition: none !important; transition-delay: 0s !important; }
+  .toc-collapse-chip,
+  .toc-collapse-chip.is-open.is-entering,
+  .toc-collapse-chip::before,
+  .doc-tools::before,
+  .doc-tools::after,
+  .side-header .kb-identity::before,
+  .side-header .sidebar-actions::before,
+  .side-header .kb-identity,
+  .side-header .sidebar-actions,
+  .lib-expand,
+  .lib-panel,
+  .cover-actions,
+  .rail-peek-enter-active,
+  .rail-peek-leave-active {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+  .rail-peek-enter-from,
+  .rail-peek-leave-to { opacity: 1 !important; transform: none !important; }
+}

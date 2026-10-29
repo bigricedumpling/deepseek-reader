@@ -1,10 +1,12 @@
 <template>
   <!--
-    插入当前抽屉其他文档的选择器。
+    插入当前知识库其他文档的选择器。
     视觉跟应用的浮层一致：圆角 12、细边、柔和阴影；顶部一条搜索，下面是文档行。
   -->
-  <div class="pick-mask" @click.self="emit('close')">
-    <div class="pick ui-font">
+  <Transition name="overlay" appear @after-leave="afterLeave">
+  <div v-if="visible" class="pick-mask" @click.self="close">
+    <Transition name="pop" appear>
+    <div v-if="visible" class="pick ui-font">
       <div class="pick-head">
         <PhMagnifyingGlass :size="13" class="pick-glass" />
         <input
@@ -12,7 +14,7 @@
           v-model="kw"
           class="pick-input"
           placeholder="搜索文档…"
-          @keydown.esc="emit('close')"
+          @keydown.esc="close"
           @keydown.down.prevent="move(1)"
           @keydown.up.prevent="move(-1)"
           @keydown.enter.prevent="choose(list[active])"
@@ -44,13 +46,15 @@
         <span><kbd>esc</kbd> 关闭</span>
       </div>
     </div>
+    </Transition>
   </div>
+  </Transition>
 </template>
 
 <script setup>
 /* 斜杠菜单里"插入文档"用的选择器：搜名字或路径都行，键盘可用 */
 import { computed, onMounted, ref, watch } from 'vue'
-import { PhMagnifyingGlass, PhFileText, PhFilePdf, PhFileHtml } from '@phosphor-icons/vue'
+import { PhMagnifyingGlass, PhFileText, PhFilePdf, PhFileHtml } from '../icons/remix'
 import { useDocsStore } from '../stores/docs'
 
 const emit = defineEmits(['close', 'pick'])
@@ -58,6 +62,15 @@ const store = useDocsStore()
 const kw = ref('')
 const active = ref(0)
 const inputEl = ref(null)
+const visible = ref(true)
+let pendingPick = null
+
+/* 先放完退场，再通知父组件卸载，否则 v-if 会把它一帧拿掉，看不到收起。 */
+function close() { visible.value = false }
+function afterLeave() {
+  if (pendingPick) emit('pick', pendingPick)
+  else emit('close')
+}
 
 onMounted(() => inputEl.value?.focus())
 
@@ -79,7 +92,8 @@ function move(step) {
 
 function choose(doc) {
   if (!doc) return
-  emit('pick', doc)
+  pendingPick = doc
+  visible.value = false
 }
 
 function folderOf(file) {

@@ -1,7 +1,7 @@
 <template>
   <main class="preview-shell">
     <header v-if="ready" class="preview-header">
-      <button class="collect-button" type="button" @click="openPicker">收进抽屉</button>
+      <button class="collect-button" type="button" @click="openPicker">收进知识库</button>
     </header>
     <div v-if="!ready" class="preview-state">
       <template v-if="!embedded">这个页面需要在 DSH 的工作区 Markdown 预览中打开。</template>
@@ -13,16 +13,16 @@
       <article class="preview-image-probe" aria-hidden="true" v-html="html" />
     </div>
     <div v-if="picker" class="picker-mask" @click.self="picker=false">
-      <section class="picker" role="dialog" aria-modal="true" aria-label="收进抽屉" @keydown.esc="picker=false">
-        <div class="picker-heading">收进抽屉<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
-        <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus /><SelectMenu v-model="libFilter" :options="[{value:'all',label:'全部'},{value:'private',label:'未公开'},{value:'public',label:'公开'}]" label="筛选抽屉" /></div>
+      <section class="picker" role="dialog" aria-modal="true" aria-label="收进知识库" @keydown.esc="picker=false">
+        <div class="picker-heading">收进知识库<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
+        <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus /></div>
         <div class="picker-grid">
           <button v-for="lib in filteredLibraries" :key="lib.name" type="button" class="picker-card" :class="{ selected: destination === lib.name, draft: lib.name === DRAFT_NAME }" @click="destination=lib.name">
             <ContentIcon :value="lib.name === DRAFT_NAME ? 'icon:draft' : lib.icon || 'icon:book'" :size="24" />
             <strong>{{ lib.name }}</strong>
             <small>{{ lib.docs || 0 }} 篇</small>
           </button>
-          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的抽屉</p><div v-if="!libraries.length" class="empty-library-create"><label>抽屉名称<input v-model="newLibraryName" placeholder="新抽屉" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建抽屉</button></div>
+          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的知识库</p><div v-if="!libraries.length" class="empty-library-create"><label>知识库名称<input v-model="newLibraryName" placeholder="新知识库" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建知识库</button></div>
         </div>
         <label>文档名称<input v-model="newName" maxlength="160" /></label>
         <p v-if="pickerError" class="picker-error">{{ pickerError }}</p>
@@ -38,7 +38,6 @@ import MarkdownIt from 'markdown-it'
 import { API_BASE } from '../utils/api'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import ContentIcon from '../components/ContentIcon.vue'
-import SelectMenu from '../components/SelectMenu.vue'
 
 // 工作区 Markdown 是任意项目文件，预览禁用原生 HTML 执行。
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false })
@@ -75,11 +74,10 @@ const newName = ref('')
 const destination = ref('')
 const libraries = ref([])
 const libQuery = ref('')
-const libFilter = ref('all')
 const DRAFT_NAME = '草稿'
 const newLibraryName=ref('')
 async function createLibrary(){busy.value=true;pickerError.value='';try{const result=await fetch(API_BASE+'/api/lib',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newLibraryName.value.trim()})}).then(r=>r.json());if(!result.ok)throw Error(result.error);destination.value=newLibraryName.value.trim();await openPicker()}catch(e){pickerError.value=e.message}finally{busy.value=false}}
-const filteredLibraries = computed(() => libraries.value.filter(lib => lib.name.toLocaleLowerCase().includes(libQuery.value.toLocaleLowerCase()) && (libFilter.value === 'all' || lib.name === DRAFT_NAME || (libFilter.value === 'public' ? lib.shared : !lib.shared))))
+const filteredLibraries = computed(() => libraries.value.filter(lib => lib.name.toLocaleLowerCase().includes(libQuery.value.toLocaleLowerCase())))
 const pendingImages = ref(0)
 const imageData = new Map()
 const imageVersion = ref(0)
@@ -207,7 +205,7 @@ async function openPicker() {
       fetch(API_BASE + '/api/libs', { credentials: 'same-origin' }).then(r => r.json())
     ])
     if (me?.data?.role !== 'owner') throw Error('请先在阅读器中进入管理工作区')
-    if (!result.ok) throw Error(result.error || '无法读取抽屉')
+    if (!result.ok) throw Error(result.error || '无法读取知识库')
     libraries.value = result.data.libs
     if (!libraries.value.some(lib => lib.name === destination.value)) destination.value = libraries.value[0]?.name || ''
   } catch (error) { pickerError.value = error.message }

@@ -5,14 +5,9 @@
     :style="{ width: (collapsed ? 0 : width) + 'px' }"
   >
     <div class="flex-1 min-w-0 flex flex-col" :style="{ width: width + 'px' }">
-      <!-- 头部 -->
-      <div class="h-[56px] px-5 flex items-center flex-shrink-0">
-        <span class="ui-font text-[12px] text-[var(--c-faint)] tracking-wide">目录</span>
-        <span v-if="note" class="ui-font text-[10.5px] text-[var(--c-faint)] ml-2 opacity-70">{{ note }}</span>
-        <button class="btn-icon ml-auto" title="收起目录" @click="emit('update:collapsed', true)">
-          <PhSidebarSimple :size="15" weight="regular" />
-        </button>
-      </div>
+      <!-- 顶栏悬浮在面板上方；Aa/… 通过 Teleport 落到左侧槽位，右上角只留目录收起。 -->
+      <div class="h-10 flex-shrink-0" />
+      <button class="toc-collapse-chip" :class="{ 'is-open': !collapsed, 'is-flat': shellFlat, 'is-entering': chipEnter }" :style="{ pointerEvents: chipHot ? 'auto' : 'none' }" title="收起目录" aria-label="收起目录" @click="emit('update:collapsed', true)"><PhCaretRight :size="16" /></button>
 
       <!-- 目录项 -->
       <nav ref="navEl" class="toc-scroll flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 pb-4">
@@ -56,11 +51,8 @@
       <!-- 阅读进度：pdf 的滚动在 iframe 里，量不到，就不显示 -->
       <div v-if="!pdf" class="px-5 pb-5 flex-shrink-0">
         <div class="flex items-center gap-2">
-          <div class="flex-1 h-px bg-[var(--c-line)] overflow-hidden">
-            <div
-              class="h-full bg-accent/50 transition-[width] duration-150 ease-out"
-              :style="{ width: progress + '%' }"
-            />
+          <div class="toc-progress flex-1 overflow-hidden">
+            <div class="toc-progress-fill h-full" :style="{ width: progress + '%' }" />
           </div>
           <span class="ui-font text-[10.5px] text-[var(--c-faint)] tabular-nums">
             {{ progress }}%
@@ -87,7 +79,7 @@
 <script setup>
 import { resizePanel } from '../utils/panel-resize'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { PhSidebarSimple, PhArrowUp, PhCaretDown } from '@phosphor-icons/vue'
+import { PhCaretDown, PhCaretRight } from '../icons/remix'
 import { foldKey, foldDoc, isFolded, isFoldable, toggleFold, unfoldKeys } from '../utils/toc-fold'
 import { scrollToTarget } from '../utils/scroll-target'
 
@@ -104,7 +96,7 @@ const props = defineProps({
   /** 当前文档路径：折叠状态是按文档记的 */
   docKey: { type: String, default: '' }
 })
-const emit = defineEmits(['update:collapsed', 'update:width', 'to-top', 'go-page'])
+const emit = defineEmits(['update:collapsed', 'update:width', 'update:dragging', 'go-page'])
 
 /*
  * 目录树：把扁平的标题列表按层级挂成树，只影响**目录的显示**，正文一个字不动。
@@ -182,6 +174,32 @@ const activeIndex = ref(-1)
 const navEl = ref(null)
 const progress = ref(0)
 const dragging = ref(false)
+
+/*
+ * 收起按钮入场时仍带玻璃壳（此刻它还浮在文档上）；
+ * 面板铺到它下面后再把壳溶掉，形成"交接"。关闭时先保持无壳滑出，落位后再恢复。
+ */
+const shellFlat = ref(!props.collapsed)
+const chipEnter = ref(false)
+const chipHot = ref(!props.collapsed)
+let shellTimer = 0
+let chipTimer = 0
+function syncShell(open) {
+  clearTimeout(shellTimer)
+  clearTimeout(chipTimer)
+  if (open) {
+    shellFlat.value = false
+    // 首帧不播放入场动画：TOC 本来就是打开状态时（例如刷新页面）不要凭空滑一下。
+    if (!chipEnter.value) chipEnter.value = true
+    chipHot.value = false
+    chipTimer = setTimeout(() => { chipHot.value = true }, 150)
+    shellTimer = setTimeout(() => { shellFlat.value = true }, 240)
+  } else {
+    chipHot.value = false
+    shellTimer = setTimeout(() => { shellFlat.value = false }, 380)
+  }
+}
+watch(() => props.collapsed, v => syncShell(!v))
 let scroller = null
 let heads = []
 let ticking = false
@@ -190,8 +208,9 @@ let ticking = false
 
 function startResize(e) {
   dragging.value = true
+  emit('update:dragging', true)
   const startX=e.clientX, startW=props.width
-  resizePanel(e, ev => emit('update:width', Math.max(180,Math.min(420,startW - (ev.clientX-startX)))), () => { dragging.value = false })
+  resizePanel(e, ev => emit('update:width', Math.max(180,Math.min(420,startW - (ev.clientX-startX)))), () => { dragging.value = false; emit('update:dragging', false) })
 }
 
 /* ---------- 当前位置跟随 ---------- */
@@ -284,6 +303,8 @@ function clearTimers() {
 
 function teardown() {
   clearTimers()
+  clearTimeout(shellTimer)
+  clearTimeout(chipTimer)
   if (scroller) scroller.removeEventListener('scroll', onScroll)
 }
 
@@ -340,6 +361,7 @@ watch(
 watch(
   () => props.collapsed,
   async (v) => {
+    if (v && dragging.value) { dragging.value = false; emit('update:dragging', false) }
     if (!v) {
       clearTimers()
       await nextTick()
@@ -354,6 +376,7 @@ watch(
   border-left: 1px solid var(--c-line-soft);
   transition: width 0.26s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.26s ease;
 }
+.toc-panel:not(.is-collapsed) { transition-delay: 140ms; }
 .toc-panel.is-collapsed {
   border-left-color: transparent;
 }
@@ -361,6 +384,17 @@ watch(
 .toc-panel.is-dragging {
   transition: none;
 }
+.toc-collapse-chip{position:fixed;top:4px;right:4px;z-index:35;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:18px;corner-shape:superellipse(2);color:var(--c-faint);visibility:hidden;pointer-events:none;transform:translateX(40px) scale(.96);transition:transform 340ms var(--motion-pop),background 140ms ease,color 140ms ease,visibility 0s linear 340ms}
+.toc-collapse-chip::before{content:'';position:absolute;inset:0;z-index:0;border-radius:inherit;corner-shape:inherit;background-color:var(--topbar-chip-bg);box-shadow:var(--topbar-glass-shadow);pointer-events:none;transition:background-color 160ms ease,box-shadow 160ms ease}
+.toc-collapse-chip svg{position:relative;z-index:1}
+.toc-collapse-chip.is-open{visibility:visible;pointer-events:auto;transform:translateX(0) scale(1);transition-delay:0s,0s,0s,0s}
+.toc-collapse-chip.is-open.is-entering{animation:toc-chip-in 340ms var(--motion-pop) 150ms backwards}
+.toc-collapse-chip.is-open:hover{background:transparent;color:var(--c-ink);transform:translateY(-1px)}
+.toc-collapse-chip.is-open:hover::before{background-color:var(--topbar-chip-bg-hover)}
+/* 落进面板后，壳同样只淡颜色，不切 opacity。 */
+.toc-collapse-chip.is-open.is-flat::before{background-color:transparent;box-shadow:0 2px 8px rgb(0 0 0 / 0),0 1px 2px rgb(0 0 0 / 0),inset 0 1px 0 rgb(255 255 255 / 0),inset 0 -1px 0 rgb(0 0 0 / 0);-webkit-backdrop-filter:blur(0) saturate(1);backdrop-filter:blur(0) saturate(1);transition:background-color 200ms cubic-bezier(.4,0,.2,1),box-shadow 200ms cubic-bezier(.4,0,.2,1),-webkit-backdrop-filter 0s,backdrop-filter 0s}
+.toc-collapse-chip.is-open.is-flat:hover{background:color-mix(in srgb,var(--c-ink) 5%,transparent)}
+@keyframes toc-chip-in{0%{opacity:0;transform:translateX(-32px) scale(.96)}14%{opacity:1}100%{opacity:1;transform:translateX(0) scale(1)}}
 
 .toc-top {
   display: inline-flex;
@@ -434,6 +468,8 @@ watch(
   border-radius: 1px;
   background: var(--c-accent);
 }
+.toc-progress { height: 2px; border-radius: 999px; background: color-mix(in srgb, var(--c-line) 55%, transparent); }
+.toc-progress-fill { border-radius: 999px; background: color-mix(in srgb, var(--c-accent) 28%, transparent); transition: width 180ms ease-out; }
 </style>
 
 <style scoped>.toc-scroll{padding-bottom:28px;mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 24px),transparent);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 24px),transparent)}</style>

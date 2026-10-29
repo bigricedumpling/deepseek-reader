@@ -35,7 +35,7 @@
     <FormulaEditor v-if="formula" :value="formula.node.attrs.value" @close="formula=null" @save="saveFormula" />
     <RawBlockEditor v-if="rawBlock" :value="rawBlock.node.attrs.value" @close="rawBlock=null" @save="saveRawBlock" />
     <!-- 块左侧那个六点手柄，点一下弹出来的转为菜单 -->
-    <Transition name="pop">
+    <Transition name="editor-pop">
       <BlockTypeMenu
         v-if="menu"
         :x="menu.x"
@@ -45,7 +45,42 @@
       />
     </Transition>
     <IconPicker v-if="calloutPicker" :anchor="calloutPicker.anchor" :save="saveCalloutIcon" @close="calloutPicker=null" />
-    <Transition name="pop"><TextStyleMenu v-if="styleMenu" :x="styleMenu.x" :y="styleMenu.y" @pick="onStylePick" /></Transition>
+    <Transition name="editor-pop"><TextStyleMenu v-if="styleMenu" :x="styleMenu.x" :y="styleMenu.y" :color="styleMenu.color" :highlight="styleMenu.highlight" @pick="onStylePick" /></Transition>
+    <EditorContextMenu v-if="contextMenu" :x="contextMenu.x" :y="contextMenu.y" :label="contextMenu.kind === 'image' ? '图片操作' : '编辑操作'" :items="contextItems" @select="onContextPick" @close="closeContextMenu(true)" />
+    <input ref="imageReplaceInput" type="file" accept="image/*" class="hidden" @change="onImageReplace" />
+    <Teleport to="body">
+      <Transition name="editor-pop">
+        <div v-if="imageTools" class="reader-image-tools" :style="{ left: imageTools.x + 'px', top: imageTools.y + 'px' }" @pointerenter="cancelImageHide" @pointerleave="scheduleImageHide" @mousedown.stop.prevent>
+          <button type="button" title="查看大图" aria-label="查看大图" @click="imageAction('preview')"><PhArrowsOutSimple :size="16" /></button>
+          <button v-if="!readonly" type="button" title="添加图注" aria-label="添加图注" @click="imageAction('caption')"><PhPencilLine :size="16" /></button>
+          <button v-if="!readonly" type="button" title="替换图片" aria-label="替换图片" @click="imageAction('replace')"><PhArrowClockwise :size="16" /></button>
+          <button type="button" title="复制图片地址" aria-label="复制图片地址" @click="imageAction('copy')"><PhCopy :size="16" /></button>
+          <button type="button" title="下载图片" aria-label="下载图片" @click="imageAction('download')"><PhExport :size="16" /></button>
+          <span v-if="!readonly" class="reader-image-tool-sep" />
+          <button v-if="!readonly" type="button" class="is-danger" title="删除图片" aria-label="删除图片" @click="imageAction('delete')"><PhTrash :size="16" /></button>
+        </div>
+      </Transition>
+    </Teleport>
+    <Teleport to="body">
+      <Transition name="editor-pop">
+        <div v-if="docLinkCard" class="reader-doc-card" :style="{ left: docLinkCard.x + 'px', top: docLinkCard.y + 'px' }" role="status">
+          <component :is="docLinkCard.kind === 'pdf' ? PhFilePdf : docLinkCard.kind === 'h5' ? PhFileHtml : PhFileText" :size="19" class="reader-doc-card-icon" />
+          <div class="reader-doc-card-copy">
+            <strong>{{ docLinkCard.label }}</strong>
+            <small>{{ docLinkCard.path }}</small>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+    <Teleport to="body">
+      <div v-if="imagePreview" class="reader-image-lightbox" @click.self="closeImagePreview">
+        <button type="button" class="reader-lightbox-close" aria-label="关闭大图" @click="closeImagePreview"><PhX :size="20" /></button>
+        <figure>
+          <img :src="imagePreview.src" :alt="imagePreview.caption || ''" />
+          <figcaption v-if="imagePreview.caption">{{ imagePreview.caption }}</figcaption>
+        </figure>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -54,22 +89,25 @@ import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Crepe } from '@milkdown/crepe'
 import { renderMermaidSvg } from '../utils/mermaid'
 import { normalizeMarkdown, isCosmeticOnly } from '../utils/markdown-normalize'
-import { editorShortcuts, applyBlockKind, blockKindOf } from '../utils/editor-shortcuts'
+import { editorShortcuts, applyBlockKind, blockKindOf, resolveDocHref } from '../utils/editor-shortcuts'
 import { editorFold, bindFoldView, refreshFolds } from '../utils/editor-fold'
 import { foldKey, isFolded, isFoldable, setFoldable, toggleFold, foldState, foldDoc } from '../utils/toc-fold'
 import BlockTypeMenu from './BlockTypeMenu.vue'
 import TextStyleMenu from './TextStyleMenu.vue'
+import EditorContextMenu from './EditorContextMenu.vue'
 import IconPicker from './IconPicker.vue'
 import MarkdownReading from './MarkdownReading.vue'
 import RawBlockEditor from './RawBlockEditor.vue'
 import FormulaEditor from './FormulaEditor.vue'
+import { PhArrowsOutSimple, PhArrowClockwise, PhArrowSquareOut, PhClipboard, PhCopy, PhExport, PhFileHtml, PhFilePdf, PhFileText, PhPencilLine, PhScissors, PhSquaresFour, PhTrash, PhX } from '../icons/remix'
+import { remixIcons } from '../icons/remix-data'
 import { preservedRemark, preservedSchema, editableHtmlSchema, configurePreservedMarkdown } from '../utils/editor-preserved'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
 import { richBlockRemark, richBlockSchema, calloutSchema, calloutKeys, calloutValue, richMarkdown } from '../utils/rich-blocks'
 import { editorViewCtx, parserCtx } from '@milkdown/kit/core'
-import { TextSelection } from '@milkdown/kit/prose/state'
+import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
 import { API_BASE, assetUrl } from '../utils/api'
 
 /*
@@ -114,6 +152,15 @@ const uploadError = ref('')
 const actionError = ref('')
 const replacementInput = ref(null)
 const newImageInput = ref(null)
+const imageReplaceInput = ref(null)
+const contextMenu = ref(null)
+const contextItems = ref([])
+const imageTools = ref(null)
+const imagePreview = ref(null)
+const docLinkCard = ref(null)
+let imageHideTimer = 0
+let docCardHideTimer = 0
+let imageReplaceTarget = null
 let replacementSrc = ''
 let newImagePosition = 0
 let newImageBaseline = ''
@@ -216,31 +263,100 @@ async function insertNewImage(event) {
   }
 }
 
+/* 工具条统一使用 Remix 的同一套线稿图标，避免 Crepe 默认图标混进来后粗细、尺寸不一致。 */
+const TOOLBAR_ICONS = {
+  bold: 'bold',
+  italic: 'italic',
+  strikethrough: 'strikethrough',
+  code: 'code',
+  latex: 'functions',
+  link: 'link'
+}
+const TOOLBAR_LABELS = {
+  bold: '加粗',
+  italic: '斜体',
+  strikethrough: '删除线',
+  code: '行内代码',
+  latex: '行内公式',
+  link: '链接'
+}
+function toolbarIcon(name) {
+  const body = name && remixIcons[name]?.line
+  return body ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${body}</svg>` : ''
+}
+
+/* 斜杠菜单右侧的快捷键提示。Crepe 自己不带这个位置，渲染后在 DOM 上补一层。 */
+const SLASH_SHORTCUTS = {
+  '正文': '⌘⌥0',
+  '一级标题': '⌘⌥1',
+  '二级标题': '⌘⌥2',
+  '三级标题': '⌘⌥3',
+  '四级标题': '⌘⌥4',
+  '五级标题': '⌘⌥5',
+  '六级标题': '⌘⌥6',
+  '引用': '⌘⇧U',
+  '无序列表': '⌘⇧8',
+  '有序列表': '⌘⇧7',
+  '待办列表': '⌘⇧9',
+  '代码块': '⌘⌥C'
+}
+function decorateSlashMenu() {
+  const menu = host.value?.querySelector('.milkdown-slash-menu')
+  if (!menu) return
+  for (const li of menu.querySelectorAll('.menu-group li')) {
+    const label = li.querySelector(':scope > span:not(.milkdown-icon)')?.textContent.trim() || ''
+    const shortcut = SLASH_SHORTCUTS[label]
+    if (!shortcut) continue
+    let kbd = li.querySelector(':scope > .slash-shortcut')
+    if (!kbd) {
+      kbd = document.createElement('kbd')
+      kbd.className = 'slash-shortcut'
+      li.appendChild(kbd)
+    }
+    if (kbd.textContent !== shortcut) kbd.textContent = shortcut
+  }
+}
+
 onMounted(async () => {
   crepe = new Crepe({
     root: host.value,
     defaultValue: props.value,
     featureConfigs: {
-      [Crepe.Feature.ImageBlock]: { onUpload: uploadImage, proxyDomURL: assetUrl },
+      [Crepe.Feature.ImageBlock]: {
+        onUpload: uploadImage,
+        proxyDomURL: assetUrl,
+        blockCaptionPlaceholderText: '添加图注',
+        blockUploadPlaceholderText: '粘贴图片地址',
+        blockUploadButton: '上传图片',
+        blockConfirmButton: '确定'
+      },
       [Crepe.Feature.Toolbar]: {
         buildToolbar: (builder) => {
           const groups = builder.build()
           builder.clear()
-          builder.addGroup('block-type', '块格式').addItem('block-type', {
-            label: '转换格式',
-            icon: '<span class="block-type-label">转换格式 <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></span>',
-            active: () => false,
-            onRun: () => openSelectionMenu()
-          })
-          builder.addGroup('reader-style', '文字样式').addItem('reader-style', {
-            label: '文字颜色、高光与下划线',
-            icon: '<span class="text-style-trigger" aria-hidden="true">A<span></span></span>',
-            active: () => false,
-            onRun: () => openStyleMenu()
-          })
+          builder.addGroup('reader-style', '文字样式')
+            .addItem('reader-style', {
+              label: '文字颜色与高光',
+              icon: '<span class="text-style-trigger" aria-hidden="true">A<span></span></span>',
+              active: () => false,
+              onRun: () => openStyleMenu()
+            })
+            .addItem('reader-underline', {
+              label: '下划线',
+              icon: toolbarIcon('underline'),
+              active: () => selectionHasMark('readerUnderline'),
+              onRun: toggleUnderline
+            })
           for (const group of groups) {
             const target = builder.addGroup(group.key, group.label)
-            for (const item of group.items) target.addItem(item.key, item)
+            for (const item of group.items) {
+              const icon = toolbarIcon(TOOLBAR_ICONS[item.key])
+              target.addItem(item.key, {
+                ...item,
+                ...(icon ? { icon } : {}),
+                ...(TOOLBAR_LABELS[item.key] ? { label: TOOLBAR_LABELS[item.key] } : {})
+              })
+            }
           }
         }
       },
@@ -263,12 +379,12 @@ onMounted(async () => {
           }
         },
         /*
-         * 斜杠菜单里多一组：插入当前抽屉的其他文档。
+         * “插入文档”不单独占一个斜杠 tab，直接并入“插入”组。
          * 插进去的是一条普通的 markdown 链接，点击时由 editor-shortcuts 的
          * "内部链接"分支接住 —— 开成工具内部的标签页，不是浏览器标签页。
          */
         buildMenu: (builder) => {
-          builder.addGroup('reader', '当前抽屉').addItem('doc-link', {
+          builder.getGroup('advanced').addItem('doc-link', {
             label: '插入文档',
             icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10.75 6a.75.75 0 0 0-1.5 0v4.25H5a.75.75 0 0 0 0 1.5h4.25V16a.75.75 0 0 0 1.5 0v-4.25H15a.75.75 0 0 0 0-1.5h-4.25V6Z"/><path d="M6.75 3h10.5A2.75 2.75 0 0 1 20 5.75v12.5A2.75 2.75 0 0 1 17.25 21H6.75A2.75 2.75 0 0 1 4 18.25V5.75A2.75 2.75 0 0 1 6.75 3Zm0 1.5c-.69 0-1.25.56-1.25 1.25v12.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25V5.75c0-.69-.56-1.25-1.25-1.25H6.75Z"/></svg>',
             onRun: () => emit('pick-doc')
@@ -310,7 +426,7 @@ onMounted(async () => {
   })
 
   // 编辑快捷键：改块类型、整块上移下移、列表缩进
-  // 访客（分享链接进来的人）是只读的：编辑器层面直接关掉，不靠前端藏按钮
+  // 访客（旧只读链接进来的人）是只读的：编辑器层面直接关掉，不靠前端藏按钮
   if (props.readonly) crepe.setReadonly(true)
   crepe.editor.use(editorShortcuts({ docId: props.docId, onOpenDoc: (path) => emit('open-doc', path) }))
   crepe.editor.config(configureInlineStyleMarkdown)
@@ -361,6 +477,9 @@ onMounted(async () => {
   host.value?.addEventListener('click', openCalloutIcon)
   host.value?.addEventListener('click', openRawBlock)
   host.value?.addEventListener('keydown', onCalloutIconKey, true)
+  host.value?.addEventListener('contextmenu', openContextMenu)
+  host.value?.addEventListener('pointerover', onEditorPointerOver)
+  host.value?.addEventListener('pointerout', onEditorPointerOut)
 
   // 开发期把编辑器和原文快照暴露出来，方便查往返到底差在哪
   if (import.meta.env.DEV) {
@@ -400,12 +519,14 @@ onMounted(async () => {
    */
   observer = new MutationObserver(() => {
     decorateFormula()
+    decorateSlashMenu()
     mermaid.schedule()
     colw.schedule()
   })
   observer.observe(host.value, { childList: true, subtree: true, characterData: true })
   mermaid.schedule()
   decorateFormula()
+  decorateSlashMenu()
 
   // 表格列宽：把这篇存过的取回来，再挂上拖拽
   colw.load()
@@ -523,6 +644,48 @@ function closeMenu() {
   menu.value = null
 }
 
+function selectionHasMark(name) {
+  const view = viewOf()
+  const type = view?.state?.schema?.marks?.[name]
+  if (!view || !type || view.state.selection.empty) return false
+  return view.state.doc.rangeHasMark(view.state.selection.from, view.state.selection.to, type)
+}
+
+function selectionTone(name) {
+  const view = viewOf()
+  const type = view?.state?.schema?.marks?.[name]
+  const { from, to } = view?.state?.selection || {}
+  if (!view || !type || from === to) return null
+  let tone = null
+  let seen = false
+  view.state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isText) return
+    const mark = type.isInSet(node.marks)
+    if (!seen) {
+      tone = mark?.attrs.tone || null
+      seen = true
+    } else if ((mark?.attrs.tone || null) !== tone) {
+      tone = null
+    }
+  })
+  return tone
+}
+
+function toggleUnderline() {
+  const view = viewOf()
+  if (!view || props.readonly || lossy.value) return
+  const { from, to } = view.state.selection
+  if (from >= to) return
+  const type = view.state.schema.marks.readerUnderline
+  if (!type) return
+  const had = view.state.doc.rangeHasMark(from, to, type)
+  let tr = view.state.tr.removeMark(from, to, type)
+  if (!had) tr = tr.addMark(from, to, type.create())
+  userTyped = true
+  view.dispatch(tr)
+  view.focus()
+}
+
 function openStyleMenu() {
   const view = viewOf()
   if (!view || view.state.selection.empty || props.readonly || lossy.value) return
@@ -531,10 +694,12 @@ function openStyleMenu() {
   if (!rect) return
   closeMenu()
   styleMenu.value = {
-    x: Math.max(8, Math.min(rect.left, window.innerWidth - 258)),
-    y: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 148)),
+    x: Math.max(8, Math.min(rect.left, window.innerWidth - 268)),
+    y: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 210)),
     from: view.state.selection.from,
-    to: view.state.selection.to
+    to: view.state.selection.to,
+    color: selectionTone('readerColor'),
+    highlight: selectionTone('readerHighlight')
   }
 }
 
@@ -545,40 +710,402 @@ function onStylePick(kind, tone) {
   if (!view || !selection || props.readonly) return
   const { from, to } = selection
   if (from >= to || to > view.state.doc.content.size) return
-  const type = view.state.schema.marks[kind === 'color' ? 'readerColor' : kind === 'highlight' ? 'readerHighlight' : 'readerUnderline']
+  const type = view.state.schema.marks[kind === 'color' ? 'readerColor' : 'readerHighlight']
   if (!type) return
-  const tr = view.state.tr.removeMark(from, to, type)
-  if (kind === 'underline') {
-    let hadUnderline = false
-    view.state.doc.nodesBetween(from, to, (node) => {
-      if (node.isText && type.isInSet(node.marks)) hadUnderline = true
-    })
-    if (!hadUnderline) tr.addMark(from, to, type.create())
-  } else if (tone) {
-    tr.addMark(from, to, type.create({ tone }))
-  }
+  let tr = view.state.tr.removeMark(from, to, type)
+  if (tone) tr = tr.addMark(from, to, type.create({ tone }))
   userTyped = true
   view.dispatch(tr)
   view.focus()
 }
 
-/** 与加粗等操作共用 Crepe 浮窗，保留其维护的编辑器选区。 */
-function openSelectionMenu() {
+/* ------------------------------------------------------------------ *
+ * 编辑器右键菜单 / 图片操作 / 文档引用悬停卡
+ * ------------------------------------------------------------------ */
+
+function closeContextMenu(focus = false) {
+  contextMenu.value = null
+  contextItems.value = []
+  if (focus) viewOf()?.focus()
+}
+
+function imageNodeAt(pos) {
   const view = viewOf()
-  if (!view || props.readonly || lossy.value) return
-  if (menu.value) { closeMenu(); return }
-  const button = host.value?.querySelector('[data-toolbar-item="block-type"]')
-  const rect = button?.getBoundingClientRect()
-  if (!rect) return
-  const anchor = view.state.selection.$from
-  const block = anchor.depth ? view.nodeDOM(anchor.before(anchor.depth)) : null
-  const foldInfo = foldInfoOf(block)
-  menu.value = {
-    x: Math.max(8, Math.min(rect.left, window.innerWidth - 186)),
-    y: rect.bottom + 6,
-    groups: menuGroups(blockKindOf(view.state), foldInfo),
-    foldInfo
+  if (!view || !Number.isInteger(pos) || pos < 0) return null
+  const node = view.state.doc.nodeAt(pos)
+  return node?.type?.name === 'image-block' ? node : null
+}
+
+function imageAbsolute(src) {
+  try { return new URL(String(src || ''), location.origin).href } catch { return String(src || '') }
+}
+
+function imageKind(target) {
+  const clean = String(target || '').split('?')[0].toLowerCase()
+  if (clean.endsWith('.pdf')) return 'pdf'
+  if (clean.endsWith('.html') || clean.endsWith('.htm')) return 'h5'
+  return 'doc'
+}
+
+function imageContextItems() {
+  return [
+    { id: 'image-preview', label: '查看大图', icon: PhArrowsOutSimple },
+    { id: 'image-caption', label: '添加 / 编辑图注', icon: PhPencilLine, disabled: props.readonly },
+    { id: 'image-replace', label: '替换图片', icon: PhArrowClockwise, disabled: props.readonly },
+    { id: 'image-sep-1', separator: true },
+    { id: 'image-copy', label: '复制图片地址', icon: PhCopy },
+    { id: 'image-download', label: '下载图片', icon: PhExport },
+    { id: 'image-sep-2', separator: true },
+    { id: 'image-delete', label: '删除图片', icon: PhTrash, danger: true, disabled: props.readonly }
+  ]
+}
+
+async function copyPlainText(text) {
+  const value = String(text ?? '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch {
+    /* 权限被拒时退回 execCommand，桌面端通常仍然可用 */
   }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.setAttribute('readonly', '')
+    area.style.position = 'fixed'
+    area.style.left = '-9999px'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch {
+    return false
+  }
+}
+
+function selectionText(view) {
+  const { from, to } = view.state.selection
+  if (from >= to) return ''
+  return view.state.doc.textBetween(from, to, '\n', '\n')
+}
+
+function openContextMenu(event) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (target.closest('input, textarea, .cm-editor')) return
+  const view = viewOf()
+  if (!view) return
+
+  const imageBlock = target.closest('.milkdown-image-block')
+  if (imageBlock) {
+    let pos
+    try { pos = view.posAtDOM(imageBlock, 0) } catch { pos = null }
+    const node = imageNodeAt(pos)
+    if (node) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeMenu()
+      styleMenu.value = null
+      hideImageTools()
+      contextMenu.value = { kind: 'image', pos, src: node.attrs.src, caption: node.attrs.caption || '', x: event.clientX, y: event.clientY }
+      contextItems.value = imageContextItems()
+      return
+    }
+  }
+
+  if (!target.closest('.ProseMirror')) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeMenu()
+  styleMenu.value = null
+  hideImageTools()
+
+  const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+  if (coords) {
+    const { from, to } = view.state.selection
+    if (view.state.selection.empty || coords.pos < from || coords.pos > to) {
+      const next = TextSelection.near(view.state.doc.resolve(coords.pos))
+      view.dispatch(view.state.tr.setSelection(next))
+    }
+  }
+
+  const anchor = target.closest('a[href]')
+  const href = anchor?.getAttribute('href') || ''
+  const internal = href ? resolveDocHref(href, props.docFile || props.docId) : ''
+  const link = anchor ? { href, internal, label: anchor.textContent.trim() } : null
+  const empty = view.state.selection.empty
+  const items = [
+    { id: 'cut', label: '剪切', icon: PhScissors, shortcut: '⌘X', disabled: empty || props.readonly },
+    { id: 'copy', label: '复制', icon: PhCopy, shortcut: '⌘C', disabled: empty },
+    { id: 'paste', label: '粘贴', icon: PhClipboard, shortcut: '⌘V', disabled: props.readonly },
+    { id: 'sep-1', separator: true },
+    { id: 'select-all', label: '全选', icon: PhSquaresFour, shortcut: '⌘A' }
+  ]
+  if (link) {
+    items.push(
+      { id: 'sep-link', separator: true },
+      { id: 'open-link', label: link.internal ? '打开文档' : '打开链接', icon: link.internal ? PhFileText : PhArrowSquareOut },
+      { id: 'copy-link', label: '复制链接地址', icon: PhCopy }
+    )
+  }
+  if (!props.readonly) {
+    items.push(
+      { id: 'sep-doc', separator: true },
+      { id: 'insert-doc', label: '插入文档引用', icon: PhFileText }
+    )
+  }
+  contextMenu.value = { kind: 'text', link, x: event.clientX, y: event.clientY }
+  contextItems.value = items
+}
+
+async function pasteClipboard(view) {
+  if (props.readonly) return
+  try {
+    const text = await navigator.clipboard.readText()
+    if (!text) return
+    let tr = view.state.tr.insertText(text)
+    if (view.state.schema.marks.link) tr = tr.removeStoredMark(view.state.schema.marks.link)
+    userTyped = true
+    view.dispatch(tr.scrollIntoView())
+    view.focus()
+  } catch {
+    actionError.value = '浏览器没有允许读取剪贴板，请直接用 ⌘V 粘贴'
+  }
+}
+
+async function onContextPick(id) {
+  const menu = contextMenu.value
+  closeContextMenu()
+  if (!menu) return
+  if (id.startsWith('image-')) {
+    await imageAction(id.slice('image-'.length), menu)
+    return
+  }
+  const view = viewOf()
+  if (!view) return
+  if (id === 'cut' || id === 'copy') {
+    const text = selectionText(view)
+    if (!text) return
+    const ok = await copyPlainText(text)
+    if (!ok) {
+      actionError.value = '复制失败，请用 ⌘C / ⌘X 重试'
+      return
+    }
+    if (id === 'cut') {
+      userTyped = true
+      view.dispatch(view.state.tr.deleteSelection().scrollIntoView())
+      view.focus()
+    } else {
+      view.focus()
+    }
+    return
+  }
+  if (id === 'paste') return pasteClipboard(view)
+  if (id === 'select-all') {
+    view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)))
+    view.focus()
+    return
+  }
+  if (id === 'insert-doc') {
+    emit('pick-doc')
+    return
+  }
+  if (!menu.link) return
+  if (id === 'open-link') {
+    if (menu.link.internal) emit('open-doc', menu.link.internal)
+    else if (menu.link.href) window.open(menu.link.href, '_blank', 'noopener')
+    return
+  }
+  if (id === 'copy-link') {
+    const value = menu.link.internal ? menu.link.href : imageAbsolute(menu.link.href)
+    const ok = await copyPlainText(value)
+    if (!ok) actionError.value = '复制链接失败'
+  }
+}
+
+async function focusImageCaption(pos) {
+  const view = viewOf()
+  if (!view) return
+  let dom = view.nodeDOM(pos)
+  if (!dom || dom.nodeType !== 1) dom = view.domAtPos(pos).node
+  const block = dom?.nodeType === 1 ? (dom.closest('.milkdown-image-block') || dom) : dom?.parentElement?.closest('.milkdown-image-block')
+  if (!block) return
+  let input = block.querySelector('.caption-input')
+  if (!input) {
+    block.querySelector('.image-wrapper .operation .operation-item')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
+    for (let i = 0; i < 8 && !input; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 35))
+      input = block.querySelector('.caption-input')
+    }
+  }
+  input?.focus({ preventScroll: true })
+  input?.select?.()
+  window.setTimeout(() => {
+    const fresh = block.querySelector('.caption-input')
+    fresh?.focus({ preventScroll: true })
+    fresh?.select?.()
+  }, 30)
+}
+
+function closeImagePreview() {
+  imagePreview.value = null
+  viewOf()?.focus()
+}
+
+function downloadImage(node) {
+  const href = imageAbsolute(node.attrs.src)
+  const raw = String(node.attrs.caption || '').trim().replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)
+  const ext = (String(node.attrs.src || '').split('?')[0].match(/\.(png|jpe?g|webp|gif|svg|avif)$/i) || [])[0] || '.png'
+  const name = (raw || 'image') + (/\.[a-z0-9]{2,5}$/i.test(raw || '') ? '' : ext)
+  const a = document.createElement('a')
+  a.href = href
+  a.download = name
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+async function imageAction(action, info) {
+  const target = info || imageTools.value
+  const view = viewOf()
+  const node = imageNodeAt(target?.pos)
+  if (!view || !node) {
+    actionError.value = '图片位置已变化，请重试'
+    return
+  }
+  hideImageTools()
+  if (action === 'preview') {
+    imagePreview.value = { src: imageAbsolute(node.attrs.src), caption: node.attrs.caption || '' }
+    return
+  }
+  if (action === 'caption') {
+    if (!props.readonly) await focusImageCaption(target.pos)
+    return
+  }
+  if (action === 'replace') {
+    if (props.readonly) return
+    imageReplaceTarget = { pos: target.pos, src: node.attrs.src }
+    if (imageReplaceInput.value) {
+      imageReplaceInput.value.value = ''
+      imageReplaceInput.value.click()
+    }
+    return
+  }
+  if (action === 'copy') {
+    const ok = await copyPlainText(imageAbsolute(node.attrs.src))
+    if (!ok) actionError.value = '复制图片地址失败'
+    return
+  }
+  if (action === 'download') {
+    downloadImage(node)
+    return
+  }
+  if (action === 'delete') {
+    if (props.readonly) return
+    const tr = view.state.tr.delete(target.pos, target.pos + node.nodeSize)
+    userTyped = true
+    view.dispatch(tr.scrollIntoView())
+    view.focus()
+  }
+}
+
+async function onImageReplace(event) {
+  const file = event.target.files?.[0]
+  const target = imageReplaceTarget
+  event.target.value = ''
+  imageReplaceTarget = null
+  if (!file || !target) return
+  try {
+    const url = await uploadImage(file)
+    const view = viewOf()
+    const node = imageNodeAt(target.pos)
+    if (!view || !node || node.attrs.src !== target.src) throw new Error('图片位置已变化，请重试')
+    const tr = view.state.tr.setNodeMarkup(target.pos, undefined, { ...node.attrs, src: url, ratio: 1 })
+    userTyped = true
+    view.dispatch(tr)
+    view.focus()
+  } catch (error) {
+    actionError.value = error?.message || '替换图片失败'
+  }
+}
+
+function showImageTools(block) {
+  if (!block) return
+  const view = viewOf()
+  if (!view) return
+  let pos
+  try { pos = view.posAtDOM(block, 0) } catch { return }
+  const node = imageNodeAt(pos)
+  if (!node) return
+  if (imageTools.value?.pos === pos) return
+  const rect = block.getBoundingClientRect()
+  const width = props.readonly ? 110 : 210
+  imageTools.value = {
+    pos,
+    src: node.attrs.src,
+    caption: node.attrs.caption || '',
+    x: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+    y: Math.max(8, rect.top + 8)
+  }
+}
+
+function cancelImageHide() {
+  clearTimeout(imageHideTimer)
+}
+function hideImageTools() {
+  clearTimeout(imageHideTimer)
+  imageTools.value = null
+}
+function scheduleImageHide() {
+  clearTimeout(imageHideTimer)
+  imageHideTimer = window.setTimeout(() => { imageTools.value = null }, 220)
+}
+
+function showDocLinkCard(anchor) {
+  const target = resolveDocHref(anchor.getAttribute('href') || '', props.docFile || props.docId)
+  if (!target) return
+  if (docLinkCard.value?.target === target) return
+  const rect = anchor.getBoundingClientRect()
+  const width = 270, height = 76
+  let x = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
+  let y = rect.bottom + 8
+  if (y + height > window.innerHeight - 8) y = Math.max(8, rect.top - height - 8)
+  docLinkCard.value = {
+    target,
+    label: anchor.textContent.trim() || target.split('/').pop()?.replace(/\.(md|pdf|html?)$/i, '') || target,
+    path: target.replace(/\.(md|pdf|html?)$/i, ''),
+    kind: imageKind(target),
+    x,
+    y
+  }
+}
+function scheduleDocCardHide() {
+  clearTimeout(docCardHideTimer)
+  docCardHideTimer = window.setTimeout(() => { docLinkCard.value = null }, 120)
+}
+
+function onEditorPointerOver(event) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  const image = target.closest('.milkdown-image-block')
+  if (image) {
+    showImageTools(image)
+    return
+  }
+  const anchor = target.closest('.ProseMirror a[href]')
+  if (anchor) showDocLinkCard(anchor)
+}
+function onEditorPointerOut(event) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  const image = target.closest('.milkdown-image-block')
+  if (image && !image.contains(event.relatedTarget)) scheduleImageHide()
+  const anchor = target.closest('.ProseMirror a[href]')
+  if (anchor && !anchor.contains(event.relatedTarget)) scheduleDocCardHide()
 }
 
 /** 手柄纵向中心落在哪个顶级块上（手柄永远贴在某一块的左侧） */
@@ -676,8 +1203,8 @@ function openBlockMenu(handleEl) {
     return
   }
   const foldInfo = foldInfoOf(el)
-  const W = 176
-  const H = 470
+  const W = 196
+  const H = 400
   menu.value = {
     x: Math.max(8, Math.min(hr.right + 10, window.innerWidth - W - 8)),
     y: Math.max(8, Math.min(hr.top, window.innerHeight - H)),
@@ -690,7 +1217,7 @@ function openBlockMenu(handleEl) {
 function onHandleDown(e) {
   if (props.readonly) return
   const toolbarItem = e.target?.closest?.('[data-toolbar-item]')
-  if (toolbarItem && toolbarItem.dataset.toolbarItem !== 'block-type') userTyped = true
+  if (toolbarItem) userTyped = true
   const handle = e.target?.closest?.('.milkdown-block-handle')
   if (!handle) return
   const items = handle.querySelectorAll('.operation-item')
@@ -727,9 +1254,13 @@ function onHeadingClick(e) {
 }
 
 function onDocDown(e) {
-  if (e.target?.closest?.('.bt-menu, .text-style-menu, [data-toolbar-item="block-type"], [data-toolbar-item="reader-style"]')) return
+  const target = e.target
+  if (target?.closest?.('.bt-menu, .text-style-menu, .editor-context-menu, .reader-image-tools, [data-toolbar-item="reader-style"]')) return
   if (menu.value) closeMenu()
   styleMenu.value = null
+  closeContextMenu()
+  hideImageTools()
+  docLinkCard.value = null
 }
 
 /*
@@ -738,7 +1269,11 @@ function onDocDown(e) {
  * 点下去的坐标就落到正文上了，看起来就是点了没反应。
  */
 function onDocScroll(e) {
+  if (e.target?.closest?.('.editor-context-menu')) return
   if (styleMenu.value && !e.target?.closest?.('.text-style-menu')) styleMenu.value = null
+  closeContextMenu()
+  hideImageTools()
+  docLinkCard.value = null
   if (!menu.value) return
   const t = e.target
   if (t && t.nodeType === 1 && t.closest && t.closest('.bt-menu')) return
@@ -746,7 +1281,16 @@ function onDocScroll(e) {
 }
 
 function onDocKey(e) {
-  if (e.key === 'Escape') { closeMenu(); styleMenu.value = null }
+  if (e.key === 'Escape') {
+    const hadMenu = !!menu.value || !!styleMenu.value || !!contextMenu.value || !!imageTools.value || !!imagePreview.value || !!docLinkCard.value
+    closeMenu()
+    styleMenu.value = null
+    closeContextMenu()
+    hideImageTools()
+    imagePreview.value = null
+    docLinkCard.value = null
+    if (hadMenu) viewOf()?.focus()
+  }
 }
 
 async function onMenuPick(kind) {
@@ -784,6 +1328,11 @@ onBeforeUnmount(async () => {
   host.value?.removeEventListener('click', openCalloutIcon)
   host.value?.removeEventListener('click', openRawBlock)
   host.value?.removeEventListener('keydown', onCalloutIconKey, true)
+  host.value?.removeEventListener('contextmenu', openContextMenu)
+  host.value?.removeEventListener('pointerover', onEditorPointerOver)
+  host.value?.removeEventListener('pointerout', onEditorPointerOut)
+  clearTimeout(imageHideTimer)
+  clearTimeout(docCardHideTimer)
   host.value?.removeEventListener('pointerdown', openFormula, true)
   host.value?.removeEventListener('keydown', openFormula, true)
   host.value?.removeEventListener('keydown', onHeadingBoundary, true)

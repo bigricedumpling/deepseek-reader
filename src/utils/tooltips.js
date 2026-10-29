@@ -42,6 +42,7 @@ export function installTooltips() {
       const below = rect.top < height + 16
       tip.style.left = left + 'px'
       tip.style.top = (below ? rect.bottom + 8 : rect.top - height - 8) + 'px'
+      tip.classList.toggle('is-below', below)
     }, 550)
   }
   function anchorFor(target) { return target?.closest?.('[title], [data-tooltip]') }

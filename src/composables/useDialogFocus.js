@@ -7,7 +7,11 @@ export function useDialogFocus(open, element, cancel) {
     if (stack.at(-1) !== token || !element.value) return
     const nestedMenu=event.target.closest?.('[role=listbox],[role=menu]')
     if(nestedMenu&&!element.value.contains(nestedMenu))return
-    if (event.key === 'Escape' && cancel) { event.preventDefault(); event.stopImmediatePropagation(); cancel(); return }
+    if (event.key === 'Escape' && cancel) {
+      // 只有声明了本地 Esc 行为的字段才拦截，避免搜索框里的 Esc 关不掉弹窗。
+      if (event.target?.closest?.('[data-esc-local]')) return
+      event.preventDefault(); event.stopImmediatePropagation(); cancel(); return
+    }
     if (event.key !== 'Tab') return
     let controls = [...element.value.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')].filter(el => el.getClientRects().length)
     // A native radio group contributes one Tab stop; arrow keys move inside it.
@@ -32,7 +36,11 @@ export function useDialogFocus(open, element, cancel) {
     previous = document.activeElement; stack.push(token)
     document.addEventListener('keydown', keydown, true)
     await nextTick()
-    if (stack.at(-1) === token) (element.value?.querySelector('input,button:not(:disabled),textarea') || element.value)?.focus()
+    if (stack.at(-1) === token) {
+      const preferred = element.value?.querySelector('[autofocus]')
+      const target = preferred || element.value?.querySelector('input,button:not(:disabled),textarea') || element.value
+      target?.focus()
+    }
   }, { immediate: true })
   onBeforeUnmount(release)
 }

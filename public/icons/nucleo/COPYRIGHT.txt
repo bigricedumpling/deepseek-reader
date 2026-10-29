@@ -1,0 +1,13 @@
+Nucleo Free Icons — Isometric and SVG Arcade
+Source pages:
+  https://nucleoapp.com/svg-isometric-icons
+  https://nucleoapp.com/svg-arcade-icons
+Import packages (linked from the free pages):
+  https://iconstore-nc.s3-us-west-2.amazonaws.com/Nucleo-Isometric.zip
+  https://iconstore-nc.s3-us-west-2.amazonaws.com/Nucleo-Arcade.zip
+Counts in this picker:
+  Isometric: 141
+  Arcade: 570 (566 from the current free package, plus 5 legacy samples kept for compatibility)
+Copyright © Nucleo. These are free Nucleo icon sets, not MIT-licensed project code.
+The project's MIT license does not apply to these SVG files.
+Please confirm the current Nucleo free-icon license before redistributing the app or the icons.

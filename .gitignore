@@ -17,3 +17,7 @@ public/lib-*.svg
 
 # macOS custom folder icon
 Icon?
+# The KB icon picker ships these SVGs; "Icon?" also matches "icons" on case-insensitive filesystems.
+!public/icons/
+!public/icons/glass/
+!public/icons/glass/**

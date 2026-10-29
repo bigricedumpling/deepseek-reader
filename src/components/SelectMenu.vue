@@ -1,5 +1,5 @@
 <template>
-  <button ref="trigger" class="select-menu-trigger" type="button" :aria-label="label" aria-haspopup="listbox" :aria-expanded="open" @click="toggle" @keydown.down.prevent="show" @keydown.up.prevent="show">
+  <button ref="trigger" class="select-menu-trigger" :class="{ 'is-open': open }" type="button" :aria-label="label" aria-haspopup="listbox" :aria-expanded="open" @click="toggle" @keydown.down.prevent="show" @keydown.up.prevent="show">
     <span>{{ options.find(item => item.value === modelValue)?.label }}</span><PhCaretDown :size="14" />
   </button>
   <Teleport to="body">
@@ -12,7 +12,7 @@
 </template>
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { PhCaretDown, PhCheck } from '@phosphor-icons/vue'
+import { PhCaretDown, PhCheck } from '../icons/remix'
 const props = defineProps({ modelValue: String, options: { type: Array, default: () => [] }, label: String })
 const emit = defineEmits(['update:modelValue'])
 const inDialog=ref(false)
@@ -21,7 +21,11 @@ function close(focus = false) { open.value = false; if (focus) trigger.value?.fo
 async function show() {
   inDialog.value=!!trigger.value.closest('[role=dialog]')
   const rect = trigger.value.getBoundingClientRect(), width = Math.min(innerWidth - 16, Math.max(128, rect.width))
-  position.value = { width: width + 'px', left: Math.max(8, Math.min(rect.left, innerWidth - width - 8)) + 'px', top: Math.max(8, Math.min(rect.bottom + 6, innerHeight - props.options.length * 36 - 16)) + 'px' }
+  const height = props.options.length * 34 + 10
+  let top = rect.bottom + 6
+  if (top + height > innerHeight - 8) top = rect.top - height - 6
+  top = Math.max(8, Math.min(top, innerHeight - height - 8))
+  position.value = { width: width + 'px', left: Math.max(8, Math.min(rect.left, innerWidth - width - 8)) + 'px', top: top + 'px' }
   active.value = Math.max(0, props.options.findIndex(item => item.value === props.modelValue)); open.value = true
   await nextTick(); panel.value?.children[active.value]?.focus()
 }
@@ -43,7 +47,7 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', outside); wi
 </script>
 <style>
 .select-menu-trigger{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:36px;padding:8px 12px;border:1px solid var(--c-line);border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);font:inherit;font-size:12px;color:var(--c-sub);text-align:left}
-.select-menu-trigger span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.select-menu-trigger svg{flex:none}
+.select-menu-trigger span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.select-menu-trigger svg{flex:none;transition:transform 200ms var(--motion-snap)}.select-menu-trigger.is-open svg{transform:rotate(180deg)}
 .select-menu-panel{position:fixed;z-index:1200;padding:5px;border:1px solid var(--c-line);border-radius:10px;corner-shape:superellipse(2);background:var(--c-pop);box-shadow:var(--c-pop-shadow);font-synthesis:none}
 .select-menu-panel button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:34px;padding:7px 10px;border-radius:6px;corner-shape:superellipse(2);font-size:12px;text-align:left}.select-menu-panel button:hover,.select-menu-panel button:focus-visible{background:var(--c-hover);outline:0}
 </style>

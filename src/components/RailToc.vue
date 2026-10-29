@@ -8,12 +8,12 @@
       @mouseenter="showHint(item,$event)" @focus="showHint(item,$event)" @blur="hint=null" @click.stop="go(i)">
       <span :style="{width:(item.level > 2 ? 9 : item.level === 2 ? 12 : 16)+'px'}" />
     </button>
-    <Teleport to="body"><div v-if="hint" class="rail-toc-hint ui-font" role="tooltip" :style="{top:hint.y+'px',right:hint.right+'px'}">{{ hint.title }}</div></Teleport>
+    <Teleport to="body"><Transition name="toc-hint"><div v-if="hint" class="rail-toc-hint ui-font" role="tooltip" :style="{top:hint.y+'px',right:hint.right+'px'}">{{ hint.title }}</div></Transition></Teleport>
   </nav>
 </template>
 <script setup>
 import {ref, computed, watch, onMounted, onBeforeUnmount, nextTick} from 'vue'
-import {PhCaretLeft} from '@phosphor-icons/vue'
+import {PhCaretLeft} from '../icons/remix'
 import {useDocsStore} from '../stores/docs'
 import {useReaderStore} from '../stores/reader'
 import {unfoldKeys, foldKey} from '../utils/toc-fold'
@@ -64,12 +64,17 @@ onBeforeUnmount(()=>{scroller?.removeEventListener('scroll',onScroll);cancelAnim
 </script>
 <style scoped>
 .rail-toc{position:absolute;top:50%;right:6px;z-index:5;transform:translateY(-50%);width:32px;max-height:60vh;overflow:hidden;overflow:clip;padding:4px 0}
-.rail-toc-handle{display:flex;justify-content:center;align-items:center;width:32px;height:24px;margin-bottom:2px;border-radius:6px;background:var(--c-surface);color:var(--c-faint);opacity:.4;transition:opacity .15s,background .15s,color .15s}
+.rail-toc-handle{display:flex;justify-content:center;align-items:center;width:32px;height:24px;margin-bottom:2px;border-radius:6px;background:transparent;color:var(--c-faint);opacity:.4;transition:opacity .15s,background .15s,color .15s}
 .rail-toc:hover .rail-toc-handle{opacity:.85}
-.rail-toc-handle:hover,.rail-toc-handle:focus-visible{opacity:1;background:var(--c-hover);color:var(--c-accent)}
+.rail-toc-handle:hover,.rail-toc-handle:focus-visible{opacity:1;background:transparent;color:var(--c-accent)}
 .rail-toc-stop{display:flex;justify-content:center;align-items:center;width:32px;height:15px;outline-offset:-2px}
 .rail-toc-stop span{height:1.5px;flex-shrink:0;border-radius:2px;background:var(--c-faint);opacity:.26;transition:opacity .15s,background .15s}
 .rail-toc-stop.active span{opacity:.85;background:var(--c-ink)}
 .rail-toc-stop:hover span,.rail-toc-stop:focus-visible span{opacity:1;background:var(--c-accent)}
-.rail-toc-hint{position:fixed;transform:translateY(-50%);z-index:90;max-width:min(230px,calc(100vw - 64px));padding:5px 9px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-pop);box-shadow:0 2px 8px #0000000d;color:var(--c-sub);font-size:11.5px;line-height:1.5;pointer-events:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rail-toc-hint{position:fixed;transform:translateY(-50%);z-index:var(--layer-hint);max-width:min(280px,calc(100vw - 64px));padding:5px 12px;border:0!important;border-radius:999px;background:transparent!important;box-shadow:none!important;color:var(--c-sub)!important;font-size:11.5px;line-height:1.5;pointer-events:none;overflow:hidden;white-space:nowrap;isolation:isolate;clip-path:inset(0 0 0 0);transition:clip-path 160ms var(--motion-snap),opacity 100ms ease,transform 160ms var(--motion-snap),top 180ms var(--motion-snap),right 180ms var(--motion-snap)}
+.rail-toc-hint::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:linear-gradient(to right,transparent 0%,color-mix(in srgb,var(--c-panel) 72%,transparent) 22%,color-mix(in srgb,var(--c-panel) 72%,transparent) 78%,transparent 100%);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.toc-hint-enter-active{transition:clip-path 150ms var(--motion-snap),opacity 90ms ease,transform 150ms var(--motion-snap),top 180ms var(--motion-snap),right 180ms var(--motion-snap)}
+.toc-hint-leave-active{transition:clip-path 300ms var(--motion-pop),opacity 260ms ease,transform 300ms var(--motion-pop),top 180ms var(--motion-snap),right 180ms var(--motion-snap)}
+.toc-hint-enter-from{opacity:0;clip-path:inset(0 0 0 100%);transform:translateY(-50%) translateX(4px)}
+.toc-hint-leave-to{opacity:0;clip-path:inset(0 0 0 70%);transform:translateY(-50%) translateX(4px) scale(.98);filter:blur(1px)}
 </style>

@@ -1,0 +1,5 @@
+Nucleo Glass Essential icons (248)
+Source: https://nucleoapp.com/svg-glass-icons
+Import package: https://iconstore-nc.s3-us-west-2.amazonaws.com/Nucleo-Glass-Essential.zip
+Copyright (c) Nucleo. Used under the Nucleo Icons License; these assets are not covered by the project's MIT source license.
+Trial use: verify the license terms for distribution before shipping.

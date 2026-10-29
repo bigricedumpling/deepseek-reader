@@ -26,6 +26,7 @@ if (import.meta.hot) {
 
 import { $prose } from '@milkdown/kit/utils'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
+import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import { lift, wrapIn } from '@milkdown/kit/prose/commands'
 import { wrapInList, liftListItem, sinkListItem } from '@milkdown/kit/prose/schema-list'
 
@@ -337,7 +338,7 @@ function landSpot(doc, index, from, deletedSize) {
 /* 当前编辑器实例：插入链接要用它 */
 let activeView = null
 
-/** 从 fromDoc 所在目录算到 target 的相对路径（都在抽屉根下） */
+/** 从 fromDoc 所在目录算到 target 的相对路径（都在知识库根下） */
 function relativePath(fromDoc, target) {
   const a = String(fromDoc || '').split('/').slice(0, -1)
   const b = String(target || '').split('/')
@@ -347,7 +348,7 @@ function relativePath(fromDoc, target) {
   return up.concat(b.slice(i)).join('/')
 }
 
-/** 把正文里的相对链接解析成抽屉里的路径（点了要开哪一篇） */
+/** 把正文里的相对链接解析成知识库里的路径（点了要开哪一篇） */
 export function resolveDocHref(href, fromDoc) {
   const raw = String(href || '').split('#')[0]
   if (!raw || /^[a-z]+:/i.test(raw) || raw.startsWith('/')) return ''
@@ -364,7 +365,7 @@ export function resolveDocHref(href, fromDoc) {
 }
 
 /**
- * 在光标处插入一条指向当前抽屉其他文档的链接。
+ * 在光标处插入一条指向当前知识库其他文档的链接。
  *
  * 存成普通的 markdown 链接 —— 正文里不留私货，换任何编辑器打开都还是人话；
  * 点击的行为由下面的"内部链接"分支负责：开工具内部的标签页，不是浏览器标签页。
@@ -395,7 +396,10 @@ export function insertDocLink(name, relPath, fromDoc) {
     const at = tr.mapping.map(from)
     const tip = tr.mapping.map(to)
     tr.insertText(name, at, tip)
+    tr.removeMark(at, at + name.length, link)
     tr.addMark(at, at + name.length, link.create({ href }))
+    tr.setSelection(TextSelection.near(tr.doc.resolve(at + name.length)))
+    tr.removeStoredMark(link)
     view.dispatch(tr.scrollIntoView())
     view.focus()
     return true
@@ -413,6 +417,23 @@ export function editorShortcuts(props = {}) {
       new Plugin({
         key: new PluginKey('reader-shortcuts'),
         props: {
+          decorations(state) {
+            const marks = []
+            state.doc.descendants((node, pos) => {
+              if (!node.isText) return
+              const link = node.marks.find((mark) => mark.type.name === 'link')
+              if (!link) return
+              const target = resolveDocHref(link.attrs.href, props.docId)
+              if (!target) return
+              const ext = target.toLowerCase().split('.').pop()
+              const kind = ext === 'pdf' ? 'is-pdf' : (ext === 'html' || ext === 'htm') ? 'is-h5' : 'is-doc'
+              marks.push(Decoration.inline(pos, pos + node.nodeSize, {
+                class: `reader-doc-link ${kind}`,
+                'data-doc-target': target
+              }))
+            })
+            return DecorationSet.create(state.doc, marks)
+          },
           handleKeyDown(view, event) {
             const mod = event.metaKey || event.ctrlKey
             const key = event.key
@@ -510,7 +531,7 @@ export function editorShortcuts(props = {}) {
               window.open(href, '_blank', 'noopener')
               return
             }
-            // 指向当前抽屉其他文档的链接：开成工具内部的标签页（不是浏览器标签页）
+            // 指向当前知识库其他文档的链接：开成工具内部的标签页（不是浏览器标签页）
             const target = resolveDocHref(href, props.docId)
             if (!target) return
             e.preventDefault()

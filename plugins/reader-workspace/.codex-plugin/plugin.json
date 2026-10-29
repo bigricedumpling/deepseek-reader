@@ -1,15 +1,15 @@
 {
   "name": "reader-workspace",
   "version": "1.0.0",
-  "description": "Read and edit authorized Reader libraries with version-safe updates.",
+  "description": "Read and edit local Typocket knowledge libraries with version-safe updates.",
   "author": {
     "name": "zangqucheng"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Reader Workspace",
-    "shortDescription": "Read and organize your Reader knowledge libraries.",
-    "longDescription": "Scoped access to Markdown documents, search, stable IDs, revision checks, metadata and history through the Reader content service.",
+    "shortDescription": "Read and organize your local knowledge libraries.",
+    "longDescription": "Read, search and organize Markdown documents in a local Typocket knowledge tree, with stable IDs, revision checks, metadata and history when the local service is running.",
     "developerName": "zangqucheng",
     "category": "Productivity",
     "capabilities": [
@@ -17,9 +17,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Search my authorized knowledge library.",
+      "Search my local knowledge library.",
       "Organize these notes without losing their images."
     ]
-  },
-  "mcpServers": "./.mcp.json"
+  }
 }

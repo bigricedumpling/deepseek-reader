@@ -1,6 +1,6 @@
 import {readerApi as api} from '../services/readerClient'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { renderMarkdown, extractToc, searchDocs } from '../utils/markdown'
 import { API_BASE } from '../utils/api'
 import { legacyInterviewDoc, legacyRootSectionPath, normalizeLibraryName } from '../utils/legacy-paths'
@@ -13,6 +13,7 @@ import { legacyInterviewDoc, legacyRootSectionPath, normalizeLibraryName } from 
  * 或者html 当 markdown 解析这类错，所以收成一个集合。
  */
 const PREVIEW_TYPES = new Set(['pdf', 'h5'])
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 /**
  * 文档树与正文都由本地接口提供，接口直接读写磁盘上的 md 文件。
@@ -49,6 +50,19 @@ function lastDocKey() {
  * 但要在文档树到手之后 prune 一次：文件可能已经被改名或删掉了。
  */
 const TABS_KEY = 'reader.tabs'
+const RECENT_DOCS_KEY = 'reader.recent-docs'
+
+function loadRecentDocs() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_DOCS_KEY) || '[]')
+    return Array.isArray(raw)
+      ? raw.filter(item => item && typeof item.file === 'string' && Number.isFinite(item.at)).slice(0, 40)
+      : []
+  } catch {
+    return []
+  }
+}
+const recentDocs = ref(loadRecentDocs())
 
 function tabsKey() {
   try {
@@ -81,6 +95,13 @@ function lastDoc() {
 function rememberDoc(file) {
   try {
     if (file) localStorage.setItem(lastDocKey(), file)
+  } catch {
+    /* 隐私模式下写不了就算了 */
+  }
+  if (!file) return
+  recentDocs.value = [{ file, at: Date.now() }, ...recentDocs.value.filter(item => item.file !== file)].slice(0, 40)
+  try {
+    localStorage.setItem(RECENT_DOCS_KEY, JSON.stringify(recentDocs.value))
   } catch {
     /* 隐私模式下写不了就算了 */
   }
@@ -180,30 +201,21 @@ export const useDocsStore = defineStore('docs', () => {
 
   const tabs = ref(loadTabs())
 
-  /* ---------- 身份与分享 ---------- */
+  /* ---------- 身份 ---------- */
 
   /** owner 可管理全部内容；guest 只见公开内容，且只能编辑未锁定项。 */
-  /** 每换一次抽屉 +1；侧边栏据此知道"折叠状态该重置了" */
+  /** 每换一次知识库 +1；侧边栏据此知道"折叠状态该重置了" */
   const libEpoch = ref(0)
+  /** 换库转场：out（旧标签淡出）→ loading（加载新库）→ in（新标签淡入）→ idle */
+  const libSwitch = reactive({ active: false, phase: 'idle', animated: false })
+  /** 换库时给 DocTabs 换 key，重置 goo / 滚动位置，避免选中块跨库飞行 */
+  const libSwitchKey = ref(0)
 
   const role = ref(window.__readerMode === 'owner' ? 'owner' : 'guest')
   const restoredCopy = ref(false), pdfTranslationAvailable=ref(false)
   const isGuest = computed(() => role.value !== 'owner')
-  const accessRequest = ref(null)
   const currentReadonly = computed(() => !canEdit(currentNode.value))
-  async function requestAccess(path, change) {
-    if (isGuest.value || !path) return
-    try {
-      if (isDirty.value && !(await save())) throw Error('请先保存当前改动')
-      await api('PUT', '/access', { path, ...change })
-      await loadAll()
-      window.dispatchEvent(new Event('reader-access-updated'))
-    } catch (reason) { setError(reason.message || reason) }
-  }
   function canEdit(node) { return !!node && (!isGuest.value || (node.locked === false && node.shared === true)) }
-
-  /** 分享设置：{ shared: { 路径: true }, editable: {...}, guestToken } */
-  const shareInfo = ref({ shared: {}, editable: {}, guestToken: '' })
 
   async function loadMe() {
     try {
@@ -212,17 +224,6 @@ export const useDocsStore = defineStore('docs', () => {
       if (json.ok) { role.value = json.data.role; restoredCopy.value = json.data.restoredCopy === true; pdfTranslationAvailable.value=json.data.pdfTranslationAvailable===true }
     } catch {
       /* 问不到就按"我"处理（本机 dev 一直是这个分支） */
-    }
-  }
-
-  async function loadShare() {
-    if (isGuest.value) return
-    try {
-      const res = await fetch(API_BASE + '/api/share')
-      const json = await res.json()
-      if (json.ok) shareInfo.value = json.data
-    } catch {
-      /* 读不到就先按空的来 */
     }
   }
 
@@ -254,6 +255,16 @@ export const useDocsStore = defineStore('docs', () => {
     saveTabs()
     if (currentPath.value !== file) return currentPath.value
     return tabs.value[Math.min(i, tabs.value.length - 1)] || ''
+  }
+
+  /** 拖拽排序后按新顺序保存；只接受同一批标签，避免外部误传。 */
+  function reorderTabs(files) {
+    if (!Array.isArray(files) || files.length !== tabs.value.length) return
+    const current = new Set(tabs.value)
+    if (new Set(files).size !== files.length || files.some(file => !current.has(file))) return
+    if (files.every((file, index) => file === tabs.value[index])) return
+    tabs.value = [...files]
+    saveTabs()
   }
 
   /** 树刷新后把已经不存在的标签清掉 */
@@ -296,7 +307,7 @@ export const useDocsStore = defineStore('docs', () => {
        *
        * 站点可能挂在子路径下（/deepseek/reader/onlyread/…），前缀会让以 /onlyread/ 开头
        * 落空，地址栏点名的那一篇就认不出来，页面回落到目录里第一篇 ——
-       * 表现是第二条分享链接打开的是第一篇。/edit 走的是去前缀后的路径，所以一直没暴露。
+       * 表现是第二条只读链接打开的是第一篇。/edit 走的是去前缀后的路径，所以一直没暴露。
        */
       const m = location.pathname.match(/\/(?:doc|edit|onlyread)\/(.+)$/)
       if (!m) return ''
@@ -306,7 +317,7 @@ export const useDocsStore = defineStore('docs', () => {
        * 路径里的斜杠会被编码成 %2F（例如 笔试题%2F笔试题交付：题目二），
        * 而 decodeURI 有意不还原 %2F —— 斜杠在路径里有特殊含义。
        * 结果是查表时拿着 %2F 去比，永远匹配不上，页面静默回落到目录里第一篇：
-       * 表现就是第二条分享链接打开的是第一篇。这个错误很隐蔽，因为页面不报错。
+       * 表现就是第二条只读链接打开的是第一篇。这个错误很隐蔽，因为页面不报错。
        *
        * 只解这一段，不能解整条 pathname：那样站点前缀里的编码也会被一起还原。
        */
@@ -322,7 +333,7 @@ export const useDocsStore = defineStore('docs', () => {
    *
    * 对外发出去的链接长这样：/onlyread/笔试题/笔试题交付：题目一
    * 那时 笔试题 与 调研报告 是文档根下的两个顶层目录。
-   * 后来资料按抽屉归拢：笔试题 成了Agent（设计方向）库，调研报告 挪进了它里面。
+   * 后来资料按知识库归拢：笔试题 成了Agent（设计方向）库，调研报告 挪进了它里面。
    *
    * 固定改名规则在 utils/legacy-paths.js；这里只保留需要看当前文档树才能判断的部分。
    *
@@ -391,7 +402,7 @@ export const useDocsStore = defineStore('docs', () => {
     const head = rest.split('/')[0]
     const inside = files.find((f) => f.file.startsWith(head + '/'))
     if (!inside) return ''
-    /* hit.file 里 head 之前的部分可能不止一层；抽屉只认最顶层的名字 */
+    /* hit.file 里 head 之前的部分可能不止一层；知识库只认最顶层的名字 */
     const idx = inside.file.indexOf(head)
     return idx > 0 ? inside.file.slice(0, idx).split('/')[0] : ''
   }
@@ -403,7 +414,7 @@ export const useDocsStore = defineStore('docs', () => {
       syncUrl()
       return
     }
-    // 路由点名的那一篇优先（别人分享过来的链接、或你提交作业时要别人直接看到的）
+    // 路由点名的那一篇优先（别人发过来的只读链接、或你提交作业时要别人直接看到的）
     const routed = routedDocPath()
     // 路由里写的是"不带扩展名的路径"（/edit/调研/数据调研），这里两种写法都认
     const routedHit = routed
@@ -428,7 +439,7 @@ export const useDocsStore = defineStore('docs', () => {
     const hit = want && allFiles.value.some((f) => f.file === want)
     currentPath.value = hit ? want : allFiles.value[0]?.file || ''
     openTab(currentPath.value)
-    // 空抽屉也要清掉地址里上一库的文档路径。
+    // 空知识库也要清掉地址里上一库的文档路径。
     syncUrl()
     if (currentPath.value && !PREVIEW_TYPES.has(currentNode.value?.type)) {
       try {
@@ -442,10 +453,10 @@ export const useDocsStore = defineStore('docs', () => {
   /* ---------- 读取 ---------- */
 
   /*
-   * 当前抽屉：地址栏里的 ?lib=<库名>。
+   * 当前知识库：地址栏里的 ?lib=<库名>。
    *
-   * 一个抽屉就是文档根下的一个文件夹。不选时看整棵树（工作区总览），
-   * 选了就只看那一个 —— 切换抽屉不换实例，只换这一个参数。
+   * 一个知识库就是文档根下的一个文件夹。不选时看整棵树（工作区总览），
+   * 选了就只看那一个 —— 切换知识库不换实例，只换这一个参数。
    */
   function routedLib() {
     try {
@@ -495,7 +506,7 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   /**
-   * 切换抽屉之后重新加载。
+   * 切换知识库之后重新加载。
    *
    * 关键一步：先把"当前这篇"清掉再拉树。
    *
@@ -504,24 +515,43 @@ export const useDocsStore = defineStore('docs', () => {
    * 于是出现 /edit/过程稿/…/xxx?lib=面试准备 这种"路径属于 A 库、lib 指向 B 库"的地址。
    * 清掉之后由 ensureCurrent 从新库的树里重新挑一篇，两边就一致了。
    */
-  async function switchLib() {
-    /*
-     * 发一个"换库了"的信号。
-     *
-     * 目录的展开/收起状态是按路径存的，而路径是带库名的 ——
-     * 换库之后旧路径在新库里一个都不存在，于是所有目录都成了"没标过 = 展开"，
-     * 看着就是"一更新/一切库，文件夹全被展开"。
-     * 侧边栏拿到这个信号后清一次折叠状态，让新库按自己的第一层重新收起。
-     */
-    libEpoch.value++
-    tabs.value = loadTabs()
-    currentPath.value = ''
-    rawMap.value = {}
-    savedMap.value = {}
-    revisionMap.value = {}
-    conflict.value = null
-    clearError()
-    await loadAll()
+  async function switchLib(options = {}) {
+    if (libSwitch.active) return
+    const reduceMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const animate = options.animate !== false && !reduceMotion
+    libSwitch.active = true
+    libSwitch.animated = animate
+    try {
+      // 先让旧标签完整地淡出，再换数据；不要在 0ms 就把整组标签替换掉。
+      if (animate) {
+        libSwitch.phase = 'out'
+        await wait(260)
+      }
+      libSwitch.phase = 'loading'
+      /*
+       * 换库了：目录折叠状态按路径存，旧路径在新库里都不存在，
+       * 所以这里发一次信号，让侧栏按新库重新收起。
+       */
+      libEpoch.value++
+      libSwitchKey.value++
+      tabs.value = loadTabs()
+      currentPath.value = ''
+      rawMap.value = {}
+      savedMap.value = {}
+      revisionMap.value = {}
+      conflict.value = null
+      clearError()
+      await loadAll()
+      libSwitch.phase = animate ? 'in' : 'idle'
+      // 新标签和宽度过渡完成后再回到 idle。
+      if (animate) await wait(340)
+    } finally {
+      libSwitch.phase = 'idle'
+      libSwitch.active = false
+      libSwitch.animated = false
+    }
   }
 
   let allRequest = 0
@@ -529,14 +559,13 @@ export const useDocsStore = defineStore('docs', () => {
     const request = ++allRequest
     // 先问清自己是谁：guest 拿到的树是服务端剪过的，前端只管别露出编辑入口
     await loadMe()
-    if (!isGuest.value) loadShare()
     loading.value = true
     clearError()
     try {
       if (!(await loadTree())) return
       if(currentPath.value)await loadPageMeta()
       if (request !== allRequest) return
-      // 路由点名的那一篇最优先（/edit/调研/数据调研、分享过来的 /onlyread/…）
+      // 路由点名的那一篇最优先（/edit/调研/数据调研、旧只读链接 /onlyread/…）
       const routed = routedDocPath()
       const routedHit = routed
         ? allFiles.value.find((d) => d.file === routed || d.file.replace(/\.(md|pdf|html?)$/i, '') === routed)
@@ -594,6 +623,8 @@ export const useDocsStore = defineStore('docs', () => {
   async function startTranslate() {
     const file = currentPath.value
     if (!file) return
+    const previous = pdfTranslate.value
+    pdfTranslate.value = { status: 'running', progress: 0, output: previous?.output || '', error: '' }
     try {
       const res = await fetch(API_BASE + '/api/pdf-translate', {
         method: 'POST',
@@ -602,18 +633,21 @@ export const useDocsStore = defineStore('docs', () => {
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || '起不了翻译任务')
+      if (currentPath.value !== file) return
       pdfTranslate.value = json.data
       if (json.data.error) setError(json.data.error)
       if (json.data.status === 'running') pollTranslate()
       else if (json.data.status === 'done') pdfView.value = 'translated'
     } catch (e) {
+      if (currentPath.value !== file) return
+      pdfTranslate.value = { status: 'failed', progress: 0, output: '', error: String(e.message || e) }
       setError('翻译失败：' + String(e.message || e))
     }
   }
 
   let translateTimer = null
 
-  /** 每 3 秒问一次进度，翻完自动切到译文 */
+  /** 每 1.5 秒问一次进度，翻完自动切到译文 */
   function pollTranslate() {
     clearTimeout(translateTimer)
     const file = currentPath.value
@@ -631,7 +665,7 @@ export const useDocsStore = defineStore('docs', () => {
       } catch {
         pollTranslate()
       }
-    }, 3000)
+    }, 1500)
   }
 
   /** 切到 pdf 时问一下有没有现成译文（有就显示看译文） */
@@ -913,6 +947,8 @@ export const useDocsStore = defineStore('docs', () => {
     contentEpoch,pageMeta,pageMetaRevision,loadPageMeta,savePageMeta,conflict,resolveConflict,renameLibrary,
     legacyLib,
     libEpoch,
+    libSwitch,
+    libSwitchKey,
     switchLib,
     moveDoc,
     moveCategory,
@@ -943,6 +979,7 @@ export const useDocsStore = defineStore('docs', () => {
     tabs,
     openTab,
     closeTab,
+    reorderTabs,
     allFiles,
     allDocs,
     currentNode,
@@ -968,10 +1005,8 @@ export const useDocsStore = defineStore('docs', () => {
     createCategory,
     renameCategory,
     deleteCategory,
-    role, restoredCopy, pdfTranslationAvailable,
-    isGuest, currentReadonly, canEdit, accessRequest, requestAccess,
-    shareInfo,
-    loadShare,
+    role, restoredCopy, pdfTranslationAvailable, recentDocs,
+    isGuest, currentReadonly, canEdit,
     syncUrl
   }
 })

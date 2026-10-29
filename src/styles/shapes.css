@@ -1,9 +1,10 @@
 /* Shared shell geometry. Editor content and its internal controls keep their own shapes. */
 :root {
   --radius-control: 12px;
-  --radius-surface: 22px;
-  --radius-row: 27px;
-  --radius-dialog: 40px;
+  --radius-surface: 16px;
+  --radius-row: 10px;
+  --radius-tab: 999px;
+  --radius-dialog: 24px;
   --corner-ui: superellipse(2);
 }
 :where(*):not(:where(.editor-shell, .editor-shell *)),

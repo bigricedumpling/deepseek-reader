@@ -42,7 +42,7 @@ export function isFoldable(key) {
 }
 
 async function loadFoldable(path) {
-  if (!path) return
+  if (!path || !/\.md$/i.test(path)) return
   try {
     const res = await fetch(API_BASE + '/api/foldable?path=' + encodeURIComponent(path))
     const json = await res.json()

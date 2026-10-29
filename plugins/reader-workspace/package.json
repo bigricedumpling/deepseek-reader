@@ -31,6 +31,8 @@
     "platform.js",
     "cordis.patch.yml",
     "scripts/reader.mjs",
+    "skills/**",
+    ".codex-plugin/**",
     "locale/*.json",
     "runtime/dist/**",
     "runtime/server/**",

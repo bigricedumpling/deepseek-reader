@@ -20,6 +20,7 @@ const KEY = {
   measure: 'reader.measure',
   zoom: 'reader.zoom',
   theme: 'reader.theme',
+  accent: 'reader.accent',
   para: 'reader.para',
   // 行距：KEY 里原来漏了这一项，setItem(undefined) 写进了名叫 undefined 的键，
   // 所以行距永远是默认值 1.95（设置面板里以前也没有这个入口，一直没暴露）
@@ -65,6 +66,22 @@ const bool = (k, fallback) => {
  * 同样的 1.95 放到中文里就偏松、整段发飘。三档分别是：
  * 窄（密排、看结构）、中（默认，长时间阅读）、宽（行短或需要逐行精读时）。
  */
+export const ACCENT_PRESETS = [
+  { id: 'ink', label: '墨黑', light: '#303030', dark: '#e0e0e0' },
+  { id: 'indigo', label: '靛蓝', light: '#3b5bdb', dark: '#8ea2ff' },
+  { id: 'navy', label: '藏蓝', light: '#1e3a8a', dark: '#9db4ff' },
+  { id: 'mist', label: '雾蓝', light: '#4a6fa5', dark: '#a9c6e8' },
+  { id: 'graphite', label: '石墨蓝', light: '#374151', dark: '#c7d2e0' }
+]
+
+
+/** #rrggbb -> the space-separated triplet used by rgb(var(--accent-rgb-*)). */
+function rgbTriplet(hex) {
+  const value = String(hex || '').replace('#', '')
+  if (!/^[0-9a-f]{6}$/i.test(value)) return '48 48 48'
+  return [0, 2, 4].map(i => parseInt(value.slice(i, i + 2), 16)).join(' ')
+}
+
 export const PACE_OPTIONS = [
   { id: 'narrow', label: '窄', lh: 1.6 },
   { id: 'normal', label: '中', lh: 1.8 },
@@ -98,7 +115,14 @@ export const useReaderStore = defineStore('reader', () => {
   const italicFace = ref(str('italic', 'kai'))
 
   /* ---------- 外观 ---------- */
-  const theme = ref(str('theme', 'auto'))
+  /* 不再提供“跟随系统”。旧设置里存过 auto 的，一次性落到当时系统对应的浅/深色。 */
+  const storedTheme = str('theme', 'light')
+  const initialTheme = storedTheme === 'auto'
+    ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : (['light', 'sepia', 'dark'].includes(storedTheme) ? storedTheme : 'light')
+  const theme = ref(initialTheme)
+  const storedAccent = str('accent', 'ink')
+  const accent = ref(ACCENT_PRESETS.some(item => item.id === storedAccent) ? storedAccent : 'ink')
   const zoom = ref(num('zoom', 100))
 
   /* ---------- 表格 ---------- */
@@ -108,6 +132,8 @@ export const useReaderStore = defineStore('reader', () => {
   /* ---------- 布局 ---------- */
   const tocOpen = ref(bool('toc', true))
   const tocWidth = ref(num('tocW', 244))
+  /** 只在拖拽目录宽度时使用：让文档顶栏的让位跟手，而不是走 380ms 过渡 */
+  const tocDragging = ref(false)
   const navCollapsed = ref(bool('nav', false))
   /** 侧栏宽度，可以拖（180~420），夹在 store 里跟别的设置一起落 localStorage */
   const navWidth = ref(Math.max(180, Math.min(420, num('navW', 236))))
@@ -133,25 +159,8 @@ export const useReaderStore = defineStore('reader', () => {
     }
   })
 
-  /** 跟随系统时要看系统偏好，所以不能只在切换时算一次 */
-  const prefersDark = ref(
-    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-  )
-  if (typeof window !== 'undefined') {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-      prefersDark.value = e.matches
-    })
-  }
-  /**
-   * 实际生效的主题。
-   *
-   * auto 看系统偏好，其余原样返回 —— 护眼是独立的一档，不能塌回 light，
-   * 否则 data-theme 只会有 light/dark 两个值，护眼样式永远匹配不上。
-   */
-  const resolvedTheme = computed(() => {
-    if (theme.value !== 'auto') return theme.value
-    return prefersDark.value ? 'dark' : 'light'
-  })
+  /* 实际生效的主题。护眼是独立的一档，不能塌回 light，否则 data-theme 只有两个值。 */
+  const resolvedTheme = computed(() => theme.value)
   const isDark = computed(() => resolvedTheme.value === 'dark')
 
   /**
@@ -169,6 +178,12 @@ export const useReaderStore = defineStore('reader', () => {
     b.dataset.table = tableWidth.value
     b.dataset.tableAlign = tableAlign.value
     b.dataset.theme = resolvedTheme.value
+    const accentPreset = ACCENT_PRESETS.find(item => item.id === accent.value) || ACCENT_PRESETS[0]
+    const rootStyle = document.documentElement.style
+    rootStyle.setProperty('--accent-light', accentPreset.light)
+    rootStyle.setProperty('--accent-rgb-light', rgbTriplet(accentPreset.light))
+    rootStyle.setProperty('--accent-dark', accentPreset.dark)
+    rootStyle.setProperty('--accent-rgb-dark', rgbTriplet(accentPreset.dark))
     b.style.setProperty('--reading-lh', String(leading.value))
     b.style.setProperty('--reading-tracking', tracking.value + 'em')
 
@@ -181,6 +196,7 @@ export const useReaderStore = defineStore('reader', () => {
     storageSet(KEY.strong, strongFace.value)
     storageSet(KEY.italic, italicFace.value)
     storageSet(KEY.theme, theme.value)
+    storageSet(KEY.accent, accent.value)
     storageSet(KEY.zoom, String(zoom.value))
     storageSet(KEY.tableWidth, tableWidth.value)
     storageSet(KEY.tableAlign, tableAlign.value)
@@ -193,7 +209,7 @@ export const useReaderStore = defineStore('reader', () => {
   watch(
     [
       font, size, measure, leading, tracking, paraStyle, strongFace, italicFace,
-      theme, zoom, tableWidth, tableAlign, tocOpen, tocWidth, navCollapsed, navWidth, resolvedTheme
+      theme, accent, zoom, tableWidth, tableAlign, tocOpen, tocWidth, navCollapsed, navWidth
     ],
     apply,
     { immediate: true }
@@ -201,8 +217,8 @@ export const useReaderStore = defineStore('reader', () => {
 
   return {
     font, size, measure, leading, tracking, paraStyle, strongFace, italicFace,
-    theme, zoom, tableWidth, tableAlign,
-    tocOpen, tocWidth, navCollapsed, navWidth,
+    theme, accent, zoom, tableWidth, tableAlign,
+    tocOpen, tocWidth, tocDragging, navCollapsed, navWidth,
     readingStyle, isDark, resolvedTheme
   }
 })

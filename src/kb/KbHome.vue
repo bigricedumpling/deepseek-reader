@@ -30,7 +30,7 @@
     </div>
 
     <footer class="kb-foot">
-      加一个抽屉：编辑 <code>public/kb.json</code>，刷新即可，不用重新构建。
+      加一个知识库：编辑 <code>public/kb.json</code>，刷新即可，不用重新构建。
     </footer>
   </div>
 </template>
@@ -42,7 +42,7 @@ import { API_BASE } from '../utils/api'
 import { storageGet, storageSet } from '../utils/storage'
 
 /*
- * 抽屉首页。
+ * 知识库首页。
  *
  * 跟阅读器是同一个工程里的第二个入口（kb/index.html），共用：
  *   - tokens.css 的配色（浅色 / 护眼 / 深色三套，跟阅读器同一份变量）

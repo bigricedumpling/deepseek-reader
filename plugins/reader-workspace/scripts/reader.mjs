@@ -22,7 +22,7 @@ export const definitions=[
 export async function callTool(name,args={},options={}){
  const def=definitions.find(x=>x[0]===name);if(!def)throw Error('Unknown tool')
  const base=process.env.READER_URL||'http://127.0.0.1:8090',token=process.env.READER_TOKEN
- if(!token)throw Error('请在阅读器的 Agent 连接中生成令牌并设置 READER_TOKEN')
+ if(!token)throw Error('此旧版入口需要已有的 READER_TOKEN；本机 Agent 可直接读写知识库文件')
  const url=new URL(base.replace(/\/$/,'')+'/api/'+def[3]);if(url.protocol!=='https:'&&!['127.0.0.1','localhost','[::1]'].includes(url.hostname))throw Error('远程连接必须使用 HTTPS')
  const method=def[2],schema=def[4];for(const k of schema.required)if(args[k]===undefined)throw Error('Missing '+k)
  for(const k of Object.keys(args))if(!Object.hasOwn(schema.properties,k))throw Error('Unknown argument '+k)
