@@ -7,6 +7,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
+    "dev:site": "vite --config site/vite.config.js",
+    "dev:demo": "node scripts/dev-demo.mjs",
     "dev:sandbox": "node scripts/dev-sandbox.mjs",
     "release:local": "node scripts/release-local.mjs",
     "release:plugin": "node scripts/release-plugin.mjs",
@@ -15,6 +17,7 @@
     "snapshot:status": "node scripts/snapshot-service.mjs status",
     "snapshot:uninstall": "node scripts/snapshot-service.mjs uninstall",
     "build": "vite build",
+    "build:site": "vite build --config site/vite.config.js",
     "preview": "vite preview --port 8090",
     "start:local": "PORT=8090 node server/serve.js",
     "service:install": "node scripts/local-service.mjs install",

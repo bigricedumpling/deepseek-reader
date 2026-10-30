@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Typocket — 给 Agent 写下的文件，一间阅览室</title>
+    <meta
+      name="description"
+      content="Typocket 是 DSH 里的一间阅览室。读工作区里的 Markdown、PDF 和网页，把值得留下的收进抽屉。文件始终留在本机。"
+    />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      html { background: #fbfbfb; }
+    </style>
+    <script>
+      (function () {
+        var width = window.innerWidth
+        var fine = window.matchMedia('(pointer: fine)').matches
+        var scale = width >= 1024 && fine
+          ? Math.min(Math.max(width / 1600, 0.85), 1.15)
+          : 1
+        document.documentElement.style.setProperty('--site-scale', String(scale))
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -21,3 +21,7 @@ Icon?
 !public/icons/
 !public/icons/glass/
 !public/icons/glass/**
+
+# Landing preview build
+site/dist/
+site/demo-kb/.reader/
