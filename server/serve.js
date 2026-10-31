@@ -13,6 +13,7 @@ import { BRAND_NAME } from './brand.js'
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
+import zlib from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { handleApi, share, DOCS_ROOT } from './content-api.js'
 import { roleOf } from './share.js'
@@ -67,6 +68,53 @@ const MIME = {
   '.ttf': 'font/ttf',
   '.pdf': 'application/pdf',
   '.map': 'application/json; charset=utf-8'
+}
+
+/*
+ * 静态资源压缩。
+ *
+ * 首屏最大的一块是构建后的 JS/CSS；字体和图片本身已经压缩，不再处理。
+ * 按文件路径缓存第一次的结果，后续请求直接复用；HTML 会按实例注入品牌，
+ * 不能缓存压缩结果，但它只有 1 KB 左右，现压也很便宜。
+ */
+const compressedCache = new Map()
+let compressedBytes = 0
+const COMPRESSED_LIMIT = 32 * 1024 * 1024
+
+function accepts(req, encoding) {
+  return new RegExp('(^|,)\\s*' + encoding + '\\s*(;|,|$)').test(String(req.headers['accept-encoding'] || '').toLowerCase())
+}
+
+function compressible(mime) {
+  return mime.startsWith('text/') || mime.startsWith('application/json') || mime.startsWith('application/javascript') || mime.startsWith('image/svg+xml')
+}
+
+function encodeBody(body, encoding, cacheKey) {
+  if (!encoding || body.length < 1024) return { body, encoding: '' }
+  const key = cacheKey ? cacheKey + ':' + encoding : ''
+  if (key && compressedCache.has(key)) return { body: compressedCache.get(key), encoding }
+  try {
+    const out = encoding === 'br'
+      ? zlib.brotliCompressSync(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } })
+      : zlib.gzipSync(body, { level: 6 })
+    if (key) {
+      if (compressedBytes + out.length > COMPRESSED_LIMIT) {
+        compressedCache.clear()
+        compressedBytes = 0
+      }
+      compressedCache.set(key, out)
+      compressedBytes += out.length
+    }
+    return { body: out, encoding }
+  } catch {
+    return { body, encoding: '' }
+  }
+}
+
+function cacheControlFor(pathname) {
+  if (pathname.startsWith('/assets/')) return 'public, max-age=31536000, immutable'
+  if (/^\/(fonts|icons|pdfjs)\//.test(pathname)) return 'public, max-age=86400'
+  return 'no-cache'
 }
 
 if (!fs.existsSync(path.join(DIST, 'index.html'))) {
@@ -217,13 +265,24 @@ const server = http.createServer(async (req, res) => {
       html = html.replace("</head>", "<script>" + script + "<\/script></head>")
       body = Buffer.from(html, "utf-8")
     }
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
+    const mime = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream'
+    const prefers = accepts(req, 'br') ? 'br' : accepts(req, 'gzip') ? 'gzip' : ''
+    const stat = fs.statSync(file)
+    const servingIndex = path.basename(file) === 'index.html'
+    /* 入口 HTML 可能按实例注入品牌，不缓存压缩结果；其余文件按 mtime 缓存。 */
+    const cacheKey = servingIndex ? '' : file + ':' + stat.mtimeMs + ':' + stat.size
+    const encoded = compressible(mime) ? encodeBody(body, prefers, cacheKey) : { body, encoding: '' }
+    const headers = {
+      'Content-Type': mime,
+      'Cache-Control': servingIndex ? 'no-cache' : cacheControlFor(url.pathname),
       // 别被搜索引擎收录
-      'X-Robots-Tag': 'noindex, nofollow'
-    })
-    res.end(body)
+      'X-Robots-Tag': 'noindex, nofollow',
+      'Content-Length': String(encoded.body.length)
+    }
+    if (compressible(mime)) headers.Vary = 'Accept-Encoding'
+    if (encoded.encoding) headers['Content-Encoding'] = encoded.encoding
+    res.writeHead(200, headers)
+    res.end(encoded.body)
   } catch {
     notFound(res)
   }
