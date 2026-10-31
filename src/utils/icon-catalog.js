@@ -1,5 +1,5 @@
-import { phosphorPaths } from './phosphor-paths.js'
-
+import { phosphorCore } from './phosphor-core.js'
+import { ICON_ALIASES } from './icon-aliases.js'
 
 /*
  * 知识库侧边图标用的图形集。
@@ -102,6 +102,7 @@ const LIBRARY = [
   ['shapes', '形状', 'PhShapes'],
   ['cube', '方块', 'PhCube'],
   ['squares', '图形', 'PhSquaresFour'],
+  /* 以上是首屏和知识库默认图标；完整 Phosphor 集按需加载。 */
   ['acorn', 'acorn', 'PhAcorn'],
   ['activity', 'activity', 'PhActivity'],
   ['address-book', 'address book', 'PhAddressBook'],
@@ -1545,40 +1546,33 @@ const COMPAT = [
   ['chat', 'PhChatCircle']
 ]
 
-const ICON_ALIASES = {
-  PhActivity: 'PhPulse',
-  PhArchiveBox: 'PhBoxArrowDown',
-  PhArchiveTray: 'PhTrayArrowDown',
-  PhCaduceus: 'PhAsclepius',
-  PhCircleWavy: 'PhSeal',
-  PhCircleWavyCheck: 'PhSealCheck',
-  PhCircleWavyQuestion: 'PhSealQuestion',
-  PhCircleWavyWarning: 'PhSealWarning',
-  PhFileDotted: 'PhFileDashed',
-  PhFileSearch: 'PhFileMagnifyingGlass',
-  PhFolderDotted: 'PhFolderDashed',
-  PhFolderNotch: 'PhFolder',
-  PhFolderNotchMinus: 'PhFolderMinus',
-  PhFolderNotchOpen: 'PhFolderOpen',
-  PhFolderNotchPlus: 'PhFolderPlus',
-  PhFolderSimpleDotted: 'PhFolderSimpleDashed',
-  PhLemniscate: 'PhInfinity',
-  PhTextBolder: 'PhTextB'
-}
-
-function iconPath(name) {
-  const key = ICON_ALIASES[name] || name
-  return phosphorPaths[key] || phosphorPaths.PhFileText
-}
-
-export const iconNames = Object.fromEntries([
-  ...LIBRARY.map(([key, , icon]) => [key, iconPath(icon)]),
-  ...COMPAT.map(([key, icon]) => [key, iconPath(icon)])
+/* 完整图标表只有打开选择器或遇到非常用图标时才下载。 */
+let phosphorPaths = null
+let pathsPromise = null
+const ICON_NAMES = Object.fromEntries([
+  ...LIBRARY.map(([key, , icon]) => [key, icon]),
+  ...COMPAT
 ])
+function pathKey(name) {
+  return ICON_ALIASES[ICON_NAMES[name] || name] || ICON_NAMES[name] || name
+}
+export function iconPaths(name) {
+  const key = pathKey(name)
+  return (phosphorPaths && phosphorPaths[key]) || phosphorCore[key] || null
+}
+export function ensureIconPaths() {
+  if (phosphorPaths) return Promise.resolve(phosphorPaths)
+  if (!pathsPromise) pathsPromise = import('./phosphor-paths.js').then(module => {
+    phosphorPaths = module.phosphorPaths
+    return phosphorPaths
+  })
+  return pathsPromise
+}
 
-/** Render an icon path map to standalone SVG markup (for favicon/rich blocks). */
+
+/** 渲染图标为独立 SVG（用于 favicon 和富文本提示块）。 */
 export function iconSvg(name, weight = 'regular', size = 24, color = 'currentColor') {
-  const paths = iconNames[name] || iconNames.file
+  const paths = iconPaths(name) || iconPaths('file')
   const body = paths[weight] || paths.regular
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="${size}" height="${size}" fill="${color}">${body}</svg>`
 }

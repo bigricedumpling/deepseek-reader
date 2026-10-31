@@ -45,11 +45,13 @@ export default defineConfig(async ({ command }) => ({
   plugins: [{ name: 'product-brand', transformIndexHtml(html) {
     const escape = value => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
     return html.replaceAll('__APP_NAME__', escape(BRAND_NAME)).replaceAll('__APP_DESCRIPTION__', escape(BRAND_DESCRIPTION_ZH))
-  } }, inlineIcon(), { name: 'pdf-runtime-assets', apply: 'build', closeBundle() { for (const dir of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.resolve('node_modules/pdfjs-dist', dir), path.resolve('dist/pdfjs', dir), {recursive:true}); fs.copyFileSync(path.resolve('node_modules/pdfjs-dist/LICENSE'), path.resolve('dist/pdfjs/LICENSE')); fs.rmSync(path.resolve('dist/fonts/Weixin.otf'), {force:true}); for (const weight of ['Regular','Medium','Bold','Black']) fs.rmSync(path.resolve(`dist/fonts/HarmonyOS_Sans_SC_${weight}.ttf`), {force:true}) } }, ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
+  } }, inlineIcon(), { name: 'pdf-runtime-assets', apply: 'build', closeBundle() { for (const dir of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.resolve('node_modules/pdfjs-dist', dir), path.resolve('dist/pdfjs', dir), {recursive:true}); fs.copyFileSync(path.resolve('node_modules/pdfjs-dist/LICENSE'), path.resolve('dist/pdfjs/LICENSE')); fs.rmSync(path.resolve('dist/fonts/Weixin.otf'), {force:true}); for (const weight of ['Regular','Medium','Bold','Black']) { fs.rmSync(path.resolve(`dist/fonts/HarmonyOS_Sans_SC_${weight}.ttf`), {force:true}); fs.rmSync(path.resolve(`dist/fonts/HarmonyOS_Sans_SC_${weight}.woff2`), {force:true}) } } }, ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src')
-    }
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, 'src') },
+      /* markdown-it-texmath 的 CJS 入口和 Crepe 的 ESM 入口会各自拉一份 KaTeX。 */
+      { find: /^katex$/, replacement: path.resolve(__dirname, 'node_modules/katex/dist/katex.mjs') }
+    ]
   },
   server: {
     port: 8090,

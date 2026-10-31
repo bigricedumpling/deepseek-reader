@@ -20,10 +20,10 @@
 </section></div></Transition></Teleport></template>
 <script setup>
 const visible=ref(true)
-import {ref,computed,onMounted,onBeforeUnmount,nextTick} from 'vue'
+import {ref,computed,watch,onMounted,onBeforeUnmount,nextTick} from 'vue'
 import {PhMagnifyingGlass,PhShuffle,PhImage,PhCheck} from '../icons/remix'
 import ContentIcon from './ContentIcon.vue'
-import {lineIcons,solidIcons,emojiGroups} from '../utils/icon-catalog'
+import {lineIcons,solidIcons,emojiGroups,ensureIconPaths} from '../utils/icon-catalog'
 import {nucleoIconGroups} from '../utils/nucleo-icons'
 import {glassIcons} from '../utils/glass-icons'
 import {API_BASE} from '../utils/api'
@@ -63,6 +63,7 @@ const groups=computed(()=>{
   return list.map(g=>({...g,items:g.items.filter(x=>!q||x.label.toLowerCase().includes(q)||x.value.includes(q)||String(x.tags||'').toLowerCase().includes(q))})).filter(g=>g.items.length)
 })
 function place(){const r=props.anchor?.getBoundingClientRect?.();const w=Math.min(400,innerWidth-24);const estimated=Math.min(520,innerHeight-24);const natural=(r?.bottom??80)+10;const top=Math.max(12,Math.min(natural,innerHeight-estimated-12));placement.value={position:'fixed',width:w+'px',left:Math.max(12,Math.min(r?.left??(innerWidth-w)/2,innerWidth-w-12))+'px',top:top+'px',maxHeight:'calc(100dvh - 24px)'}}
+watch(tab,value=>{if(value==='图标'||value==='实心')ensureIconPaths()},{immediate:true})
 onMounted(()=>{place();const cur=String(props.current||'');const fill=cur.includes('weight=fill');tab.value=cur.startsWith('glass:')?'玻璃':cur.startsWith('icon:')?(fill?'实心':'图标'):cur.startsWith('nucleo:')?'Nucleo':/^(data:|\/|https?:\/\/)/.test(cur)?'上传':'表情符号';const q=cur.indexOf('?')>=0?new URLSearchParams(cur.slice(cur.indexOf('?')+1)):null;if(cur.startsWith('glass:')){const h=q?.get('hue')||'0';glassHue.value=({'198':'145','216':'158','234':'170','252':'178','180':'158'})[h]||h}else if(cur.startsWith('icon:'))iconTint.value=q?.get('color')||'';window.addEventListener('resize',place);nextTick(()=>search.value?.focus());fetch(API_BASE+'/api/icon-history').then(r=>r.json()).then(json=>{if(json.ok&&Array.isArray(json.data))customIcons.value=json.data}).catch(()=>{})});onBeforeUnmount(()=>window.removeEventListener('resize',place))
 async function choose(value){if(busy.value)return;const chosen=previewValue(value);busy.value=true;error.value='';try{if(chosen.startsWith('data:image/png;base64,')&&!customIcons.value.includes(chosen)){const response=await fetch(API_BASE+'/api/icon-history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:chosen})});const json=await response.json();if(json.ok)customIcons.value=json.data;else if(response.status!==403)throw Error(json.error||'图标历史保存失败')}await props.save(chosen);if(chosen&&!chosen.startsWith('data:')){recent.value=[chosen,...recent.value.filter(x=>variantKey(x)!==variantKey(chosen))].slice(0,16);storageSet('reader:recent-icons',JSON.stringify(recent.value))}visible.value=false}catch(e){error.value=e.message}finally{busy.value=false}}
 function shuffle(){const items=groups.value.flatMap(g=>g.items);if(items.length)choose(items[Math.floor(Math.random()*items.length)].value)}

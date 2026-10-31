@@ -48,7 +48,7 @@ code, pre, kbd { font-family: var(--font-mono); }
   border-radius: 2px;
 }
 
-/* 界面字体固定为鸿蒙黑体，见 styles/tokens.css。 */
+/* 界面字体见 styles/tokens.css：默认 Noto Sans SC。 */
 .ui-font {
   font-family: var(--font-sans);
 }
@@ -75,27 +75,12 @@ code, pre, kbd { font-family: var(--font-mono); }
   font-weight: 700; font-style: italic; font-display: swap;
 }
 
-/* HarmonyOS Sans SC © Huawei Device Co., Ltd.; license in public/fonts/HarmonyOS-Sans-LICENSE.txt */
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Medium.woff2') format('woff2');
-  font-weight: 500 600; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Bold.woff2') format('woff2');
-  font-weight: 700 800; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Black.woff2') format('woff2');
-  font-weight: 900; font-style: normal; font-display: swap;
-}
+/*
+ * 界面与正文默认用 Noto Sans SC（SIL OFL，可按常用字裁剪、体积可接受）。
+ * HarmonyOS Sans 只保留给独立落地页；它的许可不允许改动字形，
+ * 整包 4 MB/字重在应用首屏不划算，因此应用不再声明它的 @font-face。
+ * 许可仍随包保留在 public/fonts/HarmonyOS-Sans-LICENSE.txt。
+ */
 
 /*
  * 代码看门狗提示。

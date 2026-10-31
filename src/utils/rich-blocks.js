@@ -1,4 +1,4 @@
-import { iconSvg } from './icon-catalog.js'
+import { iconSvg, iconPaths, ensureIconPaths } from './icon-catalog.js'
 import { $nodeSchema, $remark, $prose } from '@milkdown/kit/utils'
 import MarkdownIt from 'markdown-it'
 import { assetUrl, API_BASE } from './api.js'
@@ -15,7 +15,12 @@ function calloutIcon(value) {
  icon.title='更换提示块图标';icon.setAttribute('role','button');icon.setAttribute('aria-label','更换提示块图标');icon.tabIndex=0
  const valueIcon=value.icon??'💡'
  if(valueIcon.startsWith('icon:')){
-  icon.insertAdjacentHTML('beforeend', iconSvg(valueIcon.slice(5), 'fill', 22))
+  const name=valueIcon.slice(5)
+  icon.insertAdjacentHTML('beforeend', iconSvg(name, 'fill', 22))
+  if(!iconPaths(name))ensureIconPaths().then(()=>{
+   const svg=icon.querySelector('svg')
+   if(svg&&icon.isConnected)svg.outerHTML=iconSvg(name,'fill',22)
+  })
  }else if(/^(data:image\/|\/|https?:\/\/)/.test(valueIcon)){
   const img=document.createElement('img');img.src=assetUrl(valueIcon);img.alt='';img.width=img.height=22;img.style.objectFit='contain';icon.append(img)
  }else icon.textContent=valueIcon||'＋'

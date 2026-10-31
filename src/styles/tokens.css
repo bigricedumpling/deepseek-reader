@@ -29,7 +29,7 @@
   --c-overlay: rgba(0, 0, 0, 0.08);
   --c-pop-shadow: 0 2px 6px rgba(0, 0, 0, 0.025), 0 8px 24px rgba(0, 0, 0, 0.045);
 
-  --font-sans: "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
+  --font-sans: "Noto Sans SC", "HarmonyOS Sans SC", sans-serif;
   --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 
@@ -40,7 +40,7 @@
   --para-indent: 0em;             /* 段首缩进，缩进式排版才用 */
   --para-gap: 0.6em;              /* 段间距，段距式排版才用 */
   --cjk-strong-weight: 900;       /* 中文加粗面：900 是宋体 Black */
-  --reading-font: "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
+  --reading-font: "Noto Sans SC", "HarmonyOS Sans SC", sans-serif;
 }
 
 /* 中西文分开选：西文在前、中文在后，浏览器按字符回退，天然分流 */

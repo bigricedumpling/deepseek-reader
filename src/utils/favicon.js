@@ -1,4 +1,4 @@
-import {iconSvg} from './icon-catalog.js'
+import {iconSvg,iconPaths,ensureIconPaths} from './icon-catalog.js'
 import {assetUrl,API_BASE} from './api.js'
 const svgUri=svg=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg)
 const escapeXml=text=>String(text).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]))
@@ -18,10 +18,19 @@ export function faviconHref(value) {
  }
  cache.set(icon,href);return href
 }
+let current=''
 export function setFavicon(value){
+ current=value
  const href=faviconHref(value),previous=[...document.querySelectorAll('link[rel="icon"],link[rel="shortcut icon"]')]
  if(previous.length===1&&previous[0].getAttribute('href')===href)return
  const link=document.createElement('link');link.rel='icon';link.href=href
  if(href.startsWith('data:image/svg+xml')||/\.svg(?:[?#]|$)/i.test(href)){link.type='image/svg+xml';link.sizes='any'}
  document.head.append(link);previous.forEach(el=>el.remove())
+ if(typeof value==='string'&&value.startsWith('icon:')&&!iconPaths(value.slice(5))){
+  ensureIconPaths().then(()=>{
+   if(current!==value||!iconPaths(value.slice(5)))return
+   cache.delete(value)
+   setFavicon(value)
+  })
+ }
 }
