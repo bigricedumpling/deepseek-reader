@@ -2663,7 +2663,8 @@ onMounted(loadActivityUnread)
   transform-origin:top center;
   transform:translateY(-8px) scale(.96);
   /* 玻璃层始终不透明，只做位移动画；opacity 过渡会让 backdrop-filter 延迟上屏。 */
-  transition:transform 300ms var(--motion-pop),visibility 0s linear 300ms,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
+  /* 收起时用短而匀的位移，位移结束立刻隐藏；300ms 弹簧会提前停住，留出一段“卡一下”的静置。 */
+  transition:transform 180ms cubic-bezier(.4,0,.2,1),visibility 0s linear 180ms,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
 }
 .sidebar-actions.is-compact .kb-list-btn::before {
   content:'';
