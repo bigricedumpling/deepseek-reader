@@ -53,5 +53,10 @@ try {
   assert.equal((await call('GET', '/tree?lib=Target', null, 'guest')).status, 403)
   console.log('PASS: direct workspace import, source record, assets, private access, cross-library copy/move')
 } finally {
-  fs.rmSync(root, { recursive: true, force: true })
+  try {
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  } catch (error) {
+    // Windows can keep a handle on freshly written assets; cleanup should not fail the test.
+    console.warn(`WARN: could not remove ${root}: ${error.code || error.message}`)
+  }
 }
