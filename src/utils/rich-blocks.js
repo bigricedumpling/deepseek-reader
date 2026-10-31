@@ -1,5 +1,4 @@
-import { h, render } from 'vue'
-import { iconNames } from './icon-catalog.js'
+import { iconSvg } from './icon-catalog.js'
 import { $nodeSchema, $remark, $prose } from '@milkdown/kit/utils'
 import MarkdownIt from 'markdown-it'
 import { assetUrl, API_BASE } from './api.js'
@@ -16,8 +15,7 @@ function calloutIcon(value) {
  icon.title='更换提示块图标';icon.setAttribute('role','button');icon.setAttribute('aria-label','更换提示块图标');icon.tabIndex=0
  const valueIcon=value.icon??'💡'
  if(valueIcon.startsWith('icon:')){
-  const host=document.createElement('div');render(h(iconNames[valueIcon.slice(5)]||iconNames.file,{size:22,weight:'fill'}),host)
-  icon.append(host.firstElementChild.cloneNode(true));render(null,host)
+  icon.insertAdjacentHTML('beforeend', iconSvg(valueIcon.slice(5), 'fill', 22))
  }else if(/^(data:image\/|\/|https?:\/\/)/.test(valueIcon)){
   const img=document.createElement('img');img.src=assetUrl(valueIcon);img.alt='';img.width=img.height=22;img.style.objectFit='contain';icon.append(img)
  }else icon.textContent=valueIcon||'＋'

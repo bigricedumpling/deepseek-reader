@@ -7,11 +7,11 @@
 | Noto Sans SC | Google Fonts / @fontsource/noto-sans-sc | `fonts/Noto-Sans-SC-LICENSE.txt`，SIL OFL 1.1 |
 | Noto Serif SC | Google Fonts / @fontsource/noto-serif-sc | `fonts/Noto-Serif-SC-LICENSE.txt`，SIL OFL 1.1 |
 | 寒蝉楷书 ChillKai | https://github.com/Warren2060/Chillkai | `fonts/ChillKai-LICENSE.txt`，SIL OFL 1.1 |
-| HarmonyOS Sans | 华为官方下载包中的未修改 TTF | `fonts/HarmonyOS-Sans-LICENSE.txt`，允许与软件一起分发，须保留协议与显著声明 |
+| HarmonyOS Sans | 华为官方字体；应用构建使用 WOFF2，源 TTF 保留给独立站点，字形未修改 | `fonts/HarmonyOS-Sans-LICENSE.txt`，允许与软件一起分发，须保留协议与显著声明 |
 | TeX Gyre Pagella | GUST / TeX Gyre | `fonts/GUST-FONT-LICENSE.txt` |
 | PDF.js、CMap、标准字体与 WASM | pdfjs-dist / Mozilla PDF.js | `pdfjs/LICENSE` 与各资产目录的上游许可 |
 | Remix Icon 4.9.1 | https://remixicon.com | `licenses/RemixIcon-LICENSE.txt`；用于功能性 UI 图标，不作为产品品牌标识 |
-| Phosphor Icons（@phosphor-icons/vue 2.2.1） | https://phosphoricons.com | MIT；用于知识库/文档的 `图标` 选择器，UI 图标仍为 Remix |
+| Phosphor Icons（@phosphor-icons/core 2.1.1） | https://phosphoricons.com | MIT；只取 regular / fill 路径生成 `src/utils/phosphor-paths.js`，用于知识库/文档的 `图标` 选择器，UI 图标仍为 Remix |
 | Nucleo Glass Essential（248 枚免费集） | https://nucleoapp.com/svg-glass-icons · https://iconstore-nc.s3-us-west-2.amazonaws.com/Nucleo-Glass-Essential.zip | `icons/glass/COPYRIGHT.txt`；© Nucleo，非 MIT；试用/分发前确认 Nucleo Icons License |
 | Nucleo Isometric / SVG Arcade 免费集（141 / 570 枚） | https://nucleoapp.com/svg-isometric-icons · https://nucleoapp.com/svg-arcade-icons · https://iconstore-nc.s3-us-west-2.amazonaws.com/Nucleo-Isometric.zip · https://iconstore-nc.s3-us-west-2.amazonaws.com/Nucleo-Arcade.zip | `icons/nucleo/COPYRIGHT.txt`；© Nucleo，非 MIT；使用/再分发前确认 Nucleo 免费图标许可 |
 

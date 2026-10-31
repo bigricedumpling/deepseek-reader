@@ -45,7 +45,7 @@ export default defineConfig(async ({ command }) => ({
   plugins: [{ name: 'product-brand', transformIndexHtml(html) {
     const escape = value => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
     return html.replaceAll('__APP_NAME__', escape(BRAND_NAME)).replaceAll('__APP_DESCRIPTION__', escape(BRAND_DESCRIPTION_ZH))
-  } }, inlineIcon(), { name: 'pdf-runtime-assets', apply: 'build', closeBundle() { for (const dir of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.resolve('node_modules/pdfjs-dist', dir), path.resolve('dist/pdfjs', dir), {recursive:true}); fs.copyFileSync(path.resolve('node_modules/pdfjs-dist/LICENSE'), path.resolve('dist/pdfjs/LICENSE')); fs.rmSync(path.resolve('dist/fonts/Weixin.otf'), {force:true}) } }, ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
+  } }, inlineIcon(), { name: 'pdf-runtime-assets', apply: 'build', closeBundle() { for (const dir of ['cmaps','standard_fonts','wasm']) fs.cpSync(path.resolve('node_modules/pdfjs-dist', dir), path.resolve('dist/pdfjs', dir), {recursive:true}); fs.copyFileSync(path.resolve('node_modules/pdfjs-dist/LICENSE'), path.resolve('dist/pdfjs/LICENSE')); fs.rmSync(path.resolve('dist/fonts/Weixin.otf'), {force:true}); for (const weight of ['Regular','Medium','Bold','Black']) fs.rmSync(path.resolve(`dist/fonts/HarmonyOS_Sans_SC_${weight}.ttf`), {force:true}) } }, ...(command === 'serve' ? [(await import('./server/content-api.js')).default()] : []), tailwindcss(), vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')

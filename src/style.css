@@ -78,22 +78,22 @@ code, pre, kbd { font-family: var(--font-mono); }
 /* HarmonyOS Sans SC © Huawei Device Co., Ltd.; license in public/fonts/HarmonyOS-Sans-LICENSE.txt */
 @font-face {
   font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Regular.ttf') format('truetype');
+  src: url('/fonts/HarmonyOS_Sans_SC_Regular.woff2') format('woff2');
   font-weight: 400; font-style: normal; font-display: swap;
 }
 @font-face {
   font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Medium.ttf') format('truetype');
+  src: url('/fonts/HarmonyOS_Sans_SC_Medium.woff2') format('woff2');
   font-weight: 500 600; font-style: normal; font-display: swap;
 }
 @font-face {
   font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Bold.ttf') format('truetype');
+  src: url('/fonts/HarmonyOS_Sans_SC_Bold.woff2') format('woff2');
   font-weight: 700 800; font-style: normal; font-display: swap;
 }
 @font-face {
   font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Black.ttf') format('truetype');
+  src: url('/fonts/HarmonyOS_Sans_SC_Black.woff2') format('woff2');
   font-weight: 900; font-style: normal; font-display: swap;
 }
 

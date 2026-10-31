@@ -1,5 +1,4 @@
-import {h,render} from 'vue'
-import {iconNames} from './icon-catalog.js'
+import {iconSvg} from './icon-catalog.js'
 import {assetUrl,API_BASE} from './api.js'
 const svgUri=svg=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg)
 const escapeXml=text=>String(text).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]))
@@ -11,12 +10,9 @@ export function faviconHref(value) {
  if(cache.has(icon))return cache.get(icon)
  let href
  if(icon.startsWith('icon:')){
-  const component=iconNames[icon.slice(5)]||iconNames.file,host=document.createElement('div')
-  render(h(component,{size:64,weight:'fill'}),host)
-  const svg=host.querySelector('svg');svg.setAttribute('xmlns','http://www.w3.org/2000/svg')
-  const style=document.createElementNS('http://www.w3.org/2000/svg','style')
-  style.textContent=':root{color:#454545}@media(prefers-color-scheme:dark){:root{color:#dedede}}'
-  svg.prepend(style);href=svgUri(svg.outerHTML);render(null,host)
+  const markup=iconSvg(icon.slice(5),'fill',64)
+  const style='<style>:root{color:#454545}@media(prefers-color-scheme:dark){:root{color:#dedede}}</style>'
+  href=svgUri(markup.replace(/(<svg[^>]*>)/, '$1'+style))
  }else{
   href=svgUri('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="32" y="51" text-anchor="middle" font-size="54" font-family="Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif">'+escapeXml(icon)+'</text></svg>')
  }
