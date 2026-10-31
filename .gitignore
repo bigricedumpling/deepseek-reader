@@ -25,3 +25,7 @@ Icon?
 # Landing preview build
 site/dist/
 site/demo-kb/.reader/
+
+# Source icon modules are part of the app, not macOS folder metadata.
+!src/icons/
+!src/icons/**
