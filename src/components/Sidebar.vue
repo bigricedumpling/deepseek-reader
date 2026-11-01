@@ -212,7 +212,7 @@
     <Teleport to="#app-topbar-left" :disabled="!chromeCollapsed">
       <div class="side-header" :class="{ 'is-topbar': chromeCollapsed, 'is-compact': chromeCompact, 'is-collapsing': collapsed && !chromeCompact, 'is-expanding': chromeExpanding, 'is-merged': !collapsed }" @click.self="onCompactHeaderClick">
         <div class="kb-identity" :class="{ 'is-compact': collapsed }">
-          <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick"><ContentIcon :value="currentLibIcon" :size="20" /></button>
+          <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick"><ContentIcon :value="logo" :size="20" /></button>
           <div class="kb-title-wrap min-w-0">
             <!-- 两个标题叠在同一格交叉淡化：展开/收起时不会先消失再出现。 -->
             <button type="button" class="brand-line kb-title-compact" :class="{ 'is-hidden': !collapsed }" :tabindex="collapsed ? undefined : -1" :title="collapsed ? '展开目录' : (currentLib || '知识库')" @click.stop="onCompactTitleClick">
