@@ -1348,10 +1348,9 @@ onMounted(() => {
   })
 })
 /*
- * 默认知识库图标，同时暂作产品 logo / favicon 的占位。
- * 真正的产品图标定下来后，只替换 logo 这一处，知识库默认图标保持独立。
+ * 产品 logo / favicon 统一走构建后的 /favicon.svg；知识库默认图标仍然独立。
  */
-const siteIcon = '📁'
+const siteIcon = '__SITE_ICON__'
 /*
  * 产品标识与知识库图标分开：
  * 顶栏 logo / favicon 是产品自己的身份，不随当前知识库切换。

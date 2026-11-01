@@ -22,6 +22,8 @@ let current=''
 export function setFavicon(value){
  current=value
  const href=faviconHref(value),previous=[...document.querySelectorAll('link[rel="icon"],link[rel="shortcut icon"]')]
+ /* 站点图标在 index.html 里带了 light/dark 两个 media 变体，不要被单链接替换掉。 */
+ if(value==='__SITE_ICON__'&&previous.some(link=>String(link.getAttribute('href')||'').split('?')[0].endsWith('/favicon.svg')))return
  if(previous.length===1&&previous[0].getAttribute('href')===href)return
  const link=document.createElement('link');link.rel='icon';link.href=href
  if(href.startsWith('data:image/svg+xml')||/\.svg(?:[?#]|$)/i.test(href)){link.type='image/svg+xml';link.sizes='any'}
