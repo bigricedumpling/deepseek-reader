@@ -101,7 +101,6 @@ window.__ModuleLoader__.load({
           React.createElement('button', { type: 'button', onClick: () => setEditing(true) }, '更换地址')))
     }
 
-    const BRAND_MARK_TAB = 'M5.95 5.4C4.65 4.97 3.85 5.8 3.85 7.08v7.25c0 1.18.64 1.95 1.7 2.36l5.33 2.09c.73.29 1.51.29 2.24 0l5.33-2.09c1.06-.41 1.7-1.18 1.7-2.36V7.08c0-1.28-.8-2.11-2.1-1.68L12 7.37 5.95 5.4Z'
     const BRAND_MARK_LIGHT = [
       { d: "M85.8061 61.4241C86.2449 61.6617 86.7359 61.7861 87.2348 61.7861H158.967C160.636 61.7861 161.985 63.1496 161.966 64.8193L160.436 203.069C160.418 204.713 159.08 206.036 157.436 206.036H18V47C18 45.3431 19.3431 44 21 44H52.8736C53.3725 44 53.8635 44.1244 54.3023 44.362L85.8061 61.4241Z", fill: "#010101" },
       { d: "M169 99C169 102.866 172.134 106 176 106H188C188.552 106 189 106.448 189 107V119C189 122.866 192.134 126 196 126H198.522C199.264 126 199.748 126.78 199.418 127.445L161.23 204.37C160.724 205.391 159.682 206.036 158.543 206.036H18L78.8037 89.6113C79.3209 88.621 80.3456 88 81.4629 88H168C168.552 88 169 88.4477 169 89V99Z", fill: "white" },
@@ -119,10 +118,11 @@ window.__ModuleLoader__.load({
       const isTab = tone === 'neutral'
       const iconSize = Math.min(Number(size) || (isTab ? 16 : 24), isTab ? 16 : 24)
       if (isTab) {
+        const tabMarks = [BRAND_MARK_LIGHT[0], BRAND_MARK_LIGHT[2], BRAND_MARK_LIGHT[3]]
         return React.createElement('svg', {
-          width: iconSize, height: iconSize, viewBox: '2.5 2.5 19 19', fill: 'none',
+          width: iconSize, height: iconSize, viewBox: '0 0 250 250', fill: 'none',
           className, 'aria-hidden': 'true'
-        }, React.createElement('path', { d: BRAND_MARK_TAB, fill: 'currentColor' }))
+        }, ...tabMarks.map((item, index) => React.createElement('path', { key: index, d: item.d, fill: 'currentColor' })))
       }
       const dark = typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
       const items = dark ? BRAND_MARK_DARK : BRAND_MARK_LIGHT
