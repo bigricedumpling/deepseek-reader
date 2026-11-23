@@ -1,7 +1,7 @@
 <template>
   <main class="preview-shell">
     <header v-if="ready" class="preview-header">
-      <button class="collect-button" type="button" @click="openPicker">收进知识库</button>
+      <button class="collect-button" type="button" @click="openPicker">收进抽屉</button>
     </header>
     <div v-if="!ready" class="preview-state">
       <template v-if="!embedded">这个页面需要在 DSH 的工作区 Markdown 预览中打开。</template>
@@ -10,19 +10,18 @@
     </div>
     <div v-else class="preview-reader" @click="onArticleClick">
       <MarkdownEditor :key="readerVersion" :value="readerRaw" :readonly="true" :doc-id="filePath" />
-      <article class="preview-image-probe" aria-hidden="true" v-html="html" />
     </div>
     <div v-if="picker" class="picker-mask" @click.self="picker=false">
-      <section class="picker" role="dialog" aria-modal="true" aria-label="收进知识库" @keydown.esc="picker=false">
-        <div class="picker-heading">收进知识库<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
-        <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus /></div>
+      <section class="picker" role="dialog" aria-modal="true" aria-label="收进抽屉" @keydown.esc="picker=false">
+        <div class="picker-heading">收进抽屉<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
+        <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus /></div>
         <div class="picker-grid">
           <button v-for="lib in filteredLibraries" :key="lib.name" type="button" class="picker-card" :class="{ selected: destination === lib.name, draft: lib.name === DRAFT_NAME }" @click="destination=lib.name">
             <ContentIcon :value="lib.name === DRAFT_NAME ? 'icon:draft' : lib.icon || 'icon:book'" :size="24" />
             <strong>{{ lib.name }}</strong>
             <small>{{ lib.docs || 0 }} 篇</small>
           </button>
-          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的知识库</p><div v-if="!libraries.length" class="empty-library-create"><label>知识库名称<input v-model="newLibraryName" placeholder="新知识库" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建知识库</button></div>
+          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的抽屉</p><div v-if="!libraries.length" class="empty-library-create"><label>抽屉名称<input v-model="newLibraryName" placeholder="新抽屉" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建抽屉</button></div>
         </div>
         <label>文档名称<input v-model="newName" maxlength="160" /></label>
         <p v-if="pickerError" class="picker-error">{{ pickerError }}</p>
@@ -33,31 +32,12 @@
 </template>
 
 <script setup>
+import { scrollBehavior } from '../utils/scroll-target.js'
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import MarkdownIt from 'markdown-it'
+import { workspaceImages, rewriteWorkspaceImages } from '../../server/services/workspace-images.js'
 import { API_BASE } from '../utils/api'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import ContentIcon from '../components/ContentIcon.vue'
-
-// 工作区 Markdown 是任意项目文件，预览禁用原生 HTML 执行。
-const md = new MarkdownIt({ html: false, linkify: true, breaks: false })
-const imageRule = md.renderer.rules.image || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options))
-md.renderer.rules.image = (tokens, index, options, env, self) => {
-  const src = tokens[index].attrGet('src') || ''
-  if (src && !/^https?:\/\//i.test(src)) {
-    tokens[index].attrSet('data-workspace-src', src)
-    tokens[index].attrSet('src', 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=')
-  }
-  return imageRule(tokens, index, options, env, self)
-}
-const linkRule = md.renderer.rules.link_open || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options))
-md.renderer.rules.link_open = (tokens, index, options, env, self) => {
-  if (/^https?:\/\//i.test(tokens[index].attrGet('href') || '')) {
-    tokens[index].attrSet('target', '_blank')
-    tokens[index].attrSet('rel', 'noopener noreferrer')
-  }
-  return linkRule(tokens, index, options, env, self)
-}
 
 const embedded = window.parent !== window
 const title = ref('')
@@ -91,13 +71,15 @@ let nextRequestId = 0
 let awaitingImages = false
 let resizeObserver
 
-const html = computed(() => md.render(source.value.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '')))
+const imageSpans = computed(() => workspaceImages(source.value))
+const references = computed(() => [...new Set(imageSpans.value.map(span => span.reference))])
 const readerVersion = computed(() => filePath.value + ':' + sourceVersion.value + ':' + imageVersion.value)
 const readerRaw = computed(() => {
   imageVersion.value
-  let content = source.value
-  for (const [reference, image] of imageData) content = content.split(reference).join('data:' + image.mime + ';base64,' + image.base64)
-  return content
+  return rewriteWorkspaceImages(source.value, imageSpans.value, reference => {
+    const image = imageData.get(reference)
+    return image && 'data:' + image.mime + ';base64,' + image.base64
+  })
 })
 
 function notifyHeight() {
@@ -110,7 +92,7 @@ function onArticleClick(event) {
   if (!href || /^https?:\/\//i.test(href)) return
   if (href.startsWith('#')) {
     event.preventDefault()
-    document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: 'smooth' })
+    document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: scrollBehavior() })
     return
   }
   if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(href)) return
@@ -118,10 +100,8 @@ function onArticleClick(event) {
   window.parent.postMessage({ type: 'dsh-reader-preview:open-link', href }, parentOrigin || '*')
 }
 function scanImages() {
-  for (const img of document.querySelectorAll('.preview-image-probe img[data-workspace-src]')) {
-    const reference = img.getAttribute('data-workspace-src')
-    const saved = imageData.get(reference)
-    if (saved) { img.src = 'data:' + saved.mime + ';base64,' + saved.base64; continue }
+  for (const reference of references.value) {
+    if (imageData.has(reference)) continue
     if (imageFailures.has(reference) || [...requests.values()].includes(reference)) continue
     const requestId = String(++nextRequestId)
     requests.set(requestId, reference)
@@ -130,7 +110,7 @@ function scanImages() {
   }
   notifyHeight()
 }
-watch(html, async () => { await nextTick(); scanImages() }, { flush: 'post' })
+watch(references, async () => { await nextTick(); scanImages() }, { flush: 'post' })
 
 function onMessage(event) {
   const localParent = /^(?:https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?|dsh-app:\/\/app)$/.test(event.origin)
@@ -161,9 +141,9 @@ function onMessage(event) {
     requests.delete(String(data.requestId))
     pendingImages.value = Math.max(0, pendingImages.value - 1)
     if (data.error) imageFailures.set(reference, String(data.error))
-    else if (data.mime && data.base64) { imageData.set(reference, { mime: data.mime, base64: data.base64 }); if (pendingImages.value === 0) imageVersion.value++ }
+    else if (data.mime && data.base64) imageData.set(reference, { mime: data.mime, base64: data.base64 })
     scanImages()
-    if (pendingImages.value === 0 && imageData.size > 0 && !imageVersion.value) imageVersion.value++
+    if (pendingImages.value === 0 && imageData.size > 0) imageVersion.value++
     if (awaitingImages && pendingImages.value === 0) { awaitingImages = false; commitCollect() }
   } else if (data.type === 'dsh-reader-preview:full-content') {
     if (data.error) { if (busy.value) { pickerError.value = String(data.error); busy.value = false }; return }
@@ -205,7 +185,7 @@ async function openPicker() {
       fetch(API_BASE + '/api/libs', { credentials: 'same-origin' }).then(r => r.json())
     ])
     if (me?.data?.role !== 'owner') throw Error('请先在阅读器中进入管理工作区')
-    if (!result.ok) throw Error(result.error || '无法读取知识库')
+    if (!result.ok) throw Error(result.error || '无法读取抽屉')
     libraries.value = result.data.libs
     if (!libraries.value.some(lib => lib.name === destination.value)) destination.value = libraries.value[0]?.name || ''
   } catch (error) { pickerError.value = error.message }
@@ -219,8 +199,7 @@ function collect() {
   else window.parent.postMessage({ type: 'dsh-reader-preview:full-request' }, parentOrigin || '*')
 }
 async function commitCollect() {
-  const references = [...new Set([...document.querySelectorAll('.preview-image-probe img[data-workspace-src]')].map(img => img.getAttribute('data-workspace-src')))]
-  const missing = references.find(ref => !imageData.has(ref))
+  const missing = references.value.find(ref => !imageData.has(ref))
   if (missing) {
     pickerError.value = '图片无法保存：' + missing + (imageFailures.has(missing) ? '（' + imageFailures.get(missing) + '）' : '')
     busy.value = false
@@ -231,7 +210,7 @@ async function commitCollect() {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dir: destination.value, name: newName.value.trim(), content: source.value,
         reference: filePath.value, workspace: filePath.value.slice(0, filePath.value.lastIndexOf('/')),
-        assets: references.map(reference => ({ reference, ...imageData.get(reference) })) })
+        assets: references.value.map(reference => ({ reference, ...imageData.get(reference) })) })
     })
     const json = await response.json()
     if (!json.ok) throw Error(json.error || '收录失败')
@@ -252,7 +231,6 @@ body { margin: 0; }
 .preview-state { padding: 30px; color: var(--c-faint); font-size: 13px; }
 .preview-reader { min-height: calc(100vh - 44px); padding: 8px 0 80px; }
 .preview-reader .editor-shell { max-width: var(--measure,850px); margin: auto; }
-.preview-image-probe { display: none; }
 .picker-mask { position: fixed; inset: 0; z-index: 10; background: var(--c-overlay); display: grid; place-items: center; padding: 16px; }
 .picker { width: min(720px,100%); max-height: min(720px,88dvh); overflow: auto; padding: 24px; border: 1px solid var(--c-line); border-radius: 38px; corner-shape: superellipse(2); background: var(--c-pop); box-shadow: var(--c-pop-shadow); }
 .picker-heading { display: flex; align-items: center; justify-content: space-between; font-size: 17px; }

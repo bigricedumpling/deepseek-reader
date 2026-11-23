@@ -8,7 +8,7 @@
         <span v-if="tabItems.length && docId" class="tab-plus-sep" aria-hidden="true" />
         <button v-if="docId || tabItems.length || libraryEmpty" ref="quickButton" class="doc-quick" :class="{ 'is-on': quickOpen }" :disabled="store.libSwitch.phase === 'out' || store.libSwitch.phase === 'loading'" title="最近文档 / 新建文档" aria-label="最近文档 / 新建文档" :aria-expanded="quickOpen" @click.stop="toggleQuick"><PhPlus :size="15" /></button>
       </div>
-      <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原知识库"><PhClockCounterClockwise :size="12" />恢复副本</span>
+      <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原抽屉"><PhClockCounterClockwise :size="12" />恢复副本</span>
       <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
 
       <span v-if="transientSaveText" class="doc-save-state ui-font" :class="saveStateClass">
@@ -53,9 +53,9 @@
             <a v-if="embedded" class="pop-item" :href="browserUrl" target="_blank" rel="noopener noreferrer" @click="open = ''"><PhArrowSquareOut :size="15" /> 在浏览器打开</a>
             <div class="doc-options-divider" />
             <div class="more-stats ui-font">
-              <template v-if="isH5"><span>H5</span><span v-if="meta.size">· {{ (meta.size / 1024).toFixed(0) }} KB</span></template>
-              <template v-else-if="isPdf"><span>{{ pdfPages ? pdfPages + ' 页' : 'PDF' }}</span><span v-if="meta.size">· {{ (meta.size / 1024 / 1024).toFixed(1) }} MB</span></template>
-              <template v-else><span>{{ stats.total }} 字</span><span>·</span><span>{{ stats.lines }} 行</span></template>
+              <template v-if="isH5"><span>H5</span><span v-if="meta.size">{{ (meta.size / 1024).toFixed(0) }} KB</span></template>
+              <template v-else-if="isPdf"><span>{{ pdfPages ? pdfPages + ' 页' : 'PDF' }}</span><span v-if="meta.size">{{ (meta.size / 1024 / 1024).toFixed(1) }} MB</span></template>
+              <template v-else><span>{{ stats.total }} 字</span><span>{{ stats.lines }} 行</span></template>
             </div>
             <p v-if="saveStateText && !error" class="more-save ui-font">{{ saveStateText }}</p>
           </div>
@@ -156,6 +156,7 @@
       />
       <PageHeader v-if="loaded && !isPreview" />
       <MarkdownEditor
+        ref="editor"
         v-if="loaded && !isPreview"
         :key="String(store.currentReadonly) + docId + ':' + epoch + ':' + store.contentEpoch + ':' + restoredEpoch"
         :readonly="store.currentReadonly"
@@ -171,7 +172,7 @@
         @rebuild="restoredEpoch++"
       />
       <div v-else-if="!isPreview && !docId && !store.loading" class="ui-font text-center pt-24 text-[var(--c-sub)]">
-        <p class="text-[14px]">这个知识库还没有文档</p>
+        <p class="text-[14px]">这个抽屉还没有文档</p>
         <button v-if="!store.isGuest" class="mt-4 text-[12px] text-ds hover:underline" @click="emit('create-doc')">新建第一篇文档</button>
       </div>
       <p v-else-if="!isPreview && error" class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">读取失败，请点击上方重新读取</p>
@@ -240,7 +241,8 @@ const docTopbarStyle=computed(()=>({
 const pageStyle=computed(()=>({...reader.readingStyle,...({narrow:{'--measure':'min(720px, 100%)'},wide:{'--measure':'min(1120px, 100%)'},full:{'--measure':'100%'}}[store.pageMeta.layout]||{})}))
 /** 斜杠菜单里插入文档打开的选择器 */
 const pickDoc = ref(false)
-const { exportMarkdown, exportPdf, exportHtml } = useExport(() => props.meta, () => props.raw)
+const editor = ref(null)
+const { exportMarkdown, exportPdf, exportHtml } = useExport(() => props.meta, () => editor.value?.markdownSnapshot() ?? props.raw)
 
 /*
  * 只接文档本身的东西。
@@ -728,9 +730,7 @@ onBeforeUnmount(() => {
 .type-row.columns-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .type-row.columns-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .type-section-break {
-  height: 1px;
-  margin: 15px 0 2px;
-  background: var(--c-line-soft);
+  height: 12px;
 }
 
 .type-chip {
@@ -890,7 +890,7 @@ onBeforeUnmount(() => {
 .quick-open-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--c-faint)}
 .quick-open-doc time{flex:none;font-size:10px;color:var(--c-faint);white-space:nowrap}
 .quick-open-empty{margin:0;padding:10px 8px;font-size:11.5px;color:var(--c-faint)}
-.quick-open-sep{height:1px;margin:5px 6px;background:var(--c-line-soft)}
+.quick-open-sep{height:6px}
 .quick-open-new{display:flex;align-items:center;gap:8px;width:100%;padding:8px;border-radius:7px;color:var(--c-text);font-size:12px}
 .quick-open-new:hover{background:var(--c-hover);color:var(--c-ink)}
 .quick-open-new:disabled{opacity:.4;cursor:default}
@@ -952,7 +952,7 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-.doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--c-accent)}.state-switch.on:after{left:11px}.doc-options-divider{height:1px;background:var(--c-line);margin:6px 0}
+.doc-state-pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}.doc-state{display:flex;align-items:center;gap:6px;padding:10px 5px;font-size:11px;color:var(--c-sub);border-radius:var(--radius-control)}.doc-state:hover{background:var(--c-hover)}.doc-state:disabled{opacity:.65;cursor:default}.state-switch{width:22px;height:13px;border-radius:var(--radius-surface);background:var(--c-line);position:relative;margin-left:auto;flex-shrink:0}.state-switch:after{content:'';position:absolute;width:9px;height:9px;left:2px;top:2px;background:var(--c-pop);border-radius:50%;box-shadow:0 1px 2px #0002}.state-switch.on{background:var(--c-accent)}.state-switch.on:after{left:11px}.doc-options-divider{height:8px}
 .document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 

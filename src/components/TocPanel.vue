@@ -81,7 +81,7 @@ import { resizePanel } from '../utils/panel-resize'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { PhCaretDown, PhCaretRight } from '../icons/remix'
 import { foldKey, foldDoc, isFolded, isFoldable, toggleFold, unfoldKeys } from '../utils/toc-fold'
-import { scrollToTarget } from '../utils/scroll-target'
+import { scrollBehavior, scrollToTarget } from '../utils/scroll-target'
 
 const props = defineProps({
   toc: { type: Array, default: () => [] },
@@ -163,9 +163,9 @@ function scrollActiveRow() {
   if (!el) return
   const top = el.offsetTop
   const h = el.offsetHeight
-  if (top < nav.scrollTop + 10) nav.scrollTo({ top: Math.max(0, top - 10), behavior: 'smooth' })
+  if (top < nav.scrollTop + 10) nav.scrollTo({ top: Math.max(0, top - 10), behavior: scrollBehavior() })
   else if (top + h > nav.scrollTop + nav.clientHeight - 10) {
-    nav.scrollTo({ top: top + h - nav.clientHeight + 10, behavior: 'smooth' })
+    nav.scrollTo({ top: top + h - nav.clientHeight + 10, behavior: scrollBehavior() })
   }
 }
 

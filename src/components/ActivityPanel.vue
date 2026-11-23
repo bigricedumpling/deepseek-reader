@@ -6,26 +6,28 @@
           <header class="activity-head">
             <div class="activity-title">
               <h2>Agent 改动</h2>
-              <span class="activity-sub">{{ unread ? `${unread} 条未读` : '都看过了' }}</span>
+              <span v-if="items.length" class="activity-sub">{{ unread ? `${unread} 条未读` : '都看过了' }}</span>
             </div>
             <div class="activity-head-actions">
               <button v-if="unread" class="activity-text-btn" :disabled="busy" @click="markAll">全部已读</button>
               <button class="activity-text-btn" :disabled="busy" @click="toggleAll">{{ showAll ? '只看 Agent' : '包含我的改动' }}</button>
-              <button ref="closeButton" class="btn-icon" title="关闭" aria-label="关闭" @click="close"><PhX :size="18" /></button>
+              <button class="btn-icon" aria-label="关闭" @click="close"><PhX :size="18" /></button>
             </div>
           </header>
 
           <p v-if="error" class="reader-error activity-error" role="alert">{{ error }}</p>
 
-          <div class="activity-body">
+          <p v-if="!items.length && !error" class="activity-placeholder" role="status">
+            {{ loading ? '正在读取…' : showAll ? '暂无改动记录' : '暂无已记录的 Agent 改动' }}
+          </p>
+          <div v-if="items.length" class="activity-body">
             <nav class="activity-list" aria-label="改动列表">
-              <p v-if="loading && !items.length" class="activity-empty">正在读取…</p>
-              <p v-else-if="!items.length" class="activity-empty">Agent 还没有改动过文档</p>
               <button
                 v-for="item in items"
                 :key="item.id"
                 class="activity-item"
                 :class="{ 'is-active': selected?.id === item.id, 'is-read': item.reviewed }"
+                :aria-current="selected?.id === item.id || undefined"
                 @click="choose(item)"
               >
                 <span class="activity-line">
@@ -46,20 +48,20 @@
                 <div class="activity-detail-head">
                   <div>
                     <h3>{{ selected.name || selected.path || '改动' }}</h3>
-                    <p>{{ selected.actor }} · {{ selected.actionLabel }} · {{ time(selected.at) }}</p>
+                    <p><span>{{ selected.actor }}</span><span>{{ selected.actionLabel }}</span><time>{{ time(selected.at) }}</time></p>
                   </div>
                   <div class="activity-detail-actions">
                     <button v-if="selected.path && selected.available && selected.action !== 'DELETE /doc'" class="activity-text-btn" @click="openDoc">打开文档</button>
                     <button v-if="!selected.reviewed" class="activity-text-btn" :disabled="busy" @click="markRead(selected)">标记已读</button>
                   </div>
                 </div>
-                <p v-if="!selected.available && selected.action !== 'DELETE /doc'" class="activity-note">这篇文档现在不在知识库里，可能是之后被删除或移动了。</p>
+                <p v-if="!selected.available && selected.action !== 'DELETE /doc'" class="activity-note">原位置已找不到这篇文档。</p>
                 <p v-else-if="selected.currentPath && selected.currentPath !== selected.path" class="activity-note">现在位置：{{ selected.currentPath }}</p>
                 <p v-if="diffError" class="reader-error" role="alert">{{ diffError }}</p>
                 <p v-else-if="diffLoading" class="activity-empty">正在读取差异…</p>
                 <template v-else-if="diff">
                   <p v-if="diff.kind === 'delete'" class="activity-note">这篇文档已被删除，可以在回收站找回。</p>
-                  <p v-else-if="diff.kind === 'rename'" class="activity-note">重命名或移动，正文没有变化。</p>
+                  <p v-else-if="diff.kind === 'rename' || diff.kind === 'move'" class="activity-note">{{ diff.kind === 'move' ? '文档已移动' : '文档已重命名' }}</p>
                   <p v-else-if="diff.kind === 'meta'" class="activity-note">页面设置发生变化，正文没有变化。</p>
                   <template v-else-if="diff.kind === 'create'">
                     <p class="activity-note">新建文档，下面是初始内容。</p>
@@ -67,8 +69,8 @@
                   </template>
                   <TextComparison v-else :before="diff.before" :after="diff.after" />
                 </template>
+                <p v-else-if="!selected.hasDiff" class="activity-empty">此操作没有正文差异</p>
               </template>
-              <p v-else class="activity-empty">选一条改动查看差异</p>
             </section>
           </div>
         </section>
@@ -78,7 +80,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 import { PhX } from '../icons/remix'
 import TextComparison from './TextComparison.vue'
 import { useDialogFocus } from '../composables/useDialogFocus'
@@ -86,7 +88,7 @@ import { getActivity, getActivityDiff, reviewActivity } from '../services/activi
 
 const props = defineProps({ open: Boolean })
 const emit = defineEmits(['close', 'select'])
-const dialog = ref(null), closeButton = ref(null)
+const dialog = ref(null)
 const items = ref([]), total = ref(0), unread = ref(0), loading = ref(false), busy = ref(false)
 const error = ref(''), showAll = ref(false)
 const selected = ref(null), diff = ref(null), diffLoading = ref(false), diffError = ref('')
@@ -102,35 +104,42 @@ function time(at) {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${clock}`
 }
 
+let listRequest = 0
+let diffRequest = 0
+
 async function load(more = false) {
+  const request = ++listRequest
   loading.value = true
   error.value = ''
   try {
     const data = await getActivity({ limit: 50, offset: more ? items.value.length : 0, all: showAll.value })
+    if (request !== listRequest) return
     items.value = more ? [...items.value, ...data.items] : data.items
     total.value = data.total
     unread.value = data.unread
     if (selected.value) selected.value = items.value.find(item => item.id === selected.value.id) || null
-    if (!selected.value && items.value.length) await choose(items.value[0])
+    if (!selected.value && items.value.length) choose(items.value[0])
   } catch (e) {
-    error.value = e.message
+    if (request === listRequest) error.value = e.message
   } finally {
-    loading.value = false
+    if (request === listRequest) loading.value = false
   }
 }
 
 async function choose(item) {
+  const request = ++diffRequest
   selected.value = item
   diff.value = null
   diffError.value = ''
-  if (!item.hasDiff) return
-  diffLoading.value = true
+  diffLoading.value = Boolean(item?.hasDiff)
+  if (!diffLoading.value) return
   try {
-    diff.value = await getActivityDiff(item.id)
+    const result = await getActivityDiff(item.id)
+    if (request === diffRequest) diff.value = result
   } catch (e) {
-    diffError.value = e.message
+    if (request === diffRequest) diffError.value = e.message
   } finally {
-    diffLoading.value = false
+    if (request === diffRequest) diffLoading.value = false
   }
 }
 
@@ -164,8 +173,9 @@ async function markAll() {
 
 async function toggleAll() {
   showAll.value = !showAll.value
-  selected.value = null
+  choose(null)
   items.value = []
+  total.value = 0
   await load()
 }
 
@@ -177,19 +187,17 @@ function openDoc() {
 }
 
 watch(() => props.open, async visible => {
-  if (!visible) return
-  selected.value = null
-  diff.value = null
-  diffError.value = ''
-  await load()
-  await nextTick()
-  closeButton.value?.focus()
+  ++listRequest
+  choose(null)
+  items.value = []
+  total.value = 0
+  if (visible) load()
 }, { immediate: true })
 </script>
 
 <style scoped>
 .activity-panel { width: min(760px, calc(100vw - 24px)); height: min(560px, calc(100dvh - 24px)); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
-.activity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 8px; border-bottom: 1px solid var(--c-line); }
+.activity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 8px; }
 .activity-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .activity-head h2 { margin: 0; font-size: 13px; font-weight: 500; }
 .activity-sub { margin: 0; font-size: 11px; color: var(--c-faint); white-space: nowrap; }
@@ -212,10 +220,11 @@ watch(() => props.open, async visible => {
 .activity-more { display: block; width: 100%; padding: 9px; border: 0; background: transparent; font-size: 12px; color: var(--c-sub); text-align: center; }
 .activity-more:hover:not(:disabled) { color: var(--c-ink); }
 .activity-empty { padding: 24px 16px; text-align: center; color: var(--c-faint); font-size: 12px; margin: 0; }
+.activity-placeholder { margin: auto; padding: 24px; color: var(--c-sub); font-size: 13px; }
 .activity-detail { min-width: 0; min-height: 0; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .activity-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .activity-detail-head h3 { margin: 0; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
-.activity-detail-head p { margin: 4px 0 0; font-size: 11px; color: var(--c-sub); }
+.activity-detail-head p { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; font-size: 11px; color: var(--c-sub); }
 .activity-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .activity-note { margin: 0; padding: 12px; border-radius: 8px; background: var(--c-field); color: var(--c-sub); font-size: 12px; line-height: 1.65; }
 .activity-created { margin: 0; padding: 12px; border-radius: 8px; background: var(--c-field); color: var(--c-ink); white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.65 monospace; }
@@ -223,7 +232,7 @@ watch(() => props.open, async visible => {
 @media (max-width: 720px) {
   .activity-panel { height: calc(100dvh - 24px); }
   .activity-body { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 34%) minmax(0, 1fr); }
-  .activity-list { border-right: 0; border-bottom: 1px solid var(--c-line); }
+  .activity-list { border-right: 0; margin: 0 6px 4px; border-radius: var(--radius-control); background: var(--c-field); }
   .activity-head { padding: 12px; }
   .activity-detail { padding: 12px; }
 }

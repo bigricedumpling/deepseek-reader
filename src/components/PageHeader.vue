@@ -12,9 +12,9 @@
  </div></div>
  <IconPicker v-if="iconOpen" :anchor="iconAnchor" :save="saveIcon" :current="meta.icon || ''" @close="iconOpen=false" />
  <RichBlockDialog :initial="blockDraft" v-if="blockDraft" @close="blockDraft=null" />
- <Teleport to="body"><Transition name="overlay"><div v-if="settings" class="cover-dismiss" @pointerdown.self="closeCover" @keydown.esc="closeCover"><section class="reader-dialog cover-picker" :style="placement" role="dialog" aria-modal="true" aria-label="封面设置">
- <div class="cover-tabs" role="tablist" aria-label="封面来源">
-  <button v-for="t in coverTabs" :key="t" :class="{selected:coverTab===t}" :aria-selected="coverTab===t" @click="coverTab=t">{{t}}</button>
+ <Teleport to="body"><Transition name="overlay"><div v-if="settings" class="cover-dismiss" @pointerdown.self="closeCover"><section ref="coverDialog" tabindex="-1" class="reader-dialog cover-picker" :style="placement" role="dialog" aria-modal="true" aria-label="封面设置">
+ <div class="cover-tabs" role="tablist" aria-label="封面来源" @keydown="navigateTabs">
+  <button v-for="t in coverTabs" :key="t" :class="{selected:coverTab===t}" role="tab" :tabindex="coverTab===t ? 0 : -1" :aria-selected="coverTab===t" @click="coverTab=t">{{t}}</button>
   <div class="cover-head-actions">
    <button v-if="meta.cover" class="cover-remove" :disabled="busy" @click="removeCover">移除</button>
    <button class="cover-close" title="关闭" aria-label="关闭" @click="closeCover"><PhX :size="15" /></button>
@@ -36,7 +36,7 @@
    <button class="cover-flow" role="switch" :aria-checked="!!draft.animated" @click="toggleCoverFlow"><span>流动</span><span class="cover-switch" :class="{on:draft.animated}" /></button>
   </div>
  </template>
- <div v-else-if="coverTab==='上传'" class="cover-upload"><PhImage :size="30" /><label class="reader-button">选择图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden @change="upload" /></label><p>图片会保存在知识库中，最大 10 MB</p></div>
+ <div v-else-if="coverTab==='上传'" class="cover-upload"><PhImage :size="30" /><button class="reader-button" type="button" :disabled="busy" @click="coverUpload.click()">选择图片</button><input ref="coverUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden @change="upload" /><p>最大 10 MB</p></div>
  <div v-else class="cover-position">
   <div class="cover-preview image-preview"><img :src="API_BASE+'/api/file?asset='+draft.asset" :style="{objectPosition:'center '+draft.position+'%'}" alt="封面预览" /></div>
   <div class="cover-position-row"><span>上下位置</span><input type="range" min="0" max="100" :value="draft.position" @input="pickCoverPosition($event)" /></div>
@@ -53,6 +53,8 @@ import {API_BASE} from '../utils/api'
 import {randomIcon} from '../utils/icon-catalog'
 import {randomCover,coverPalettes,coverShapes} from '../utils/cover-presets'
 import ContentIcon from './ContentIcon.vue'
+import { navigateTabs } from '../utils/navigate-tabs'
+import { useDialogFocus } from '../composables/useDialogFocus'
 import IconPicker from './IconPicker.vue'
 import GradientCover from './GradientCover.vue'
 import RichBlockDialog from './RichBlockDialog.vue'
@@ -84,6 +86,9 @@ function flushCoverSave() {
     .catch(e => { error.value = e.message || String(e) })
 }
 
+const coverDialog = ref(null), coverUpload = ref(null), coverAnchor = ref(null)
+useDialogFocus(settings, coverDialog, closeCover, () => coverAnchor.value)
+
 function closeCover() {
   flushCoverSave()
   settings.value = false
@@ -102,7 +107,8 @@ async function removeCover() {
 
 async function configure(e, tab = '渐变') {
   // 必须先把 rect 取出来：await 之后事件对象的 currentTarget 会变成 null。
-  const r = e.currentTarget?.getBoundingClientRect?.()
+  coverAnchor.value = e.currentTarget
+  const r = coverAnchor.value?.getBoundingClientRect?.()
   await coverChain.catch(() => {})
   clearTimeout(coverTimer)
   coverTimer = 0
@@ -189,7 +195,7 @@ async function upload(e) {
 
 <style scoped>
 .cover-picker.reader-dialog{padding:0 20px 16px;border:1px solid var(--c-line);border-radius:20px!important;max-height:calc(100dvh - 24px)}
-.cover-tabs{display:flex;align-items:center;gap:18px;margin:0 -20px 0;padding:0 20px;border-bottom:1px solid var(--c-line)}
+.cover-tabs{display:flex;align-items:center;gap:18px;margin:0 -20px 0;padding:0 20px}
 .cover-tabs button{position:relative;padding:14px 0 10px!important;border-radius:0!important;background:transparent!important;color:var(--c-sub)!important;font-size:13px;white-space:nowrap;transition:color 160ms ease}
 .cover-tabs button::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--c-ink);transform:scaleX(0);transform-origin:left;transition:transform 220ms var(--motion-pop)}
 .cover-tabs button.selected{color:var(--c-ink)!important;background:transparent!important;font-weight:400!important;box-shadow:none!important}
@@ -219,7 +225,7 @@ async function upload(e) {
 .cover-switch{width:24px;height:14px;border-radius:999px;background:var(--c-line);position:relative;flex:none}
 .cover-switch::after{content:'';position:absolute;width:10px;height:10px;left:2px;top:2px;border-radius:50%;background:var(--c-pop);box-shadow:0 1px 2px #0002;transition:left .15s ease}
 .cover-switch.on{background:var(--c-accent)}.cover-switch.on::after{left:12px}
-.cover-footer{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:16px -20px 0;padding:12px 20px 0;border-top:1px solid var(--c-line)}
+.cover-footer{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:16px -20px 0;padding:12px 20px 0}
 .cover-footer-actions{display:flex;align-items:center;gap:10px}
 .cover-done{height:34px;padding:0 14px;border-radius:9px;background:var(--c-accent);color:var(--c-on-accent);font-size:12px}
 .cover-done:hover:not(:disabled){background:var(--c-accent-hover)}

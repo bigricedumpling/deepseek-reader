@@ -12,20 +12,19 @@
 - **用抽屉整理资料**：将有用的资料收录为独立副本，用文件夹组织内容，通过搜索和多标签继续工作。
 - **专注阅读与写作**：调整字体、正文宽度、行距和主题，使用目录导航，编辑 Markdown、表格、公式与脚注。
 - **一起查看不同资料**：在同一处阅读 Markdown、PDF 和 HTML 页面，适合调研、学习、项目记录与个人笔记。
-- **看清 Agent 改了什么**：在「Agent 改动」中按时间查看 Agent 的写入，直接对比改动前后，再决定继续处理或标记已读。
+- **看清 Agent 改了什么**：在「Agent 改动」中按时间查看 Agent 的写入，对比有历史版本的正文改动，再决定继续处理或标记已读。
 - **资料留在本机**：正文和附件是普通文件，阅读、编辑和整理都不会把内容搬进数据库。
 
 Typocket 面向以本地文件为中心的个人工作。当前不提供多人实时协作、云同步或工作区原文件与抽屉副本的双向同步。
 
 ## 安装
 
-1. 从 [发布页](https://github.com/bigricedumpling/deepseek-reader/releases)下载最新 Preview 的 `.tgz` 安装包。
-2. 在 DSH NEXT 中打开「插件 → 添加插件」，选择安装包。
-3. 从右侧栏「开始 → Typocket」进入。
+1. 在 [DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)搜索 Typocket 并安装。
+2. 在 DSH NEXT 右侧栏打开「开始 → Typocket」。
 
-**插件自带 Typocket 页面和本机服务，无需另外部署 Typocket、安装 Node.js 或运行终端命令。**首次使用会创建「草稿」抽屉，你可以改名或删除它。
+也可以从 [GitHub 发布页](https://github.com/bigricedumpling/deepseek-reader/releases)下载对应版本的 `.tgz`，在 DSH NEXT 的「插件 → 添加插件」中选择安装包。市场更新和 GitHub 发布可能有时间差。
 
-社区市场收录仍在审核中，当前请使用发布页安装包。macOS 已验证安装与本机使用；Windows 和 Linux 已包含平台适配并通过自动检查，但原生 DSH 桌面体验仍待验证。具体边界见 [支持范围与已知问题](docs/RELEASE-READINESS.md)。
+插件自带页面和本机服务。首次使用会创建「草稿」抽屉，你可以改名或删除它。各平台验证情况见[支持范围与已知问题](docs/RELEASE-READINESS.md)。
 
 ## 文件始终在本机
 

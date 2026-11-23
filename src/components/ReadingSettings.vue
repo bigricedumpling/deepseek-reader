@@ -1,15 +1,15 @@
 <template>
   <div class="reading-settings">
-    <div class="reading-tabs" role="tablist" aria-label="阅读设置">
-      <button :aria-selected="tab === 'type'" :class="{ 'is-on': tab === 'type' }" @click="tab = 'type'">排版</button>
-      <button :aria-selected="tab === 'look'" :class="{ 'is-on': tab === 'look' }" @click="tab = 'look'">外观</button>
+    <div class="reading-tabs" role="tablist" @keydown="navigateTabs" aria-label="阅读设置">
+      <button role="tab" :tabindex="tab === 'type' ? 0 : -1" :aria-selected="tab === 'type'" :class="{ 'is-on': tab === 'type' }" @click="tab = 'type'">排版</button>
+      <button role="tab" :tabindex="tab === 'look' ? 0 : -1" :aria-selected="tab === 'look'" :class="{ 'is-on': tab === 'look' }" @click="tab = 'look'">外观</button>
     </div>
 
     <Transition name="pane" mode="out-in">
     <div v-if="tab === 'type'" key="type" class="reading-pane">
-      <div class="type-tabs" role="tablist" aria-label="排版设置">
+      <div class="type-tabs" role="tablist" @keydown="navigateTabs" aria-label="排版设置">
         <span class="seg-thumb" :class="{ 'is-moving': segMoving }" :style="{ transform: typeSection === 'text' ? 'translateX(0)' : 'translateX(calc(100% + 3px))' }" aria-hidden="true" />
-        <button v-for="section in [{ id: 'text', label: '常用' }, { id: 'advanced', label: '更多' }]" :key="section.id" :aria-selected="typeSection === section.id" :class="{ 'is-on': typeSection === section.id }" @click="typeSection = section.id">{{ section.label }}</button>
+        <button v-for="section in [{ id: 'text', label: '常用' }, { id: 'advanced', label: '更多' }]" :key="section.id" role="tab" :tabindex="typeSection === section.id ? 0 : -1" :aria-selected="typeSection === section.id" :class="{ 'is-on': typeSection === section.id }" @click="typeSection = section.id">{{ section.label }}</button>
       </div>
       <Transition name="pane" mode="out-in">
       <div v-if="typeSection === 'text'" key="text" class="type-groups">
@@ -82,6 +82,7 @@
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { PhCircleHalf, PhCoffee, PhMagnifyingGlass, PhMoon, PhSun, PhArrowsInSimple, PhArrowsOutSimple, PhTextAlignCenter, PhTextAlignLeft, PhTextAlignRight, PhParagraph, PhTextIndent, PhPalette } from '../icons/remix'
+import { navigateTabs } from '../utils/navigate-tabs'
 import { useReaderStore, WIDTH_OPTIONS, PACE_OPTIONS, ACCENT_PRESETS } from '../stores/reader'
 
 const emit = defineEmits(['close'])
@@ -153,7 +154,7 @@ const PARA_STYLES = [
 
 <style scoped>
 .reading-settings { display: flex; flex-direction: column; min-width: 0; }
-.reading-tabs { display: flex; align-items: center; gap: 18px; position: relative; margin: -16px -16px 14px; padding: 0 16px; border-bottom: 1px solid var(--c-line); }
+.reading-tabs { display: flex; align-items: center; gap: 18px; position: relative; margin: -16px -16px 14px; padding: 0 16px;  }
 .reading-tabs button { position: relative; z-index: 1; min-height: 44px; padding: 14px 0 10px; border-radius: 0; background: transparent; color: var(--c-sub); font-size: 13px; transition: color 160ms ease; }
 .reading-tabs button::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--c-ink); transform: scaleX(0); transform-origin: left; transition: transform 220ms var(--motion-pop); }
 .reading-tabs button:hover { color: var(--c-ink); }

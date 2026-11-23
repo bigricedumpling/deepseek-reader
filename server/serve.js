@@ -17,6 +17,7 @@ import zlib from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { handleApi, share, DOCS_ROOT } from './content-api.js'
 import { roleOf } from './share.js'
+import { loadRouteAliases, redirectForAlias } from './route-aliases.js'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 /* 前端产物目录也可以按实例覆盖（独立实例部署在自己的子路径下，base 不同，要单独构建） */
@@ -129,6 +130,8 @@ function cookieToken(req) {
   return hit ? decodeURIComponent(hit.slice('reader_token='.length)) : ''
 }
 
+const routeAliases = loadRouteAliases(DOCS_ROOT)
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -157,6 +160,12 @@ const server = http.createServer(async (req, res) => {
       fs.appendFileSync(accessLog, line + '\n')
     }
   } catch { /* 日志失败不影响请求 */ }
+
+  const redirect = (req.method === 'GET' || req.method === 'HEAD') && redirectForAlias(url, routeAliases)
+  if (redirect) {
+    res.writeHead(302, { Location: redirect, 'Cache-Control': 'no-store' })
+    return res.end()
+  }
 
   if (url.pathname.startsWith('/api')) {
     return handleApi(req, res, { role: roleOf(req, url, share, { forceGuest }) })

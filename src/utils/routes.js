@@ -1,5 +1,3 @@
-import { legacyDocPath } from './legacy-paths.js'
-
 /** 已交付的书签永久兼容；入口名称不再表示权限。 */
 export function resolveEntry(pathname, search = '', base = '') {
   const relative = base && pathname.startsWith(base) ? pathname.slice(base.length) : pathname
@@ -11,7 +9,6 @@ export function resolveEntry(pathname, search = '', base = '') {
     try { doc = decodeURIComponent(match[1]).replace(/\/+$/, '') }
     catch { doc = match[1].replace(/\/+$/, '') }
   }
-  doc = legacyDocPath(doc)
   if (doc) params.set('lib', doc.split('/')[0])
   // 访客首页不预设某篇个人文档。公开快照会按自己的可见内容选择首页。
   params.delete('token')

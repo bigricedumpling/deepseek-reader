@@ -4,11 +4,9 @@ Typocket 是 DSH 中的个人文档工具，方便你阅读 Agent 的工作成�
 
 ## 安装
 
-1. 从 [Preview 发布页](https://github.com/bigricedumpling/deepseek-reader/releases/tag/v0.2.0-preview.5)下载 `dsh-reader-workspace-0.2.0-preview.5.tgz`，在 DSH NEXT 的「插件 → 添加插件」选择这个文件。
+1. 在 [DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)搜索 Typocket 并安装。手动安装时，从 [GitHub 发布页](https://github.com/bigricedumpling/deepseek-reader/releases)下载所需版本的 `.tgz`，在 DSH NEXT 的「插件 → 添加插件」中选择该文件。
 2. 在右侧栏「开始」页点击「Typocket」。首次使用会自动创建本机数据目录。
 3. 在 DSH 文件区打开 Markdown，可用 Typocket 预览；在 Typocket 顶栏点外部打开图标，可在浏览器打开当前页面。
-
-社区市场审核通过后，才可在市场中搜索安装。审核状态以市场页面为准。
 
 ## 本机数据
 
@@ -20,14 +18,14 @@ macOS 默认抽屉目录是 `~/Library/Application Support/Reader/知识库`。�
 
 工作区 Markdown 预览只读。相对链接继续打开工作区文件，相对图片从当前工作区读取；预览不会移动原文件。想保留时在预览页直接「收进抽屉」，生成抽屉中的独立副本；不收录就不保留浏览记录。Typocket 不提供公开分享或云端发布。
 
-阅读器与 Markdown 预览安装后即可用。Agent 直接读写抽屉里的本地文件，不需要单独授权、令牌或环境变量。通过 Typocket 接口写入时会检查版本；直接改磁盘不会进入「Agent 改动」。插件随包提供 `skills/reader-workspace/SKILL.md`，说明知识库的目录约定、写入边界和资源规则。
+阅读器与 Markdown 预览安装后即可用。Agent 直接读写抽屉里的本地文件，不需要单独授权、令牌或环境变量。通过 Typocket 接口写入时会检查版本；直接改磁盘不会进入「Agent 改动」。插件随包提供 `skills/reader-workspace/SKILL.md`，说明抽屉的目录约定、写入边界和资源规则。
 
 ## 支持范围与已知问题
 
-- 0.2.0-preview.5 是 DSH 桌面端的 Preview 版本，安装包已在 macOS、Windows 和 Linux 的自动检查中完成构建与运行测试。macOS 另使用 DSH NEXT 2.0.16-next（内含 DSH 0.2.0-rc.1）的官方安装链验收了自动启动和阅读器入口；Windows 和 Linux 的原生 DSH 桌面安装与交互仍待验收。iOS 不作为 DSH 插件平台。
+- 插件面向 macOS、Windows 和 Linux。macOS 已验证 DSH NEXT 的安装链。Windows 和 Linux 的原生 DSH 安装与桌面交互仍待验收。
 - Agent 直接使用本地文件，不需要单独授权；Typocket 不提供公开分享或云端发布。
 - 单篇内容交付使用导出；导出不会随后续编辑自动更新。
 - 工作区文件与抽屉副本独立，不提供双向同步或多人协作。
 - 同库双消费者与重启已通过实际服务测试；两个原生 DSH 桌面窗口的人工验收仍未完成。
 
-源代码采用 [MIT License](LICENSE)。随包鸿蒙黑体由 Huawei Device Co., Ltd. 授权，使用与再分发须遵守独立字体许可。许可原文在安装包的 `runtime/dist/fonts/HarmonyOS-Sans-LICENSE.txt`，也可在[源码仓库](https://github.com/bigricedumpling/deepseek-reader/blob/main/public/fonts/HarmonyOS-Sans-LICENSE.txt)查看。其他第三方资产见[许可清单](https://github.com/bigricedumpling/deepseek-reader/blob/main/docs/THIRD-PARTY-ASSETS.md)。
+源代码采用 [MIT License](LICENSE)。字体、PDF 阅读组件和图标的来源与许可见[第三方资产](https://github.com/bigricedumpling/deepseek-reader/blob/main/docs/THIRD-PARTY-ASSETS.md)。

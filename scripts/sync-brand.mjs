@@ -29,6 +29,10 @@ for (const relative of ['package.json', plugin + 'package.json']) {
   value.description = `${BRAND_NAME}: ${BRAND_DESCRIPTION_EN}`
   sync(relative, JSON.stringify(value, null, 2) + '\n')
 }
+const agentManifestFile = plugin + '.codex-plugin/plugin.json'
+const agentManifest = JSON.parse(fs.readFileSync(path.join(root, agentManifestFile), 'utf8'))
+agentManifest.interface.displayName = BRAND_NAME
+sync(agentManifestFile, JSON.stringify(agentManifest, null, 2) + '\n')
 const clientFile = plugin + 'client.js'
 const client = fs.readFileSync(path.join(root, clientFile), 'utf8')
 const declaration = `    const BRAND_NAME = ${JSON.stringify(BRAND_NAME)} // @generated-brand`

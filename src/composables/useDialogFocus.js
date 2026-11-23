@@ -1,7 +1,7 @@
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 const stack = []
 /** Trap focus only for the top dialog; restore the invoking control on close. */
-export function useDialogFocus(open, element, cancel) {
+export function useDialogFocus(open, element, cancel, returnTo) {
   const token = {}; let previous
   function keydown(event) {
     if (stack.at(-1) !== token || !element.value) return
@@ -13,7 +13,7 @@ export function useDialogFocus(open, element, cancel) {
       event.preventDefault(); event.stopImmediatePropagation(); cancel(); return
     }
     if (event.key !== 'Tab') return
-    let controls = [...element.value.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')].filter(el => el.getClientRects().length)
+    let controls = [...element.value.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]')].filter(el => el.tabIndex >= 0 && !el.closest('[inert]') && el.getClientRects().length)
     // A native radio group contributes one Tab stop; arrow keys move inside it.
     controls = controls.filter(el => {
       if (el.type !== 'radio' || !el.name) return true
@@ -33,12 +33,13 @@ export function useDialogFocus(open, element, cancel) {
   }
   watch(open, async visible => {
     if (!visible) { release(); return }
-    previous = document.activeElement; stack.push(token)
+    previous = returnTo?.() || document.activeElement; stack.push(token)
     document.addEventListener('keydown', keydown, true)
     await nextTick()
     if (stack.at(-1) === token) {
-      const preferred = element.value?.querySelector('[autofocus]')
-      const target = preferred || element.value?.querySelector('input,button:not(:disabled),textarea') || element.value
+      const controls = [...(element.value?.querySelectorAll('[autofocus], input, button, textarea, select, [tabindex="0"]') || [])]
+        .filter(el => el.tabIndex >= 0 && !el.disabled && !el.closest('[inert]') && el.getClientRects().length)
+      const target = controls.find(el => el.hasAttribute('autofocus')) || controls[0] || element.value
       target?.focus()
     }
   }, { immediate: true })

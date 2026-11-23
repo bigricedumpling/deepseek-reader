@@ -12,24 +12,35 @@
           :data-path="node.path"
           :style="{ paddingLeft: 8 + depth * 11 + 'px' }"
           :draggable="!batch.mode && store.canEdit(node)"
-          @click="batch.mode ? batch.toggle(node) : emit('toggle', node.path)"
+          @click.self="batch.mode ? batch.toggle(node) : emit('toggle', node.path)"
           @dragstart="tree.start(node, $event)"
           @dragover="tree.overRow(node, $event)"
           @drop.prevent="tree.drop()"
           @dragend="tree.end()"
         >
           <button v-if="batch.mode" class="batch-check" role="checkbox" :aria-label="'选择' + node.name" :aria-checked="batch.checked(node)" :disabled="!batch.canToggle(node)" @click.stop="batch.toggle(node)"><PhCheck v-if="batch.checked(node)" :size="11" weight="bold" /></button>
-          <span class="w-3.5 shrink-0 flex items-center justify-center text-[var(--c-sub)]" @click.stop="emit('toggle', node.path)">
-            <PhCaretRight :size="11" class="tree-caret" :class="{ 'is-open': !isCollapsed(node.path) }" />
-          </span>
-          <PhFolderSimple
-            :size="14"
-            class="cat-icon ml-1 shrink-0 text-[var(--c-sub)]"
-            :class="{ 'is-current': isCurrentParent(node) }"
-            :weight="containsCurrent(node) ? 'fill' : 'regular'"
-          />
+          <button
+            v-if="!isEditing('cat', node)"
+            type="button"
+            class="folder-toggle"
+            :aria-expanded="!isCollapsed(node.path) || !!query"
+            :aria-label="node.name"
+            :title="store.isGuest ? node.name + '（' + (store.canEdit(node) ? '可编辑' : '只读') + '）' : node.name"
+            @click="!query && emit('toggle', node.path)"
+          >
+            <span class="w-3.5 shrink-0 flex items-center justify-center text-[var(--c-sub)]">
+              <PhCaretRight :size="11" class="tree-caret" :class="{ 'is-open': !isCollapsed(node.path) || !!query }" />
+            </span>
+            <PhFolderSimple
+              :size="14"
+              class="cat-icon ml-1 shrink-0 text-[var(--c-sub)]"
+              :class="{ 'is-current': isCurrentParent(node) }"
+              :weight="containsCurrent(node) ? 'fill' : 'regular'"
+            />
+            <span class="cat-name ml-2 text-[12.5px] text-[var(--c-sub)] truncate">{{ node.name }}</span>
+          </button>
           <input
-            v-if="isEditing('cat', node)"
+            v-else
             ref="editEl"
             v-model="tree.edit.value"
             class="cat-edit"
@@ -38,7 +49,6 @@
             @keydown.esc.prevent="tree.editCancel()"
             @blur="tree.editCommit()"
           />
-          <span v-else class="cat-name ml-2 text-[12.5px] text-[var(--c-sub)] truncate" :title="store.isGuest ? node.name + '（' + (store.canEdit(node) ? '可编辑' : '只读') + '）' : node.name" :draggable="store.canEdit(node)">{{ node.name }}</span>
           <span class="row-acts">
             <button
               v-if="!store.isGuest && !batch.mode && store.canEdit(node)"
@@ -78,7 +88,7 @@
           </span>
         </div>
 
-        <div class="tree-children" :class="{ 'is-collapsed': isCollapsed(node.path) && !query }">
+        <div class="tree-children" :inert="isCollapsed(node.path) && !query" :class="{ 'is-collapsed': isCollapsed(node.path) && !query }">
           <div class="tree-children-inner">
             <div v-if="tree.create && tree.create.parent === node.path" class="tree-create-row" :style="{ paddingLeft: 28 + depth * 11 + 'px' }">
               <component :is="tree.create.kind === 'doc' ? PhFilePlus : PhFolderSimplePlus" :size="14" />
@@ -323,6 +333,8 @@ function relTime(ms) {
 
 
 <style scoped>
+.folder-toggle { align-self: stretch; flex: 1; min-width: 0; display: flex; align-items: center; text-align: left; }
+
 .row-create-btn{opacity:0;transition:opacity .12s ease,background .12s ease}
 .cat-row:hover .row-create-btn,.cat-row:focus-within .row-create-btn{opacity:1}
 .row-acts{display:flex;align-items:center;flex-shrink:0;min-width:0;max-width:0;overflow:hidden;padding-left:4px;opacity:0;pointer-events:none;transition:max-width 180ms var(--motion-snap),opacity 120ms ease}
@@ -344,4 +356,8 @@ function relTime(ms) {
 .tree-children.is-collapsed { grid-template-rows: 0fr; opacity: 0; }
 .tree-children-inner { overflow: hidden; min-height: 0; }
 
+@media (hover: none), (pointer: coarse) {
+  .cat-row:not(.is-editing) .row-acts { max-width: none; padding: 0; opacity: 1; pointer-events: auto; }
+  .cat-row .row-create-btn, .cat-row .row-finder, .doc-row .row-finder { display: none; }
+}
 </style>

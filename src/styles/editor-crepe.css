@@ -13,24 +13,6 @@
 
 .editor-shell {
   min-height: 100%;
-  /* 切文档/切标签时来一点极短的淡入：不然整页文字是"啪"地换掉的 */
-  animation: doc-in 0.18s ease-out;
-}
-@keyframes doc-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-/* 系统里关了动效就别动 */
-@media (prefers-reduced-motion: reduce) {
-  .editor-shell {
-    animation: none;
-  }
 }
 .lossy-note {
   max-width: var(--measure, 960px);
@@ -860,9 +842,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   white-space: nowrap;
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-group + .menu-group {
-  margin-top: 2px;
-  padding-top: 5px;
-  border-top: 1px solid var(--c-line-soft);
+  margin-top: 8px;
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
   content: none;

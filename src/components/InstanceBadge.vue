@@ -41,7 +41,7 @@ const text = computed(() => {
   /* 沙箱：开发时看的示例库，不是自用资料 */
   if (info.value.profile === 'dev') return '沙箱'
   /* 正式版不显示；源码直跑时标出来，因为这时最可能误连自用库 */
-  if (fromSource) return '源码 · 自用库'
+  if (fromSource) return '本地源码版'
   return ''
 })
 

@@ -29,9 +29,6 @@
       </a>
     </div>
 
-    <footer class="kb-foot">
-      加一个知识库：编辑 <code>public/kb.json</code>，刷新即可，不用重新构建。
-    </footer>
   </div>
 </template>
 
@@ -180,22 +177,6 @@ onMounted(async () => {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.85;
-  color: var(--c-sub);
-}
-.kb-foot {
-  margin-top: 32px;
-  padding-top: 14px;
-  border-top:0;
-  font-size: 11.5px;
-  line-height: 1.9;
-  color: var(--c-faint);
-}
-.kb-foot code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--c-field);
-  padding: 1px 5px;
-  border-radius: var(--radius-control);
   color: var(--c-sub);
 }
 </style>

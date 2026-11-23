@@ -204,7 +204,6 @@ onBeforeUnmount(() => clearTimeout(expandTimer))
   box-shadow: none;
   color: var(--c-ink);
   isolation: isolate;
-  animation: rail-peek-in 170ms var(--motion-snap);
 }
 .rail-peek::before {
   content: "";
@@ -217,10 +216,6 @@ onBeforeUnmount(() => clearTimeout(expandTimer))
   backdrop-filter: blur(14px) saturate(1.04);
   -webkit-mask: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
   mask: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
-}
-@keyframes rail-peek-in {
-  from { transform: translateX(-4px) scale(.992); }
-  to { transform: none; }
 }
 .rail-peek-head {
   display: flex;
@@ -332,7 +327,6 @@ onBeforeUnmount(() => clearTimeout(expandTimer))
   font-size: 11px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .rail-peek { animation: none; }
   .peek-row, .peek-caret, .peek-caret svg { transition: none; }
 }
 </style>

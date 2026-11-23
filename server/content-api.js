@@ -26,6 +26,8 @@ import { publicSession } from './services/public-session.js'
 import { documentRoutes } from './services/documents.js'
 import { activityService } from './services/activity.js'
 import { recordSource } from './services/sources.js'
+import { rewriteCopiedAttachments } from './services/document-attachments.js'
+import { workspaceImages, rewriteWorkspaceImages, normalizeImageReference } from './services/workspace-images.js'
 
 // 用文件自身位置推导，不依赖启动时的工作目录
 const READER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -465,20 +467,24 @@ function copyDocument(from, to) {
     if (!mime) throw fault('INVALID_IMAGE', '图片格式无法识别，复制已取消')
     return assets.upload(to, mime, fs.readFileSync(safeResolve(asset.path)).toString('base64'))
   }
-  if (ext === '.md') {
-    assets.legacy(from)
-    let content = bytes.toString('utf8')
-    for (const id of new Set([...content.matchAll(/\/api\/file\?asset=([a-f0-9]{64})/g)].map(match => match[1]))) {
-      const asset = assets.find('', id)
-      if (!asset || asset.owner !== source.id) continue
-      content = content.replaceAll('/api/file?asset=' + id, cloneImage(asset).url)
-    }
-    for (const reference of new Set([...content.matchAll(/\/api\/file\?[^\s)"'<>]+/g)].map(match => match[0]))) {
-      let asset
-      try { asset = assets.find(new URL(reference, 'http://reader.local').searchParams.get('path') || '') } catch {}
-      if (asset?.owner === source.id) content = content.replaceAll(reference, cloneImage(asset).url)
-    }
-    if (content !== bytes.toString('utf8')) repo.write(safeResolve(to), content)
+  if (ext !== '.pdf') {
+    if (ext === '.md') assets.legacy(from)
+    const copies = new Map()
+    const original = bytes.toString('utf8')
+    const content = rewriteCopiedAttachments(original, ext !== '.md', reference => {
+      if (!reference.startsWith('/api/file?')) return null
+      const url = new URL(reference, 'http://reader.local')
+      const id = url.searchParams.get('asset')
+      const legacyPath = url.searchParams.get('path')
+      if (!id && !legacyPath) return null
+      const asset = assets.find(legacyPath || '', id)
+      if (asset?.owner !== source.id) return null
+      if (!copies.has(asset.id)) copies.set(asset.id, cloneImage(asset).id)
+      url.searchParams.delete('path')
+      url.searchParams.set('asset', copies.get(asset.id))
+      return url.pathname + url.search + url.hash
+    })
+    if (content !== original) repo.write(safeResolve(to), content)
   }
   const meta = structuredClone(source.meta || {})
   if (meta.cover?.type === 'image') {
@@ -932,7 +938,7 @@ function listLibs() {
    * 顺序 = 注册表里的顺序，不重新排序。
    *
    * 以前按名字排，而 'zh-Hans-CN' 的规则把中文排在拉丁字母前面，
-   * 「Agent（设计方向）」被挤到最后、默认就落到别的库上了。
+   * 首选抽屉可能被排到最后。
    * 顺序是使用者的意图，不该由排序规则决定。
    */
 }
@@ -1245,17 +1251,22 @@ const routes = {
     if (imported.length > 24) throw fault('TOO_MANY_IMAGES', '一篇文档最多收录 24 张图片')
     const references = new Set()
     for (const item of imported) {
-      if (typeof item?.reference !== 'string' || !item.reference || item.reference.length > 600 || references.has(item.reference)) throw fault('INVALID_IMAGE', '图片路径无效或重复')
-      references.add(item.reference)
+      if (typeof item?.reference !== 'string' || !item.reference || item.reference.length > 600 || references.has(normalizeImageReference(item.reference))) throw fault('INVALID_IMAGE', '图片路径无效或重复')
+      references.add(normalizeImageReference(item.reference))
     }
     repo.mkdir(safeResolve(dir))
     const file = uniqueFile(dir, name)
     let content = String(body.content ?? '')
     repo.write(safeResolve(file), content)
     const node = repo.node(file)
-    for (const item of imported) {
-      const saved = assets.upload(file, String(item.mime || ''), String(item.base64 || ''))
-      content = content.split(item.reference).join(saved.url)
+    if (imported.length) {
+      const spans = workspaceImages(content)
+      const replacements = new Map()
+      for (const item of imported) {
+        const saved = assets.upload(file, String(item.mime || ''), String(item.base64 || ''))
+        replacements.set(normalizeImageReference(item.reference), saved.url)
+      }
+      content = rewriteWorkspaceImages(content, spans, reference => replacements.get(reference))
     }
     if (content !== String(body.content ?? '')) repo.write(safeResolve(file), content)
     recordSource(repo, node.id, { kind: 'workspace-file', workspace: String(body.workspace || ''), reference: String(body.reference || '') })

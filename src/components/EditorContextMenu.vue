@@ -136,8 +136,6 @@ function onKey(event) {
   letter-spacing: .01em;
 }
 .ctx-sep {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--c-line-soft);
+  height: 8px;
 }
 </style>

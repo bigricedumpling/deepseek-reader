@@ -1,6 +1,6 @@
 <template>
   <!--
-    桌面端横向排知识库栏与文档树；手机端知识库列表改为弹窗。
+    桌面端横向排抽屉栏与文档树；手机端抽屉列表改为弹窗。
   -->
   <div class="app-sidebar flex h-full flex-shrink-0">
     <!-- 手机端切换列表才用遮罩；桌面保留并排的知识库列表。 -->
@@ -8,7 +8,7 @@
       <button
         v-if="libPanel.open && isMobileLibView()"
         class="lib-modal-backdrop"
-        aria-label="关闭知识库弹窗"
+        aria-label="关闭抽屉弹窗"
         @click="closeLibPanel"
       />
     </transition>
@@ -20,19 +20,19 @@
         class="lib-panel"
         :class="{ 'is-tree-collapsed': collapsed }"
         :style="{ '--lib-w': libWidth + 'px' }"
-        aria-label="知识库列表"
+        aria-label="抽屉列表"
         @click.stop="onLibPanelClick"
       >
         <div class="lib-panel-head">
-          <span class="lib-panel-title">知识库</span>
+          <span class="lib-panel-title">抽屉</span>
           <span class="lib-panel-head-acts">
-            <button class="icon-btn" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="排序知识库" aria-label="排序知识库" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu">
+            <button class="icon-btn" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="排序抽屉" aria-label="排序抽屉" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu">
               <PhSortAscending :size="15" />
             </button>
-            <button v-if="!isGuest" class="icon-btn lib-create-toggle" :class="{ 'is-open': libCreate.active }" title="新建知识库" aria-label="新建知识库" @mousedown.prevent @click.stop="createLib">
+            <button v-if="!isGuest" class="icon-btn lib-create-toggle" :class="{ 'is-open': libCreate.active }" title="新建抽屉" aria-label="新建抽屉" @mousedown.prevent @click.stop="createLib">
               <PhPlus :size="14" />
             </button>
-            <button class="icon-btn" title="关闭知识库" aria-label="关闭知识库" @click="closeLibPanel">
+            <button class="icon-btn" title="关闭抽屉" aria-label="关闭抽屉" @click="closeLibPanel">
               <PhCaretDoubleLeft :size="15" class="lib-close-desktop" />
               <PhX :size="15" class="lib-close-mobile" />
             </button>
@@ -41,7 +41,7 @@
 
         <input ref="libIconInput" type="file" accept="image/*" class="hidden" @change="onPickLibIcon" />
 
-        <div class="lib-panel-resize" title="拖动调整知识库栏宽度" @pointerdown.stop="startLibResize" />
+        <div class="lib-panel-resize" title="拖动调整抽屉栏宽度" @pointerdown.stop="startLibResize" />
 
         <div ref="libListEl" class="lib-panel-list">
           <span class="lib-row-blob" :class="{ 'is-moving': libBlobMoving, 'is-draft': currentLib === '草稿' }" :style="libBlobStyle" aria-hidden="true" />
@@ -54,7 +54,7 @@
               v-model="libCreate.value"
               data-esc-local
               class="lib-row-input"
-              placeholder="新知识库名称"
+              placeholder="新抽屉名称"
               spellcheck="false"
               @keydown.enter.prevent.stop="commitCreateLib"
               @keydown.esc.stop.prevent="cancelCreateLib"
@@ -81,7 +81,7 @@
             @drop.prevent="dropLib(lib)"
             @dragend="endLibDrag"
           >
-            <button class="lib-icon-btn" :disabled="isGuest" title="更换图标" aria-label="更换知识库图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" class="lib-row-icon" :value="lib.icon" /><PhFolderSimple v-else class="lib-row-icon lib-icon-placeholder" :size="16" /></button>
+            <button class="lib-icon-btn" :disabled="isGuest" title="更换图标" aria-label="更换抽屉图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" class="lib-row-icon" :value="lib.icon" /><PhFolderSimple v-else class="lib-row-icon lib-icon-placeholder" :size="16" /></button>
             <div class="lib-row-body">
               <input
                 v-if="!isGuest && renaming === lib.name"
@@ -109,7 +109,7 @@
           </TransitionGroup>
         </div>
         <div class="lib-panel-footer">
-          <button v-if="!isGuest" class="icon-btn xs" title="管理知识库" aria-label="管理知识库" @click.stop="openManager"><PhSquaresFour :size="16" weight="regular" /></button>
+          <button v-if="!isGuest" class="icon-btn xs" title="管理抽屉" aria-label="管理抽屉" @click.stop="openManager"><PhSquaresFour :size="16" weight="regular" /></button>
         </div>
       </aside>
     </transition>
@@ -117,14 +117,14 @@
 
 
     <Teleport to="body">
-      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" aria-label="关闭知识库管理" @click="managerOpen=false" /></transition>
+      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" aria-label="关闭抽屉管理" @click="managerOpen=false" /></transition>
       <transition name="lib-manager">
-        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="isGuest ? '浏览知识库' : '管理知识库'">
-          <header class="lib-manager-head"><span class="lib-manager-head-actions"><button v-if="!isGuest" class="icon-btn lib-create-toggle" :class="{ 'is-open': libCreate.active }" aria-label="新建知识库" @mousedown.prevent @click="createLib"><PhPlus :size="17" /></button><button class="icon-btn" aria-label="关闭知识库管理" @click="managerOpen=false"><PhX :size="17" /></button></span></header>
-          <p v-if="!isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收进知识库，也可以直接新建文档。</p>
+        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="isGuest ? '浏览抽屉' : '管理抽屉'">
+          <header class="lib-manager-head"><span class="lib-manager-head-actions"><button v-if="!isGuest" class="icon-btn lib-create-toggle" :class="{ 'is-open': libCreate.active }" aria-label="新建抽屉" @mousedown.prevent @click="createLib"><PhPlus :size="17" /></button><button class="icon-btn" aria-label="关闭抽屉管理" @click="managerOpen=false"><PhX :size="17" /></button></span></header>
+          <p v-if="!isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收进抽屉，也可以直接新建文档。</p>
           <div class="lib-manager-tools">
-            <input v-model.trim="libQuery" class="lib-manager-search" type="search" placeholder="搜索知识库" aria-label="搜索知识库" autofocus />
-            <button class="icon-btn lib-manager-sort" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="排序知识库" aria-label="排序知识库" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu"><PhSortAscending :size="16" /></button>
+            <input v-model.trim="libQuery" class="lib-manager-search" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus />
+            <button class="icon-btn lib-manager-sort" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="排序抽屉" aria-label="排序抽屉" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu"><PhSortAscending :size="16" /></button>
           </div>
           <TransitionGroup name="manager-card" tag="div" class="lib-manager-list">
             <div v-if="libCreate.active" key="__create" class="lib-manager-card lib-manager-create">
@@ -134,7 +134,7 @@
                 v-model="libCreate.value"
                 data-esc-local
                 class="lib-manager-rename"
-                placeholder="新知识库名称"
+                placeholder="新抽屉名称"
                 spellcheck="false"
                 @keydown.enter.prevent.stop="commitCreateLib"
                 @keydown.esc.stop.prevent="cancelCreateLib"
@@ -155,7 +155,7 @@
               @keydown.space.self.prevent="openManagerLib(lib)"
               @contextmenu="libContext($event,lib)"
             >
-              <button class="lib-icon-btn lib-manager-icon-btn" :disabled="isGuest" title="更换图标" aria-label="更换知识库图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" :value="lib.icon" class="lib-manager-icon" /><PhFolderSimple v-else :size="20" class="lib-manager-icon lib-icon-placeholder" /></button>
+              <button class="lib-icon-btn lib-manager-icon-btn" :disabled="isGuest" title="更换图标" aria-label="更换抽屉图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" :value="lib.icon" class="lib-manager-icon" /><PhFolderSimple v-else :size="20" class="lib-manager-icon lib-icon-placeholder" /></button>
               <input
                 v-if="!isGuest && renaming === lib.name"
                 ref="renameInput"
@@ -170,14 +170,14 @@
                 @blur="commitRename(lib)"
               />
               <strong v-else>{{ lib.name }}</strong>
-              <span v-if="isCurrentLib(lib)" class="lib-manager-current" aria-label="当前知识库"><PhCheck :size="13" weight="bold" /></span>
+              <span v-if="isCurrentLib(lib)" class="lib-manager-current" aria-label="当前抽屉"><PhCheck :size="13" weight="bold" /></span>
               <span class="lib-card-meta">{{ lib.docs }} 篇</span>
               <button v-if="!isGuest" class="lib-manager-card-more icon-btn xs" :class="{ 'is-active': tree.menu.kind === 'lib' && tree.menu.node?.name === lib.name }" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="16" weight="bold" /></button>
             </div>
-            <p v-if="!managerLibs.length" key="__empty" class="lib-empty">没有匹配的知识库</p>
+            <p v-if="!managerLibs.length" key="__empty" class="lib-empty">没有匹配的抽屉</p>
           </TransitionGroup>
           <footer v-if="!isGuest" class="lib-manager-footer">
-            <span class="lib-manager-count">{{ managerLibs.length }} 个知识库</span>
+            <span class="lib-manager-count">{{ managerLibs.length }} 个抽屉</span>
           </footer>
         </section>
       </transition>
@@ -185,12 +185,12 @@
 
     <Teleport to="body">
       <Transition name="overlay" appear><div v-if="transfer.open" class="transfer-backdrop" @click.self="transfer.open=false">
-        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'copy' ? '复制到知识库' : '移动到知识库'">
+        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉'">
           <p class="transfer-source">{{ transfer.path }}</p>
-          <div class="transfer-library-head"><span>目标知识库</span><input v-model.trim="transferSearch" type="search" placeholder="搜索知识库" aria-label="搜索目标知识库" /></div>
-          <div class="transfer-library-grid" role="group" aria-label="选择目标知识库">
+          <div class="transfer-library-head"><span>目标抽屉</span><input v-model.trim="transferSearch" type="search" placeholder="搜索抽屉" aria-label="搜索目标抽屉" /></div>
+          <div class="transfer-library-grid" role="group" aria-label="选择目标抽屉">
             <button v-for="lib in transferLibs" :key="lib.name" type="button" :class="{ 'is-on': transfer.lib === lib.name, 'is-draft': lib.name === '草稿' }" :aria-pressed="transfer.lib === lib.name" @click="onTransferLibSelect(lib.name)"><ContentIcon v-if="lib.icon" :value="lib.icon" :size="20" /><PhFolderSimple v-else :size="20" class="lib-icon-placeholder" /><span>{{ lib.name }}</span><small>{{ lib.docs }} 篇</small></button>
-            <p v-if="!transferLibs.length" class="lib-empty">没有匹配的知识库</p>
+            <p v-if="!transferLibs.length" class="lib-empty">没有匹配的抽屉</p>
           </div>
           <div v-if="transfer.lib && transfer.folders.length > 1" class="transfer-field"><span>目标位置</span><SelectMenu v-model="transfer.dir" :options="transfer.folders.map(folder => ({ value: folder.path, label: folder.label }))" label="目标位置" /></div>
           <p v-if="transfer.error" class="transfer-error" role="alert">{{ transfer.error }}</p>
@@ -212,21 +212,21 @@
     <Teleport to="#app-topbar-left" :disabled="!chromeCollapsed">
       <div class="side-header" :class="{ 'is-topbar': chromeCollapsed, 'is-compact': chromeCompact, 'is-collapsing': collapsed && !chromeCompact, 'is-expanding': chromeExpanding, 'is-merged': !collapsed }" @click.self="onCompactHeaderClick">
         <div class="kb-identity" :class="{ 'is-compact': collapsed }">
-          <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick"><ContentIcon :value="currentLibIcon" :size="20" /></button>
+          <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开抽屉列表'" :aria-label="collapsed ? '展开目录' : '打开抽屉列表'" @click.stop="onBrandLogoClick"><ContentIcon :value="currentLibIcon" :size="20" /></button>
           <div class="kb-title-wrap min-w-0">
             <!-- 两个标题叠在同一格交叉淡化：展开/收起时不会先消失再出现。 -->
-            <button type="button" class="brand-line kb-title-compact" :class="{ 'is-hidden': !collapsed }" :tabindex="collapsed ? undefined : -1" :title="collapsed ? '展开目录' : (currentLib || '知识库')" @click.stop="onCompactTitleClick">
+            <button type="button" class="brand-line kb-title-compact" :class="{ 'is-hidden': !collapsed }" :tabindex="collapsed ? undefined : -1" :title="collapsed ? '展开目录' : (currentLib || '抽屉')" @click.stop="onCompactTitleClick">
               <span class="kb-title-stack">
                 <Transition name="lib-title">
-                  <span :key="currentLib || '知识库'" class="kb-title-text">{{ currentLib || '知识库' }}</span>
+                  <span :key="currentLib || '抽屉'" class="kb-title-text">{{ currentLib || '抽屉' }}</span>
                 </Transition>
               </span>
             </button>
-            <input v-model="brandTitle" class="brand-line brand-input is-title kb-title" :class="{ 'is-hidden': collapsed }" :tabindex="collapsed ? -1 : undefined" spellcheck="false" :readonly="isGuest || !currentLibEditable" :title="isGuest ? '' : '编辑知识库名称'" @keydown.enter.prevent="$event.target.blur()" @change="onBrandEdited($event.target.value)" />
+            <input v-model="brandTitle" class="brand-line brand-input is-title kb-title" :class="{ 'is-hidden': collapsed }" :tabindex="collapsed ? -1 : undefined" spellcheck="false" :readonly="isGuest || !currentLibEditable" :title="isGuest ? '' : '编辑抽屉名称'" @keydown.enter.prevent="$event.target.blur()" @change="onBrandEdited($event.target.value)" />
           </div>
         </div>
         <div class="sidebar-actions" :class="{ 'is-compact': collapsed, 'is-revealed': compactActionsHover }" @pointerenter="onCompactActionsEnter" @pointerleave="onCompactActionsLeave">
-          <button class="icon-btn kb-list-btn" :tabindex="collapsed ? -1 : undefined" :class="{ 'is-active': libPanel.open }" :title="'知识库：' + (currentLib || '未选择') + '（共 ' + libPanel.libs.length + ' 个）'" :aria-label="'知识库列表'" :aria-expanded="libPanel.open" @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"><PhStack :size="16" /></button>
+          <button class="icon-btn kb-list-btn" :tabindex="collapsed ? -1 : undefined" :class="{ 'is-active': libPanel.open }" :title="'抽屉：' + (currentLib || '未选择') + '（共 ' + libPanel.libs.length + ' 个）'" :aria-label="'抽屉列表'" :aria-expanded="libPanel.open" @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"><PhStack :size="16" /></button>
           <button class="icon-btn sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click.stop="toggleSidebar"><MorphIcon :icon="collapsed ? caretRight : caretLeft" :size="16" class="sidebar-chevron" spring="smooth" reduced-motion="user" /></button>
         </div>
       </div>
@@ -255,7 +255,7 @@
         <button
           class="icon-btn"
           :class="{ 'is-active': searchOpen }"
-          title="搜索当前知识库文档"
+          title="搜索当前抽屉文档"
           @click="toggleSearch"
         >
           <PhMagnifyingGlass :size="15" />
@@ -337,6 +337,7 @@
       @dragover="tree.overRoot($event)"
       @drop.prevent="tree.drop()"
       @contextmenu="onBlankTreeContext"
+      @keydown="navigateRows"
     >
       <span class="doc-row-blob" :class="{ 'is-moving': docBlobMoving }" :style="docBlobStyle" aria-hidden="true" />
       <!-- 根目录就地新建：分组和单列表下都能用 -->
@@ -400,7 +401,7 @@
     <!-- 树里那个…的菜单：teleport 出去，免得被侧栏的滚动裁掉 -->
     <Teleport to="body">
       <Transition name="pop">
-      <div v-if="tree.menu.open" class="tree-menu" :class="{ 'is-measuring': !tree.menu.ready }" role="menu" :aria-label="tree.menu.kind === 'root' ? '侧栏操作' : tree.menu.kind === 'lib-filter' ? '筛选知识库' : '条目操作'" :style="tree.menu.style" @keydown.esc.stop.prevent="tree.closeMenu()" @keydown.tab="tree.closeMenu()">
+      <div v-if="tree.menu.open" class="tree-menu" :class="{ 'is-measuring': !tree.menu.ready }" role="menu" :aria-label="tree.menu.kind === 'root' ? '侧栏操作' : tree.menu.kind === 'lib-filter' ? '筛选抽屉' : '条目操作'" :style="tree.menu.style" @keydown.esc.stop.prevent="tree.closeMenu()" @keydown.tab="tree.closeMenu()">
         <button
           v-for="it in menuItems"
           :key="it.id"
@@ -438,6 +439,7 @@
 </template>
 
 <script setup>
+import { scrollBehavior } from '../utils/scroll-target.js'
 import { BRAND_NAME } from '../../brand.mjs'
 import SelectMenu from './SelectMenu.vue'
 import {setFavicon} from '../utils/favicon'
@@ -468,7 +470,6 @@ import DocTree from './DocTree.vue'
 import RailFiles from './RailFiles.vue'
 import AppDialog from './AppDialog.vue'
 import { API_BASE } from '../utils/api'
-import { normalizeLibraryName } from '../utils/legacy-paths'
 import { storageGet, storageJSON, storageSet } from '../utils/storage'
 import { useFileManager } from '../composables/useFileManager'
 const props = defineProps({
@@ -557,7 +558,7 @@ async function revealTreeRow(kind, path) {
   const navRect = nav.getBoundingClientRect()
   const rowRect = row.getBoundingClientRect()
   const top = nav.scrollTop + rowRect.top - navRect.top - nav.clientHeight / 2 + rowRect.height / 2
-  nav.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+  nav.scrollTo({ top: Math.max(0, top), behavior: scrollBehavior() })
   row.classList.add('is-rail-target')
   setTimeout(() => row.classList.remove('is-rail-target'), 900)
 }
@@ -640,7 +641,7 @@ async function openTransfer(mode, kind, source) {
   transfer.error = ''
   transferSearch.value = ''
   if (!libPanel.libs.length) await loadLibs()
-  if (!libPanel.libs.length) { store.setError('知识库读取失败，请稍后重试'); return }
+  if (!libPanel.libs.length) { store.setError('抽屉读取失败，请稍后重试'); return }
   transfer.lib = ''
   transfer.dir = ''
   transfer.folders = []
@@ -802,7 +803,7 @@ const currentLib = ref(
   (() => {
     try {
       const lib = String(new URLSearchParams(location.search).get('lib') || '').trim()
-      return normalizeLibraryName(lib)
+      return lib
     } catch {
       return ''
     }
@@ -1150,7 +1151,7 @@ function cancelRename() {
 /** 两个改名入口共用这一条流程；当前库改名会使所有文档路径失效。 */
 async function renameLib(from, to) {
   if (!from || !to || to === from) return
-  if (to.includes('/') || to.startsWith('.')) throw new Error('知识库名不能带斜杠或以点开头')
+  if (to.includes('/') || to.startsWith('.')) throw new Error('抽屉名不能带斜杠或以点开头')
   const active = from === currentLib.value
   if (active && (store.isDirty || store.saving) && !(await store.save())) {
     throw new Error(store.error || '重命名失败')
@@ -1258,7 +1259,7 @@ function readAsDataUrl(file) {
  */
 async function deleteLib(lib) {
   askLibDialog({
-    title: '删除知识库《' + lib.name + '》',
+    title: '删除抽屉《' + lib.name + '》',
     message: '它的 ' + (lib.docs || 0) + ' 篇文档会被移到回收站，可以再捞回来。',
     confirmText: '移到回收站',
     danger: true,
@@ -1311,9 +1312,7 @@ onMounted(() => {
   /*
    * 没指定 ?lib= 时选默认库。
    *
-   * 顺序：先拉库列表，再等树到手 —— 因为旧链接要靠树才能认出"它想进哪个库"
-   * （老链接是 /onlyread/笔试题/xxx，没有 ?lib=，而"笔试题"现在是
-   *  Agent（设计方向）库里的东西）。树还没到就只能退回第一个库。
+   * 先取抽屉列表，再从树里匹配旧书签所属的抽屉。
    */
   loadLibs().then(() => {
     if (currentLib.value) return
@@ -1711,6 +1710,37 @@ function requestBatchDelete() {
   })
 }
 
+// Rows keep native button activation. Arrow keys follow only the visible hierarchy.
+function navigateRows(event) {
+  const selector = 'button.folder-toggle, button.doc-title, button.pdf-title'
+  const current = event.target
+  if (!current.matches(selector) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+  const rows = [...event.currentTarget.querySelectorAll(selector)].filter(button => !button.closest('[inert]'))
+  const index = rows.indexOf(current)
+  if (index === -1) return
+  const folder = current.matches('.folder-toggle')
+  const expanded = folder && current.getAttribute('aria-expanded') === 'true'
+  let target
+  switch (event.key) {
+    case 'Home': target = rows[0]; break
+    case 'End': target = rows.at(-1); break
+    case 'ArrowUp': target = rows[index - 1]; break
+    case 'ArrowDown': target = rows[index + 1]; break
+    case 'ArrowRight':
+      if (!folder) return
+      if (expanded) target = current.closest('.tree-folder').querySelector('.tree-children :is(' + selector + ')')
+      else current.click()
+      break
+    case 'ArrowLeft':
+      if (expanded && !query.value) current.click()
+      else target = current.closest('.tree-children')?.parentElement.querySelector(':scope > .cat-row .folder-toggle')
+      break
+    default: return
+  }
+  event.preventDefault()
+  target?.focus()
+}
+
 function onBlankTreeContext(event) {
   if (isGuest.value || event.target.closest('.cat-row, .doc-row, button, input, textarea, [contenteditable="true"]')) return
   event.preventDefault()
@@ -1753,13 +1783,13 @@ const menuItems = computed(() => {
   if (kind === 'lib') {
     if (!isGuest.value) items.push(
       ...(canRevealInFinder.value ? [{ id:'lib-reveal', label: fileManagerLabel(true), icon: PhFolderSimple }] : []),
-      { id:'lib-pin', label: libPinned(node) ? '取消置顶' : '置顶知识库', icon: PhPushPin },
+      { id:'lib-pin', label: libPinned(node) ? '取消置顶' : '置顶抽屉', icon: PhPushPin },
       { id:'lib-rename',label:'重命名',icon:PhPencilSimple },
-      { id:'lib-delete',label:'删除知识库',icon:PhTrash,danger:true }
+      { id:'lib-delete',label:'删除抽屉',icon:PhTrash,danger:true }
     )
   } else {
     if (kind === 'folder') items.push({id:'new-doc',label:'新建文档',icon:PhFilePlus},{id:'new-folder',label:'新建文件夹',icon:PhFolderSimplePlus})
-    items.push({id:'copy-to',label:'复制到知识库',icon:PhCopy},{id:'move-to',label:'移动到知识库',icon:PhArrowRight})
+    items.push({id:'copy-to',label:'复制到抽屉',icon:PhCopy},{id:'move-to',label:'移动到抽屉',icon:PhArrowRight})
     items.push({id:'rename',label:'重命名',icon:PhPencilSimple},{id:'delete',label:kind==='folder'?'删除目录':'删除',icon:PhTrash,danger:true})
   }
   return items
@@ -2218,7 +2248,7 @@ function compactHeaderWidth(title) {
       const span = stack.querySelector('.kb-title-text')
       if (span) {
         span.className = 'kb-title-text'
-        span.textContent = title || '知识库'
+        span.textContent = title || '抽屉'
         for (const extra of [...stack.querySelectorAll('.kb-title-text')].slice(1)) extra.remove()
       }
     }
@@ -2655,13 +2685,12 @@ onMounted(loadActivityUnread)
   background:transparent;
   box-shadow:none;
   color:var(--c-ink);
-  opacity:1;
+  opacity:0;
   visibility:hidden;
   pointer-events:none;
   transform-origin:top center;
   transform:translateY(-8px) scale(.96);
-  /* 玻璃层始终不透明，只做位移动画；opacity 过渡会让 backdrop-filter 延迟上屏。 */
-  transition:transform 300ms var(--motion-pop),visibility 0s linear 300ms,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
+  transition:opacity 180ms ease-in-out,transform 300ms var(--motion-pop),visibility 0s linear 180ms,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
 }
 .sidebar-actions.is-compact .kb-list-btn::before {
   content:'';
@@ -2680,11 +2709,11 @@ onMounted(loadActivityUnread)
   visibility:visible;
   pointer-events:auto;
   transform:translateY(0) scale(1);
-  transition:transform 300ms var(--motion-pop),visibility 0s,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
+  transition:opacity 180ms ease-in-out,transform 300ms var(--motion-pop),visibility 0s,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
 }
 .sidebar-actions.is-compact.is-revealed .kb-list-btn:hover {
   transform:translateY(-1px) scale(1);
-  transition:transform 120ms ease,visibility 0s,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
+  transition:opacity 180ms ease-in-out,transform 120ms ease,visibility 0s,width 200ms cubic-bezier(0,0,.2,1),background 140ms ease,color 140ms ease;
 }
 .sidebar-actions.is-compact:hover .icon-btn,
 .sidebar-actions.is-compact.is-revealed .icon-btn { color:var(--c-ink); }
@@ -2797,9 +2826,7 @@ onMounted(loadActivityUnread)
   color: var(--c-accent);
 }
 .side-menu-sep {
-  height: 1px;
-  background: var(--c-line-soft);
-  margin: 4px 0;
+  height: 8px;
 }
 
 .slide-fade-enter-active,

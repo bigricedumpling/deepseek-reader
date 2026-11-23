@@ -12,9 +12,9 @@
       这篇有 {{ transientImageCount }} 张图片只记录了浏览器临时地址。正文和图片位置仍在，原图需从截图重新选择。
       <details v-if="!readonly" class="mt-2">
         <summary>按原位置逐张替换图片</summary>
-        <div v-for="item in transientImages" :key="item.src" class="my-1 flex items-center gap-2">
+        <div v-for="item in transientImages" :key="item.start" class="my-1 flex items-center gap-2">
           <span>第 {{ item.index }} 张，第 {{ item.line }} 行</span>
-          <button class="lossy-btn" @click="chooseReplacement(item.src)">选择原图</button>
+          <button class="lossy-btn" @click="chooseReplacement(item)">选择原图</button>
         </div>
       </details>
       <input ref="replacementInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="replaceImage" />
@@ -105,6 +105,7 @@ import { preservedRemark, preservedSchema, editableHtmlSchema, configurePreserve
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
+import { workspaceImages, rewriteWorkspaceImages } from '../../server/services/workspace-images.js'
 import { richBlockRemark, richBlockSchema, calloutSchema, calloutKeys, calloutValue, richMarkdown } from '../utils/rich-blocks'
 import { editorViewCtx, parserCtx } from '@milkdown/kit/core'
 import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
@@ -161,13 +162,14 @@ const docLinkCard = ref(null)
 let imageHideTimer = 0
 let docCardHideTimer = 0
 let imageReplaceTarget = null
-let replacementSrc = ''
+let replacementTarget = null
 let newImagePosition = 0
 let newImageBaseline = ''
 const transientImages = computed(() => {
   const source = String(props.value)
-  return [...source.matchAll(/!\[[^\]]*\]\((blob:[^)]+)\)/g)].map((match, index) => ({
-    src: match[1], index: index + 1, line: source.slice(0, match.index).split('\n').length
+  if (!source.includes('blob:')) return []
+  return workspaceImages(source, url => url.startsWith('blob:')).map((span, index) => ({
+    ...span, index: index + 1, line: source.slice(0, span.start).split('\n').length
   }))
 })
 const transientImageCount = computed(() => transientImages.value.length)
@@ -181,6 +183,14 @@ let observer = null
  * 一旦自动保存把这种结果写回去，原文就被重排了。
  */
 let userTyped = false
+let initialSerialized = null
+function markdownSnapshot() {
+  if (lossy.value) return srcEl.value?.value ?? props.value
+  if (!userTyped || initialSerialized === null) return props.value
+  const markdown = crepe.getMarkdown()
+  return markdown === initialSerialized ? baseline : normalizeMarkdown(markdown, baseline, { spacing: false })
+}
+defineExpose({ markdownSnapshot })
 /**
  * 编辑器创建时原文的快照。
  * 不能拿 props.value 做比对基准——它会被父组件更新掉，
@@ -219,8 +229,8 @@ async function uploadImage(file) {
   }
 }
 
-function chooseReplacement(src) {
-  replacementSrc = src
+function chooseReplacement(span) {
+  replacementTarget = { span, markdown: String(props.value) }
   if (replacementInput.value) {
     replacementInput.value.value = ''
     replacementInput.value.click()
@@ -229,12 +239,13 @@ function chooseReplacement(src) {
 
 async function replaceImage(event) {
   const file = event.target.files?.[0]
-  const oldSrc = replacementSrc
-  if (!file || !oldSrc) return
+  const target = replacementTarget
+  replacementTarget = null
+  if (!file || !target) return
   try {
     const url = await uploadImage(file)
-    if (!String(props.value).includes(oldSrc)) throw new Error('图片位置已变化，请重新选择')
-    emit('update:value', String(props.value).replace(oldSrc, url))
+    if (String(props.value) !== target.markdown) throw new Error('图片位置已变化，请重新选择')
+    emit('update:value', rewriteWorkspaceImages(target.markdown, [target.span], () => url))
   } catch (error) {
     uploadError.value = error.message || '替换失败'
   }
@@ -501,7 +512,8 @@ onMounted(async () => {
   // 报告一次往返结果：解析再序列化之后跟原文差多少，差得多就提醒用户
   // 原样过一遍编辑器再还原，如果回不到原文，说明这篇里有编辑器表达不了的结构
   // （最典型的是表格单元格里的 <br>），这篇就不能自动保存，否则会静默损坏原文
-  const roundTrip = normalizeMarkdown(crepe.getMarkdown(), baseline)
+  initialSerialized = crepe.getMarkdown()
+  const roundTrip = normalizeMarkdown(initialSerialized, baseline)
   const differs = roundTrip.replace(/\s+$/, '') !== String(baseline).replace(/\s+$/, '')
   // 只有格式写法不同才让富文本继续工作；真正有内容差异时保留源码编辑。
   // 打开文档本身绝不自动改写磁盘内容。

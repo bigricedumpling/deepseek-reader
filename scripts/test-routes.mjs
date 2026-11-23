@@ -1,34 +1,57 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { resolveEntry } from '../src/utils/routes.js'
-import { legacyInterviewDoc, legacyRootSectionPath, normalizeLibraryName } from '../src/utils/legacy-paths.js'
+import { loadRouteAliases, redirectForAlias } from '../server/route-aliases.js'
 
-// 旧链接兼容：抽屉名、旧库根、面试准备内部的归类都只能按原样继续工作
-assert.equal(normalizeLibraryName('业务面'), '面试准备')
-assert.equal(normalizeLibraryName(' 面试准备 '), '面试准备')
-assert.equal(legacyInterviewDoc('业务面/会议总结'), '面试准备/业务面/会议总结')
-assert.equal(legacyInterviewDoc('面试准备/总览/下一步计划'), '面试准备/过程稿/总览/下一步计划')
-assert.equal(legacyInterviewDoc('面试准备/总览/下一步计划.md'), '面试准备/过程稿/总览/下一步计划.md')
-assert.equal(legacyInterviewDoc('面试准备/岗位与策略/岗位JD与目标'), '面试准备/常用资料/岗位JD与目标')
-assert.equal(legacyInterviewDoc('面试准备/README'), '面试准备/README')
-assert.equal(legacyRootSectionPath('面试准备/README'), '面试准备/总览/README')
-assert.equal(legacyRootSectionPath('面试准备/岗位JD与目标.md'), '面试准备/岗位与策略/岗位JD与目标.md')
-assert.equal(legacyRootSectionPath('别的目录/README'), '')
-
-for (const base of ['', '/deepseek/reader']) {
+for (const base of ['', '/plugins/reader']) {
   assert.equal(resolveEntry(base + '/', '', base), base + '/')
   assert.equal(resolveEntry(base + '/doc/', '', base), base + '/doc/')
   assert.equal(resolveEntry(base + '/doc/', '?choose=1', base), base + '/doc/?choose=1')
   assert.equal(resolveEntry(base + '/onlyread/', '', base), base + '/onlyread/')
-  for (const [input, title] of [
-    ['/onlyread/笔试题/笔试题交付：题目一', '题目一'],
-    ['/onlyread/笔试题/笔试题交付：题目二', '题目二']
-  ]) {
-    const out = new URL(resolveEntry(base + input, '', base), 'http://localhost')
-    assert.equal(decodeURIComponent(out.pathname), base + '/onlyread/Agent（设计方向）/笔试题交付：' + title)
-    assert.equal(out.searchParams.get('lib'), 'Agent（设计方向）')
-  }
-  assert.equal(new URL(resolveEntry(base + '/edit/业务面/会议总结', '?token=obsolete', base), 'http://localhost').searchParams.has('token'), false)
+  const own = new URL(resolveEntry(base + '/edit/First/Notes', '?lib=Second&token=obsolete', base), 'http://localhost')
+  assert.equal(own.pathname, base + '/doc/First/Notes')
+  assert.equal(own.searchParams.get('lib'), 'First')
+  assert.equal(own.searchParams.has('token'), false)
   assert.doesNotThrow(() => resolveEntry(base + '/doc/%broken', '', base))
-  assert.equal(decodeURIComponent(new URL(resolveEntry(base + '/doc/面试准备/简历/简历', '?lib=wrong', base), 'http://localhost').searchParams.get('lib')), '面试准备')
 }
-console.log('首页、三个历史公开入口、部署前缀、旧编辑入口、路径与知识库一致性及损坏编码检查通过')
+
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'typocket-routes-'))
+try {
+  const firstData = path.join(temporary, 'one')
+  const secondData = path.join(temporary, 'two')
+  const id = createHash('sha256').update(firstData).digest('hex').slice(0, 24)
+  const fixture = {
+    libraries: { First: 'Library' },
+    prefixes: { First: 'Library/First', Sample: 'Library' },
+    documents: { 'Library/First/Heading': 'Library/Archive/Heading' }
+  }
+  fs.writeFileSync(path.join(temporary, id + '.json'), JSON.stringify(fixture))
+  const first = loadRouteAliases(firstData, temporary)
+  const second = loadRouteAliases(secondData, temporary)
+  for (const [before, expected] of [
+    ['/doc/First/Heading.md?view=1', '/doc/Library/Archive/Heading.md?view=1&lib=Library'],
+    ['/onlyread/Sample/Overview', '/onlyread/Library/Overview?lib=Library'],
+    ['/edit/First%2FNotes', '/edit/Library/First/Notes?lib=Library'],
+    ['/doc/?lib=First', '/doc/?lib=Library'],
+    ['/?lib=First', '/?lib=Library']
+  ]) {
+    const url = new URL(before, 'http://localhost')
+    const location = redirectForAlias(url, first)
+    assert.ok(location)
+    for (const base of ['', '/prefix']) {
+      const next = new URL(location, new URL(base + before, url.origin))
+      assert.equal(next.pathname + next.search, base + expected)
+    }
+    assert.equal(redirectForAlias(url, second), '', 'a different instance keeps its original URL')
+    assert.equal(redirectForAlias(new URL(expected, url.origin), first), '', 'canonical URL does not redirect')
+  }
+  assert.equal(redirectForAlias(new URL('http://localhost/api/tree?lib=First'), first), '')
+  assert.equal(redirectForAlias(new URL('http://localhost/doc/%broken'), first), '')
+  assert.equal(redirectForAlias(new URL('http://localhost/doc/constructor/Notes'), first), '')
+} finally {
+  fs.rmSync(temporary, { recursive: true, force: true })
+}
+console.log('PASS: generic routes, per-instance bookmark aliases, nested prefixes, extensions and malformed paths')

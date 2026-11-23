@@ -3,7 +3,6 @@ import { defineStore } from 'pinia'
 import { ref, computed, reactive } from 'vue'
 import { renderMarkdown, extractToc, searchDocs } from '../utils/markdown'
 import { API_BASE } from '../utils/api'
-import { legacyInterviewDoc, legacyRootSectionPath, normalizeLibraryName } from '../utils/legacy-paths'
 
 /*
  * 成品文件的类型：pdf 与 h5。
@@ -67,7 +66,7 @@ const recentDocs = ref(loadRecentDocs())
 function tabsKey() {
   try {
     const requestedLib = new URLSearchParams(location.search).get('lib') || ''
-    const lib = normalizeLibraryName(requestedLib)
+    const lib = requestedLib.trim()
     const guest = window.__readerMode === 'guest' ? ':guest' : ''
     return TABS_KEY + guest + (lib ? ':' + lib : '')
   } catch {
@@ -314,7 +313,7 @@ export const useDocsStore = defineStore('docs', () => {
       /*
        * 这里必须用 decodeURIComponent，不能用 decodeURI。
        *
-       * 路径里的斜杠会被编码成 %2F（例如 笔试题%2F笔试题交付：题目二），
+       * 路径里的斜杠会被编码成 %2F（例如 Projects%2FOverview），
        * 而 decodeURI 有意不还原 %2F —— 斜杠在路径里有特殊含义。
        * 结果是查表时拿着 %2F 去比，永远匹配不上，页面静默回落到目录里第一篇：
        * 表现就是第二条只读链接打开的是第一篇。这个错误很隐蔽，因为页面不报错。
@@ -328,28 +327,9 @@ export const useDocsStore = defineStore('docs', () => {
     }
   }
 
-  /**
-   * 旧链接的路径映射。
-   *
-   * 对外发出去的链接长这样：/onlyread/笔试题/笔试题交付：题目一
-   * 那时 笔试题 与 调研报告 是文档根下的两个顶层目录。
-   * 后来资料按知识库归拢：笔试题 成了Agent（设计方向）库，调研报告 挪进了它里面。
-   *
-   * 固定改名规则在 utils/legacy-paths.js；这里只保留需要看当前文档树才能判断的部分。
-   *
-   * 两个容易写错的地方：
-   *   1. allFiles 只含文件（flatten 不产出目录），所以判断目录要看有没有文件的
-   *      file 里含这一段，不能用 f.path —— 那个字段在文件条目上根本不存在。
-   *   2. 段是出现在路径中间的（Agent（设计方向）/调研报告/…），
-   *      所以用 indexOf 找，不能用 startsWith。
-   */
+  /** An old directory bookmark can refer to a document under a nested folder. */
   function legacyPath(raw) {
     if (!raw) return ''
-    const mapped = legacyInterviewDoc(raw)
-    if (mapped !== raw) return mapped
-    /* 根部资料归类：映射后仍走一次树匹配，分类目录不存在时还能落回原文 */
-    const sectioned = legacyRootSectionPath(raw)
-    if (sectioned) return legacyPath(sectioned)
     const files = allFiles.value
     if (!files.length) return raw
 
@@ -379,7 +359,7 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   /**
-   * 旧链接没有 ?lib=，但它的第一段（笔试题）其实指的就是某个库。
+   * 旧书签有时没有 ?lib=，需要从其路径恢复所属抽屉。
    * 侧边栏定默认库时用它 —— 不然会落到"第一个库"上，
    * 而路径又按老前缀解析，两边对不上。
    */
@@ -461,7 +441,7 @@ export const useDocsStore = defineStore('docs', () => {
   function routedLib() {
     try {
       const lib = String(new URLSearchParams(location.search).get('lib') || '').trim()
-      return normalizeLibraryName(lib)
+      return lib
     } catch {
       return ''
     }
@@ -512,7 +492,7 @@ export const useDocsStore = defineStore('docs', () => {
    *
    * 不清的话会得到一个自相矛盾的地址：syncUrl 写地址时用的是 location.search，
    * 里面已经带了新的 ?lib=，而 currentPath 还是上一个库的那篇 ——
-   * 于是出现 /edit/过程稿/…/xxx?lib=面试准备 这种"路径属于 A 库、lib 指向 B 库"的地址。
+   * 这会让文档路径与查询参数分别指向不同的抽屉。
    * 清掉之后由 ensureCurrent 从新库的树里重新挑一篇，两边就一致了。
    */
   async function switchLib(options = {}) {
@@ -590,7 +570,7 @@ export const useDocsStore = defineStore('docs', () => {
     const path = clean ? '/' + clean.split('/').map(encodeURIComponent).join('/') : ''
     /* 部署在子路径时，写回地址栏也要带前缀，否则一跳就跑到站点根上 */
     const search = new URLSearchParams(location.search)
-    if (search.get('lib')) search.set('lib', normalizeLibraryName(search.get('lib')))
+    if (search.get('lib')) search.set('lib', search.get('lib').trim())
     const query = search.size ? '?' + search.toString() : ''
     const next = API_BASE + '/' + mode + path + query
     if (location.pathname + location.search !== next) history.replaceState(null, '', next)
@@ -701,7 +681,9 @@ export const useDocsStore = defineStore('docs', () => {
 
   function updateContent(text) {
     if (!currentPath.value) return
-    rawMap.value[currentPath.value] = text
+    const path = currentPath.value
+    rawMap.value[path] = text
+    if (conflict.value?.path === path) conflict.value.local = text
   }
 
   /** 丢掉当前这篇没保存的改动，退回上次保存的内容 */
@@ -722,6 +704,7 @@ export const useDocsStore = defineStore('docs', () => {
     // 同一时间只允许一个写请求。等待前一次结束后重新取最新正文，
     // 避免慢请求把后发的修改覆盖回旧版本。
     while (saveTask) await saveTask
+    if (conflict.value?.path === path) return false
     // 从没读到过内容就保存，等于把空内容写回磁盘，必须拦住
     if (rawMap.value[path] === undefined) {
       setError('这篇没有成功读取，拒绝保存，免得把空内容覆盖上去', 'save')
@@ -735,12 +718,13 @@ export const useDocsStore = defineStore('docs', () => {
       try {
         const result=await api('PUT', '/doc', {path,content,revision:revisionMap.value[path]})
         revisionMap.value[path]=result.data.revision
-        conflict.value=null
         savedMap.value[path] = content
         savedAt.value = Date.now()
         return true
       } catch (e) {
-        if(e.code==='CONFLICT')conflict.value={path,local:content,base:savedMap.value[path],remote:e.details.content,revision:e.details.revision}
+        if (e.code === 'CONFLICT') {
+          conflict.value = { path, local: rawMap.value[path], base: savedMap.value[path], remote: e.details.content, revision: e.details.revision }
+        }
         setError('保存失败：' + String(e.message || e), 'save')
         return false
       } finally {
@@ -916,19 +900,42 @@ export const useDocsStore = defineStore('docs', () => {
     const update=list=>{for(const node of list){if(node.file===path)node.meta=data.meta;if(node.children)update(node.children)}};update(treeNodes.value)
     return data
   }
-  async function resolveConflict(mode,merged) {
-    if (!['copy','merge','remote'].includes(mode)) throw Error('未知冲突处理方式')
-    const c=conflict.value;if(!c)return
-    if(mode==='copy') {
-      const dir=c.path.split('/').slice(0,-1).join('/')
-      await api('POST','/doc',{dir,name:c.path.split('/').pop().replace(/\.md$/i,'')+'（冲突副本）',content:c.local,requestId:crypto.randomUUID()})
+  async function resolveConflict(mode, merged, mergeBase) {
+    if (!['copy', 'merge', 'remote'].includes(mode)) throw Error('未知冲突处理方式')
+    const c = conflict.value
+    if (!c) return
+    const path = c.path
+    const local = rawMap.value[path]
+    if (mode === 'merge' && mergeBase !== undefined && mergeBase !== local) {
+      throw Error('你的修改有更新，请对照左侧内容再保存合并结果')
     }
-    revisionMap.value[c.path]=c.revision;savedMap.value[c.path]=c.remote
-    rawMap.value[c.path]=mode==='merge'?merged:c.remote
-    conflict.value=null;clearError()
+    if (mode === 'copy') {
+      // A lost response can be retried without creating an identical second copy.
+      if (!c.copy || c.copy.content !== local) c.copy = { content: local, requestId: crypto.randomUUID() }
+      const parts = path.split('/')
+      const name = parts.pop().replace(/\.md$/i, '') + '（冲突副本）'
+      await api('POST', '/doc', { dir: parts.join('/'), name, ...c.copy })
+    }
+    if (mode !== 'merge') {
+      const { data } = await api('GET', '/doc?path=' + encodeURIComponent(path))
+      if (conflict.value !== c) return
+      const changed = c.revision !== data.revision
+      c.remote = data.content
+      c.revision = data.revision
+      if (rawMap.value[path] !== local) throw Error('你的修改有更新，请确认最新内容')
+      if (mode === 'remote' && changed) throw Error('磁盘版本再次更新，请确认最新内容')
+    }
+    revisionMap.value[path] = c.revision
+    savedMap.value[path] = c.remote
+    rawMap.value[path] = mode === 'merge' ? merged : c.remote
+    conflict.value = null
+    clearError()
     contentEpoch.value++
-    if(mode==='merge'){if(!(await savePath(c.path)))throw Error(error.value)}
-    else await loadTree()
+    if (mode === 'merge') {
+      if (!(await savePath(path))) throw Error(error.value)
+    } else if (mode === 'copy') {
+      await loadTree()
+    }
   }
   async function renameLibrary(from,to) {
     if(isDirty.value && !(await save()))throw new Error(error.value)

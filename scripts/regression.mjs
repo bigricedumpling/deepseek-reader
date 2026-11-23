@@ -7,66 +7,33 @@
  * 用法：npm run regression
  * 它会自建一个临时沙箱，只动沙箱里的文件，不碰真实内容。
  */
-import { spawn, execSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import fs from 'node:fs'
+import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createServer } from 'vite'
 
-const SELF = path.dirname(fileURLToPath(import.meta.url))
-const ROOT = path.resolve(SELF, '..')
-const SB = '/tmp/kb-regression-' + Date.now()
-const SB_APP = path.join(SB, '知识库阅读器')
-const APP_PORT = 8098
-const CDP_PORT = 9351
+const ROOT = fileURLToPath(new URL('../', import.meta.url))
+const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'typocket-regression-')))
+const SB = path.join(temporary, 'documents')
+const profile = path.join(temporary, 'browser')
+const appRoot = path.join(temporary, 'app')
+process.env.DOCS_ROOT = SB
+process.env.READER_RUNTIME_DIR = path.join(temporary, 'runtime')
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
-// 上一轮如果没退干净会占着端口，先清掉
-try {
-  execSync(`lsof -nP -iTCP:${APP_PORT} -sTCP:LISTEN -t 2>/dev/null | xargs -r kill`, { stdio: 'ignore' })
-} catch {}
-execSync(`rm -rf /tmp/kb-regression-* 2>/dev/null`, { stdio: 'ignore' })
-
-console.log('搭沙箱:', SB)
-fs.mkdirSync(SB_APP, { recursive: true })
-for (const item of ['src', 'server', 'public', 'index.html', 'package.json', 'vite.config.js', 'brand.mjs']) {
-  fs.cpSync(path.join(ROOT, item), path.join(SB_APP, item), { recursive: true })
+for (const [file, body] of [
+  ['内容/文档一.md', '# 文档一\n\n正文 a\n'],
+  ['内容/分类甲/文档二.md', '# 文档二\n\n正文 b\n'],
+  ['内容/分类乙/文档三.md', '# 文档三\n\n正文 c\n']
+]) {
+  const destination = path.join(SB, file)
+  fs.mkdirSync(path.dirname(destination), { recursive: true })
+  fs.writeFileSync(destination, body)
 }
-fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(SB_APP, 'node_modules'))
-const cfg = path.join(SB_APP, 'vite.config.js')
-fs.writeFileSync(
-  cfg,
-  fs.readFileSync(cfg, 'utf-8')
-    .replace('port: 8090', 'port: ' + APP_PORT)
-    // node_modules 是指向主项目的软链，不把缓存目录挪开的话，
-    // 沙箱跑一次就会覆盖主项目的 node_modules/.vite，把正在跑的 dev server 弄坏
-    .replace('export default defineConfig({', `export default defineConfig({\n  cacheDir: ${JSON.stringify(path.join(SB_APP, '.vite-cache'))},`)
-)
-
-/*
- * 直接起 Vite，不走 npm run dev。
- * 沙箱只复制应用需要的文件，package.json 里的 predev 会去同步品牌和插件，
- * 那些文件在沙箱里并不存在，npm 会在启动 dev 之前就失败。
- */
-const app = spawn(process.execPath, [path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js')], {
-  cwd: SB_APP,
-  env: { ...process.env, DOCS_ROOT: SB },
-  stdio: 'ignore'
-})
-for (let i = 0; i < 60; i++) {
-  try { if ((await fetch(`http://127.0.0.1:${APP_PORT}/`)).ok) break } catch {}
-  await new Promise(r => setTimeout(r, 500))
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-execSync(`rm -rf "${SB}/内容" "${SB}/.回收站"`, { stdio: 'ignore' })
-/*
- * 抽屉是文档根下的顶层目录。回归只建一个抽屉「内容」，
- * 让启动时自动选中的库就是它，5 篇文档都在同一棵树里。
- */
-execSync(`mkdir -p "${SB}/内容/分类甲" "${SB}/内容/分类乙"`)
-execSync(`printf '# 文档一\\n\\n正文 a\\n' > "${SB}/内容/文档一.md"`)
-execSync(`printf '# 文档二\\n\\n正文 b\\n' > "${SB}/内容/分类甲/文档二.md"`)
-execSync(`printf '# 文档三\\n\\n正文 c\\n' > "${SB}/内容/分类乙/文档三.md"`)
 
 // 表格行里"竖线前紧贴、不空格"的写法（真实文档里出现过：URL 后面跟中文括号）。
 // 还原时若重建这一行会平白多一个空格，整篇就被判成有损，这里钉住它。
@@ -112,17 +79,13 @@ fs.writeFileSync(path.join(SB, '内容/有损文档.md'), [
 // 树是扫盘扫出来的（目录 = 分类，文件名 = 文档名），不再需要清单文件。
 // 下面 5 篇都在同一个抽屉「内容」下：根目录一篇、分类甲/分类乙各一篇、根目录两篇特殊格式。
 
-const PORT = CDP_PORT
-const APP = `http://127.0.0.1:${APP_PORT}/`
-const profile = '/tmp/kb-regression-profile-' + Date.now()
+const chromeBinary = process.env.CHROME_BIN || ({
+  darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  win32: path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Google/Chrome/Application/chrome.exe'),
+  linux: 'google-chrome'
+})[process.platform]
 
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
-  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-  /* 默认 800×600 会触发窄屏收起侧栏，回归就点不到“新建文档” */
-  '--window-size=1440,900',
-  `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, APP
-], { stdio: 'ignore' })
-
+let vite, server, chrome
 let ws, id = 0
 const pending = new Map()
 const consoleErrors = []
@@ -160,16 +123,42 @@ const clickText = (t) => ev(`
 `)
 
 try {
-  let target = null
-  for (let i = 0; i < 60; i++) {
+  // Both servers request their own ephemeral port. Vite's cache and the browser
+  // profile belong to this run, including when another test is already running.
+  fs.mkdirSync(appRoot)
+  for (const name of ['src', 'server', 'public', 'index.html', 'package.json', 'vite.config.js', 'brand.mjs']) {
+    fs.cpSync(path.join(ROOT, name), path.join(appRoot, name), { recursive: true })
+  }
+  fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(appRoot, 'node_modules'), 'junction')
+  server = http.createServer((req, res) => vite.middlewares(req, res))
+  vite = await createServer({
+    root: appRoot,
+    cacheDir: path.join(temporary, 'vite-cache'),
+    envDir: false,
+    logLevel: 'warn',
+    optimizeDeps: { entries: ['index.html'] },
+    server: { middlewareMode: true, hmr: { server }, watch: null, fs: { allow: [path.join(ROOT, 'node_modules'), temporary] } }
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const appUrl = `http://127.0.0.1:${server.address().port}/`
+  chrome = spawn(chromeBinary, [
+    '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    '--window-size=1440,900', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'
+  ], { stdio: 'ignore' })
+  await once(chrome, 'spawn')
+  let target
+  for (let i = 0; i < 100; i++) {
+    if (chrome.exitCode !== null) throw new Error(`Chrome exited (${chrome.exitCode})`)
     try {
-      const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
-      target = list.find((t) => t.type === 'page' && t.url.startsWith('http://127.0.0.1:8098'))
+      const [port] = fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)
+      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+      target = list.find(item => item.type === 'page' && item.url === 'about:blank')
       if (target) break
     } catch {}
-    await sleep(300)
+    await sleep(200)
   }
-  if (!target) throw new Error('没找到页面')
+  if (!target) throw new Error('无法连接到测试浏览器')
   ws = new WebSocket(target.webSocketDebuggerUrl)
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej })
   ws.onmessage = (e) => {
@@ -184,6 +173,7 @@ try {
     }
   }
   await send('Runtime.enable'); await send('Page.enable')
+  await send('Page.navigate', { url: new URL('doc/内容/文档一?lib=内容', appUrl).href })
 
   for (let i = 0; i < 60; i++) {
     if (await ev('return !!(window.__reader && window.__reader.currentPath)')) break
@@ -347,7 +337,7 @@ try {
     const inp=document.querySelector('input[placeholder="查找当前文档"]')
     if(!inp) return { err:'没有查找输入框' }
     const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set
-    set.call(inp,'正文'); inp.dispatchEvent(new Event('input',{bubbles:true}))
+    set.call(inp,'又改了'); inp.dispatchEvent(new Event('input',{bubbles:true}))
     await new Promise(x=>setTimeout(x,500))
     const hits=[...document.querySelectorAll('.search-hit')]
     if(!hits.length) return { err:'没有搜索结果', hadDrop:false }
@@ -357,20 +347,23 @@ try {
   await ev(`window.__reader.searchKeyword=''; return true`)
   await sleep(400)
 
-  r = await ev(`const s=window.__reader
-    const cur = s.allDocs.find(d=>d.file===s.currentPath)
-    s.updateContent('# y\\n\\n未保存\\n'); await new Promise(x=>setTimeout(x,400))
-    const row = [...document.querySelectorAll('.doc-row')].find(r2=>r2.textContent.includes(cur.name))
+  r = await ev(`const s = window.__reader
+    const row = [...document.querySelectorAll('.doc-row')].find(item => item.dataset.file === s.currentPath)
     row.querySelector('.acts-btn').click()
-    await new Promise(x=>setTimeout(x,400))
-    const del = [...document.querySelectorAll('.tree-menu-item')].find(b=>b.textContent.trim().startsWith('删除'))
-    if (!del) return { warned: false, err: '没出现更多操作菜单' }
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const actions = [...document.querySelectorAll('.tree-menu-item')]
+    const del = actions.find(button => button.textContent.trim() === '删除')
+    if (!del) return { error: '删除菜单未出现：' + actions.map(item => item.textContent).join(' / ') }
+    s.updateContent(s.currentRaw + '\\n未保存的删除测试\\n')
     del.click()
-    await new Promise(x=>setTimeout(x,600))
-    const box = document.querySelector('.fixed.inset-0')
-    return { warned: box ? /没保存|改动/.test(box.textContent) : false }`)
-  check('P0-3 删除当前文档会提示改动丢失', r.warned)
-  await clickText('取消'); await sleep(400)
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const box = document.querySelector('.app-dialog')
+    return { warned: !!box && /没保存|改动/.test(box.textContent), detail: box?.textContent || '未打开确认框' }`)
+  check('P0-3 删除当前未保存文档会提示改动丢失', r.warned, r.error || r.detail)
+  if (r.warned) {
+    await clickText('取消')
+    await sleep(300)
+  }
   await ev(`window.__reader.discard(); return true`)
 
   r = await ev(`const s=window.__reader; await s.deleteCategory('内容/分类乙'); await new Promise(x=>setTimeout(x,700))
@@ -379,7 +372,6 @@ try {
   check('P1-5 删分类后无残留缓存', r.stale.length === 0, r.stale.length ? JSON.stringify(r.stale) : `剩 ${r.n} 篇`)
 
   await sleep(400)
-  const real = consoleErrors.filter((e) => !/favicon|DevTools|Download the Vue/i.test(e))
   /* ---------- 表格行整行照抄：竖线前的空格不能凭空多出来 ---------- */
   await ev(`await window.__reader.select('内容/表格文档.md')`)
   await sleep(2500)
@@ -388,33 +380,77 @@ try {
     return { same: out === base, note: !!document.querySelector('.lossy-note'), b: base.length, o: out.length }`)
   check('表格行逐字节还原（竖线前不加空格）', tbl.same && !tbl.note, `${tbl.b}→${tbl.o} lossy=${tbl.note}`)
 
-  /* ---------- 有损这篇：黄条要说清差在哪、并给出一键重排 ---------- */
-  await ev(`await window.__reader.select('内容/有损文档.md')`)
-  await sleep(2600)
-  const lossyUI = await ev(`const note = document.querySelector('.lossy-note')
-    if (!note) return { lossy: false }
-    const btns = [...note.querySelectorAll('.lossy-btn')]
-    btns[0].click()
-    await new Promise(r => setTimeout(r, 250))
-    return { lossy: true, rows: note.querySelectorAll('.lossy-diff li').length, canon: btns.some(b => b.textContent.includes('重排')) }`)
-  check(
-    '有损提示：能列出差异行并给出一键重排',
-    !lossyUI.lossy || (lossyUI.rows > 0 && lossyUI.canon),
-    lossyUI.lossy ? `差异 ${lossyUI.rows} 处，重排按钮 ${lossyUI.canon ? '在' : '没在'}` : '沙箱这篇可以无损往返，跳过'
-  )
+  async function editAndReopen(file, needle, marker, requireRichEditor) {
+    const original = fs.readFileSync(path.join(SB, file), 'utf8')
+    await ev(`await window.__reader.select(${JSON.stringify(file)})`)
+    const mode = await ev(`
+      const needle = ${JSON.stringify(needle)}
+      for (let i=0; i<100; i++) {
+        const source = document.querySelector('.src-editor')
+        if (source?.checkVisibility() && source.value.includes(needle)) {
+          source.focus()
+          const end = source.value.indexOf(needle) + needle.length
+          source.setSelectionRange(end, end)
+          return 'source'
+        }
+        const editor = document.querySelector('.milkdown .ProseMirror')
+        const target = [...(editor?.querySelectorAll('p, h1') || [])].find(p=>p.textContent === needle)
+        if (editor?.checkVisibility() && target && window.__baseline?.includes(needle)) {
+          editor.focus()
+          const range = document.createRange()
+          range.selectNodeContents(target)
+          range.collapse(false)
+          const selection = getSelection()
+          selection.removeAllRanges()
+          selection.addRange(range)
+          return 'rich'
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      throw Error('未找到显示中的可编辑正文：' + needle)
+    `)
+    if (requireRichEditor) check('含表格的文档直接进入富文本', mode === 'rich', mode)
+    await send('Input.insertText', { text: marker })
+    const expected = original.replace(needle, needle + marker)
+    for (let i=0; i<100 && !fs.readFileSync(path.join(SB, file), 'utf8').includes(marker); i++) await sleep(100)
+    const edited = fs.readFileSync(path.join(SB, file), 'utf8')
+    check(`实际输入只改变目标文字（${mode === 'rich' ? '富文本' : '源码保护'}）`, edited === expected)
+    await send('Page.reload', { ignoreCache: true })
+    let reopened = false
+    for (let i=0; i<100 && !reopened; i++) {
+      await sleep(150)
+      reopened = await ev(`
+        const source = document.querySelector('.src-editor')
+        const editor = document.querySelector('.milkdown .ProseMirror')
+        const text = source?.checkVisibility() ? source.value : editor?.checkVisibility() ? editor.textContent : ''
+        return text?.includes(${JSON.stringify(marker)}) || false`)
+    }
+    check('刷新后实际可见编辑器读回修改', reopened)
+  }
+  await editAndReopen('内容/表格文档.md', '表格文档', '编辑器实测', true)
+  await editAndReopen('内容/有损文档.md', '下面几种写法编辑器大多吐不回原样：', '复杂格式实测', false)
 
+  const real = consoleErrors.filter(e => !/favicon|DevTools|Download the Vue/i.test(e))
   check('运行期无控制台报错', real.length === 0, real.slice(0, 2).join(' | '))
 } catch (e) {
   console.log('中断:', e.message)
   results.push({ name: 'harness', pass: false })
 } finally {
   try { ws?.close() } catch {}
-  chrome.kill()
+  if (chrome?.pid && chrome.exitCode === null && chrome.signalCode === null) {
+    const stopped = once(chrome, 'exit')
+    chrome.kill()
+    await stopped
+  }
+  if (server?.listening) {
+    server.closeAllConnections()
+    await new Promise(resolve => server.close(resolve))
+  }
+  await vite?.close()
+  fs.rmSync(temporary, { recursive: true, force: true, maxRetries: 6, retryDelay: 200 })
 }
 
 const pass = results.filter((r) => r.pass).length
 console.log(`\n通过 ${pass}/${results.length}`)
 
-try { app.kill() } catch {}
-fs.rmSync(SB, { recursive: true, force: true })
 process.exit(pass === results.length ? 0 : 1)

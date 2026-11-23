@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
+import { stageServer } from './stage-server.mjs'
 import path from 'node:path'
 import http from 'node:http'
 import { pathToFileURL } from 'node:url'
@@ -28,7 +29,7 @@ try {
   fs.mkdirSync(path.join(options.runtimeDirectory, 'dist'), { recursive: true })
   fs.writeFileSync(path.join(options.runtimeDirectory, 'dist', 'index.html'), '<html>Reader lifecycle fixture</html>')
   fs.writeFileSync(path.join(options.runtimeDirectory, 'package.json'), '{"type":"module"}')
-  fs.cpSync(new URL('../server', import.meta.url), path.join(options.runtimeDirectory, 'server'), { recursive: true })
+  await stageServer(path.join(options.runtimeDirectory, 'server'))
   }
   fs.mkdirSync(options.dataDirectory, { recursive: true })
   fs.writeFileSync(path.join(options.dataDirectory, 'keep.md'), '# Keep me')

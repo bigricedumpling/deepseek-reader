@@ -1,4 +1,4 @@
-name: Reader verification
+name: Typocket verification
 on: [push, pull_request]
 permissions:
   contents: read
@@ -32,7 +32,31 @@ jobs:
       - run: node scripts/test-draft-lifecycle.mjs
       - run: node scripts/test-preserved-markdown.mjs
       - run: npm run test:user-recovery
+      - run: npm run test:conflict
+      - run: npm run test:activity
+      - run: node scripts/test-tooltip-input.mjs
       - run: npm run test:workflow
+      - name: Browser editing regression
+        if: runner.os == 'Linux'
+        run: npm run regression
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+      - name: Export a document from the built application
+        if: runner.os == 'Linux'
+        run: |
+          command -v pdftotext || (sudo apt-get update && sudo apt-get install -y poppler-utils)
+          node scripts/e2e/export-release.mjs
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
       - run: npm pack --pack-destination ../../
         working-directory: plugins/reader-workspace
       - run: node scripts/test-package.mjs
+      - name: Upgrade from the published market package
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error --retry 3 --output "$READER_UPGRADE_BASELINE" "$BASELINE_URL"
+          npm run test:upgrade
+        env:
+          BASELINE_URL: https://github.com/bigricedumpling/deepseek-reader/releases/download/v0.2.0-preview.5/dsh-reader-workspace-0.2.0-preview.5.tgz
+          READER_UPGRADE_BASELINE: ${{ runner.temp }}/typocket-previous-market.tgz
+          READER_UPGRADE_BASELINE_SHA256: 58bbe780494f51fc7d0debc8cff54e15a91099b907b4f6b165652da0f1e5b61c

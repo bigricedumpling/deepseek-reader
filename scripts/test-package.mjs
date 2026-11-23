@@ -13,6 +13,7 @@ try{
  assert(entries.includes('package/runtime/dist/index.html'))
  assert(entries.includes('package/runtime/server/serve.js'))
  assert(entries.includes('package/platform.js'))
+ assert(!entries.some(name=>/(?:^|\/)(?:\.runtime|route-aliases)\//.test(name)), 'deployment-specific route mappings must stay local')
  assert(entries.includes('package/runtime/dist/pdfjs/LICENSE'))
  assert(entries.some(name=>name.includes('pdf.worker')&&name.endsWith('.mjs')))
  assert(!entries.some(name=>/state\.sqlite|\.admin-password|\.分享\.json|service\.json|runtime\/dist\/kb\.json|Weixin\.otf|\.知识库\.json/.test(name)),'private runtime data must not be packaged')

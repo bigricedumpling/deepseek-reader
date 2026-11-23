@@ -7,7 +7,7 @@
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Reader Workspace",
+    "displayName": "Typocket",
     "shortDescription": "Read and organize your local knowledge libraries.",
     "longDescription": "Read, search and organize Markdown documents in a local Typocket knowledge tree, with stable IDs, revision checks, metadata and history when the local service is running.",
     "developerName": "zangqucheng",

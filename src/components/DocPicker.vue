@@ -125,11 +125,6 @@ function folderOf(file) {
   border-radius: var(--radius-surface);
   box-shadow: var(--c-pop-shadow);
   overflow: hidden;
-  animation: pick-in 0.15s ease-out;
-}
-@keyframes pick-in {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: none; }
 }
 .pick-head {
   display: flex;

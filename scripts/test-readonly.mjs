@@ -55,7 +55,7 @@ try {
   assert.equal(fs.readdirSync(versionDir).length, 6, 'five indexed versions and the unrelated legacy file remain')
   assert.equal(fs.existsSync(path.join(versionDir, oldName)), true, 'unindexed legacy files must never be silently deleted')
 
-  const longRel = '面试准备/业务面/业务面初步复习_10个需要提前准备的问答.md'
+  const longRel = '图书馆/专题/包含数字与中文的长文件名_10个常见的分类记录.md'
   assert.ok(Buffer.byteLength('2026-09-24-04-02-28-450--0__' + encodeURIComponent(longRel)) > 255,
     'the old backup filename must exceed the filesystem limit')
   const longFile = path.join(root, longRel)

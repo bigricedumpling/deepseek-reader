@@ -5,9 +5,10 @@ import { assetUrl, API_BASE } from './api.js'
 import { remarkCtx } from '@milkdown/kit/core'
 import { ParserState, SerializerState } from '@milkdown/kit/transformer'
 import { Plugin, TextSelection } from '@milkdown/kit/prose/state'
+import { parseRichBlock } from './rich-block-format.js'
 import { isCosmeticOnly } from './markdown-normalize.js'
 const inline = new MarkdownIt({html:false,linkify:true})
-export function parseRichBlock(raw){try{const v=JSON.parse(raw);if(v.version!==1||!['callout','columns','figure','card'].includes(v.type))return null;if(JSON.stringify(v).length>200000)return null;for(const key of ['content','left','right','icon','src','alt','caption','title','description','id'])if(v[key]!==undefined&&typeof v[key]!=='string')return null;return v}catch{return null}}
+export { parseRichBlock }
 export function richMarkdown(value){return '\n```reader-block\n'+JSON.stringify(value,null,2)+'\n```\n'}
 function safeUrl(value){return /^(https?:\/\/|\/api\/file\?)/.test(value||'')?assetUrl(value):''}
 function calloutIcon(value) {

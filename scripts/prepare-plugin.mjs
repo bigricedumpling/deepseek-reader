@@ -1,5 +1,6 @@
 import { BRAND_NAME } from '../brand.mjs'
 import fs from 'node:fs'
+import { stageServer } from './stage-server.mjs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -14,7 +15,7 @@ if (build.status !== 0) process.exit(build.status || 1)
 fs.rmSync(runtime, { recursive: true, force: true })
 fs.mkdirSync(runtime, { recursive: true })
 fs.cpSync(path.join(root, 'dist'), path.join(runtime, 'dist'), { recursive: true })
-fs.cpSync(path.join(root, 'server'), path.join(runtime, 'server'), { recursive: true })
+await stageServer(path.join(runtime, 'server'))
 // Standalone website configuration is not part of the plugin. Local
 // installations store their own libraries under DOCS_ROOT.
 fs.rmSync(path.join(runtime, 'dist', 'kb.json'), { force: true })

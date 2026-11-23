@@ -163,6 +163,13 @@ let chromeTimer = 0
 
 async function toggleNav() {
   clearTimeout(chromeTimer)
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    reader.navCollapsed = !reader.navCollapsed
+    chromeCompact.value = reader.navCollapsed
+    chromeExpanding.value = false
+    chromeWidth.value = ''
+    return
+  }
   if (reader.navCollapsed) {
     /* 展开：左段和侧栏一起从 compact 内容宽长到侧栏宽，顶栏不换位置。 */
     const start = topbarLeftEl.value?.getBoundingClientRect().width

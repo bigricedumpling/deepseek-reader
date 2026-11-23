@@ -76,6 +76,7 @@
 </template>
 
 <script setup>
+import { scrollBehavior } from '../utils/scroll-target.js'
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import ContentIcon from './ContentIcon.vue'
 import { PhX } from '../icons/remix'
@@ -156,13 +157,14 @@ const strip = ref(null)
 const blobStyle = ref({ opacity: 0 })
 const trailStyle = ref({ opacity: 0 })
 const gooMoving = ref(false)
+let trailFrame = 0
 let gooTimer = 0
 async function measureBlob() {
   await nextTick()
   const host = strip.value
   if (!host) return
   const activeEl = host.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
-  if (!activeEl || props.items.length < 2) { blobStyle.value = { opacity: 0 }; trailStyle.value = { opacity: 0 }; return }
+  if (!activeEl || props.items.length < 2) { cancelAnimationFrame(trailFrame); blobStyle.value = { opacity: 0 }; trailStyle.value = { opacity: 0 }; return }
   const next = {
     left: (activeEl.offsetLeft + 4) + 'px',
     top: (activeEl.offsetTop + 1) + 'px',
@@ -172,7 +174,12 @@ async function measureBlob() {
   }
   const prev = blobStyle.value
   const moved = prev.left !== undefined && (prev.left !== next.left || prev.top !== next.top || prev.width !== next.width)
-  if (moved) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    cancelAnimationFrame(trailFrame)
+    clearTimeout(gooTimer)
+    gooMoving.value = false
+    trailStyle.value = { opacity: 0 }
+  } else if (moved) {
     // 主块先走，尾块从旧位置慢半拍追上来；两个形状被 SVG goo 连在一起，
     // 中途就是 shwn 那种被拉长、再回弹的液滴，而不是一块灰底平移。
     gooMoving.value = true
@@ -181,13 +188,14 @@ async function measureBlob() {
     trailStyle.value = { ...prev, opacity: 1 }
     // 尾块不主动消失：它追到目标后正好压在主块下面，形状并集不变；
     // 下一次切换时它再从当前位置慢半拍出发。
-    requestAnimationFrame(() => { trailStyle.value = { ...next, opacity: 1 } })
+    cancelAnimationFrame(trailFrame)
+    trailFrame = requestAnimationFrame(() => { trailStyle.value = { ...next, opacity: 1 } })
   }
   blobStyle.value = next
 }
 watch(() => [props.active, props.items.map(t => t.file + ':' + t.name + ':' + Boolean(t.dirty)).join('|')], measureBlob, { flush: 'post' })
 onMounted(measureBlob)
-onBeforeUnmount(() => clearTimeout(gooTimer))
+onBeforeUnmount(() => { clearTimeout(gooTimer); cancelAnimationFrame(trailFrame) })
 
 /** 两侧还有没有看不见的标签：有就画一小段渐变，提示"这儿还能滚" */
 const fadeLeft = ref(false)
@@ -221,9 +229,9 @@ function scrollActiveIntoView(smooth = true) {
   const right = left + tab.offsetWidth
   const pad = 10
   if (left - pad < el.scrollLeft) {
-    el.scrollTo({ left: Math.max(0, left - pad), behavior: smooth ? 'smooth' : 'auto' })
+    el.scrollTo({ left: Math.max(0, left - pad), behavior: scrollBehavior(smooth) })
   } else if (right + pad > el.scrollLeft + el.clientWidth) {
-    el.scrollTo({ left: right + pad - el.clientWidth, behavior: smooth ? 'smooth' : 'auto' })
+    el.scrollTo({ left: right + pad - el.clientWidth, behavior: scrollBehavior(smooth) })
   }
 }
 
