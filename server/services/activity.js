@@ -32,7 +32,15 @@ const contentActions = new Set(['POST /doc', 'PUT /doc', 'PATCH /doc', 'PUT /mov
 const diffActions = new Set(['POST /doc', 'PUT /doc'])
 
 function parse(raw) {
-  try { return JSON.parse(raw || '{}') } catch { return {} }
+  let details
+  try { details = JSON.parse(raw || '{}') } catch { return {} }
+  // Older Windows journals used backslashes. Nodes and aliases are keyed by slash-separated paths.
+  for (const file of fileList(details)) {
+    for (const key of ['path', 'from', 'to']) {
+      if (typeof file[key] === 'string') file[key] = file[key].replaceAll('\\', '/')
+    }
+  }
+  return details
 }
 
 function fileList(details) {
@@ -47,7 +55,7 @@ function versionIdFrom(details) {
   for (const file of fileList(details)) {
     for (const value of [file.path, file.from, file.to]) {
       if (!isVersionPath(value)) continue
-      const id = path.basename(value, '.md')
+      const id = path.posix.basename(value, '.md')
       if (id) return id
     }
   }

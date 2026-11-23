@@ -26,6 +26,6 @@ macOS 默认抽屉目录是 `~/Library/Application Support/Reader/知识库`。�
 - Agent 直接使用本地文件，不需要单独授权；Typocket 不提供公开分享或云端发布。
 - 单篇内容交付使用导出；导出不会随后续编辑自动更新。
 - 工作区文件与抽屉副本独立，不提供双向同步或多人协作。
-- 同库双消费者与重启已通过实际服务测试；两个原生 DSH 桌面窗口的人工验收仍未完成。
+- 在 macOS DSH NEXT 的两个原生窗口中可以同时打开同一个抽屉。两处写入冲突时可另存副本；卸载插件后原文和副本继续留在本机。
 
 源代码采用 [MIT License](LICENSE)。字体、PDF 阅读组件和图标的来源与许可见[第三方资产](https://github.com/bigricedumpling/deepseek-reader/blob/main/docs/THIRD-PARTY-ASSETS.md)。

@@ -99,6 +99,9 @@ export function workspace(root) {
     mkdir(path.dirname(to))
     record({ type: 'move', from, to }); fs.renameSync(from, to)
   }
+  function operationPath(file) {
+    return file && path.relative(root, file).split(path.sep).join('/')
+  }
   async function mutate(action, actor, fn, subject) {
     if (active) throw fault('BUSY', '另一个修改正在进行，请稍后重试', 409)
     const id = randomUUID(), dir = path.join(journalRoot, id)
@@ -109,7 +112,9 @@ export function workspace(root) {
     try {
       atomicWrite(path.join(dir, 'journal.json'), JSON.stringify(j))
       const out = await fn()
-      const details = { files: j.files.map(x => ({ type:x.type, path:x.path && path.relative(root,x.path), from:x.from && path.relative(root,x.from), to:x.to && path.relative(root,x.to) })) }
+      const details = { files: j.files.map(file => ({
+        type: file.type, path: operationPath(file.path), from: operationPath(file.from), to: operationPath(file.to)
+      })) }
       if (subject && typeof subject === 'object' && Object.keys(subject).length) details.subject = subject
       db.prepare('INSERT INTO operations VALUES (?,?,?,?,?)').run(id, action, actor, Date.now(), JSON.stringify(details))
       db.exec('COMMIT'); active = null

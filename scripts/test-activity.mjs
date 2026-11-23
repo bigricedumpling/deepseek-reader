@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { callTool } from '../plugins/reader-workspace/scripts/reader.mjs'
 
@@ -115,6 +116,36 @@ try {
   const stillDiff = await must('GET', 'activity/diff?id=' + encodeURIComponent(updateItem.id))
   assert.equal(stillDiff.before, '# Activity\n\nfirst line')
   assert.equal(stillDiff.after, '# Activity\n\nfirst line\n\nagent edit')
+
+  // Old Windows releases recorded file operations using native path separators.
+  // Replay those records after a rename and deletion, as when restoring an old backup.
+  const history = new DatabaseSync(path.join(temporary, 'knowledge', '.reader', 'state.sqlite'))
+  try {
+    for (const id of [createItem.id, updateItem.id, renameItem.id]) {
+      const row = history.prepare('SELECT details FROM operations WHERE id=?').get(id)
+      const details = JSON.parse(row.details)
+      for (const file of details.files) {
+        for (const key of ['path', 'from', 'to']) {
+          if (!file[key]) continue
+          assert.ok(!file[key].includes('\\'), 'New operation paths must be portable')
+          file[key] = file[key].replaceAll('/', '\\')
+        }
+      }
+      // A clock change must not prevent resolving the exact version named by this operation.
+      history.prepare('UPDATE operations SET details=?, at=0 WHERE id=?').run(JSON.stringify(details), id)
+    }
+  } finally {
+    history.close()
+  }
+  const legacy = await must('GET', 'activity')
+  for (const item of [createItem, updateItem, renameItem]) {
+    const restored = legacy.items.find(entry => entry.id === item.id)
+    assert.equal(restored.path, item.path)
+    assert.equal(restored.name, item.name)
+    assert.equal(restored.docId, created.data.id)
+  }
+  assert.deepEqual(await must('GET', 'activity/diff?id=' + createItem.id), createDiff)
+  assert.deepEqual(await must('GET', 'activity/diff?id=' + updateItem.id), updateDiff)
 
   console.log('PASS: Agent activity inbox, exact before/after diff, metadata entry, read state, historical paths, owner-only access')
 } finally {
