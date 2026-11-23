@@ -24,7 +24,13 @@ export async function verifyPackageUpgrade(baseline, candidate, expectedDigest) 
   function unpack(archive, name) {
     const directory = path.join(temporary, name)
     fs.mkdirSync(directory)
-    execFileSync('tar', ['-xf', path.resolve(archive), '-C', directory])
+    // Git Bash's tar treats a Windows drive letter in an archive argument as a remote host.
+    const archiveFile = fs.openSync(archive, 'r')
+    try {
+      execFileSync('tar', ['-xzf', '-'], { cwd: directory, stdio: [archiveFile, 'ignore', 'pipe'] })
+    } finally {
+      fs.closeSync(archiveFile)
+    }
     const plugin = path.join(directory, 'package')
     const manifest = JSON.parse(fs.readFileSync(path.join(plugin, 'package.json'), 'utf8'))
     assert.equal(manifest.name, 'dsh-reader-workspace')
