@@ -3,12 +3,52 @@ import path from 'node:path'
 import assert from 'node:assert/strict'
 import { openReadingSettings, chooseReadingSetting } from './reading-settings.mjs'
 
+// Sample painted document elements. Reading tokens alone do not catch a more
+// specific editor rule overriding colors, especially in dark mode.
+async function checkThemeColors(ev) {
+  for (const appearance of ['浅色', '深色']) {
+    await chooseReadingSetting(ev, '外观', appearance)
+    const palettes = []
+    for (const style of ['默认', '飞书', 'Notion', 'Obsidian', '默认']) {
+      await chooseReadingSetting(ev, '主题风格', style)
+      const palette = await ev(`
+        const editor = document.querySelector('.ProseMirror')
+        const paragraph = editor.querySelector('p:has([data-reader-color])')
+        const marked = paragraph.querySelector('[data-reader-color]')
+        const panel = document.querySelector('.reading-panel')
+        // Wait for the appearance change to finish painting the settings panel.
+        await Promise.allSettled(panel.getAnimations().map(a => a.finished))
+        return {
+          text: getComputedStyle(paragraph).color,
+          selection: getComputedStyle(paragraph, '::selection').backgroundColor,
+          table: getComputedStyle(editor.querySelector('th')).backgroundColor,
+          custom: getComputedStyle(marked).color,
+          choice: getComputedStyle(panel.querySelector('.choice.is-selected')).backgroundColor,
+          tab: getComputedStyle(document.querySelector('.doc-tab.is-active .doc-tab-indicator')).backgroundColor,
+          sidebar: getComputedStyle(document.querySelector('.app-sidebar > aside')).backgroundColor
+        }
+      `)
+      assert.equal(palette.custom, 'rgb(25, 139, 110)', appearance + style + '应保留手动文字色')
+      palettes.push(palette)
+    }
+    assert.deepEqual(palettes.at(-1), palettes[0], appearance + '恢复默认后正文和界面应还原')
+    const presets = palettes.slice(1, -1)
+    for (const key of ['text', 'selection', 'table', 'choice', 'tab', 'sidebar']) {
+      assert(new Set(presets.map(preset => preset[key])).size > 1, appearance + '风格没有区分 ' + key)
+    }
+  }
+}
+
 export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
   const libraries = ['图', '交互设计方案与技术验证资料库']
   const files = libraries.map((lib, i) => lib + '/' + ['索引', '排版细节'][i] + '.md')
   for (const file of files) {
     fs.mkdirSync(path.dirname(path.join(root, file)), {recursive:true})
-    fs.writeFileSync(path.join(root, file), '# ' + path.basename(file, '.md') + '\n\n## 第一节\n\n正文。\n')
+    fs.writeFileSync(path.join(root, file), [
+      '# ' + path.basename(file, '.md'), '## 第一节',
+      '正文。<span data-reader-color="#198b6e" style="color:#198b6e">手动文字色</span>',
+      '| 标题 | 状态 |\n| --- | --- |\n| 甲 | 已完成 |'
+    ].join('\n\n') + '\n')
   }
   const meta = await fetch(new URL('api/lib/meta', appUrl), {
     method:'PUT', headers:{'Content-Type':'application/json'},
@@ -205,11 +245,12 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
       row.querySelector('input:checked')?.getAttribute('aria-label')
     ]))`)
     try {
+      await checkThemeColors(ev)
       await chooseReadingSetting(ev, '字号', '大')
-      await chooseReadingSetting(ev, '文档风格', '默认')
+      await chooseReadingSetting(ev, '主题风格', '默认')
       const headingSize = () => ev("const h = document.querySelector('.ProseMirror h2'); return h && parseFloat(getComputedStyle(h).fontSize)")
       const baseline = await headingSize()
-      await chooseReadingSetting(ev, '文档风格', 'Obsidian')
+      await chooseReadingSetting(ev, '主题风格', 'Obsidian')
       const styled = await headingSize()
       assert(baseline > 0 && styled > baseline, '选择 Obsidian 后正文标题应有可见变化')
       await send('Page.navigate', {url:new URL('doc/' + files[0].slice(0, -3) + '?lib=' + libraries[0], appUrl).href})
@@ -218,9 +259,10 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
       for (let i = 0; i < 60 && !await headingSize(); i++) await sleep(50)
       assert.equal(await headingSize(), styled, '重新打开文档后应恢复同一标题尺度')
       assert(await ev(`const checked = label => document.querySelector('.reading-panel input[aria-label="' + label + '"]').checked
-        return checked('Obsidian') && checked('大')`), '文档风格和手动字号应分别保留')
+        return checked('Obsidian') && checked('大')`), '主题风格和手动字号应分别保留')
     } finally {
-      await chooseReadingSetting(ev, '文档风格', previous['文档风格'])
+      await chooseReadingSetting(ev, '外观', previous['外观'])
+      await chooseReadingSetting(ev, '主题风格', previous['主题风格'])
       await chooseReadingSetting(ev, '字号', previous['字号'])
       await ev("document.querySelector('button[aria-label=阅读设置]').click()")
     }

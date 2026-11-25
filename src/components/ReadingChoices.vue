@@ -30,7 +30,7 @@ const name = useId()
 .choice { position: relative; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 2px; min-height: 29px; line-height: 1.5; white-space: nowrap; font-size: 12px; border-radius: calc(var(--radius-control) - 3px); color: var(--c-sub); cursor: pointer; }
 .choice input { position: absolute; inset: 0; margin: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .choice svg { flex: none; }
-.choice.is-selected { background: var(--reading-choice-face); color: var(--c-ink); font-weight: 550; box-shadow: var(--reading-choice-shadow); }
+.choice.is-selected { background: var(--reading-choice-face); color: var(--workspace-accent, var(--c-ink)); font-weight: 550; box-shadow: var(--reading-choice-shadow); }
 .choice:has(:focus-visible) { outline: 2px solid var(--c-focus); outline-offset: -1px; }
 @media (hover:hover) { .choice:hover { color: var(--c-ink); } }
 @media (pointer:coarse) { .choice { min-height: 44px; } }

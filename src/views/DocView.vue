@@ -1191,7 +1191,7 @@ onBeforeUnmount(() => {
     --c-focus: var(--c-ink);
   }
   .doc-topbar.over-cover > .topbar-left {
-    --tab-marker-color: var(--nav-cover-paper);
+    --tab-marker-color: color-mix(in srgb, var(--nav-cover-paper) 84%, var(--workspace-accent, var(--nav-cover-paper)));
     --tab-marker-opacity: .54;
     --tab-hover-opacity: .26;
   }

@@ -92,8 +92,8 @@
   font-family: var(--reading-font, "Noto Sans SC", sans-serif);
   font-size: var(--reading-size, 15.5px);
   line-height: var(--reading-lh, 1.95);
-  color: var(--c-text);
-  caret-color: var(--c-accent);
+  color: var(--doc-text, var(--c-text));
+  caret-color: var(--doc-text, var(--c-accent));
   letter-spacing: var(--reading-tracking, 0em);
   text-align: justify;
   text-justify: inter-ideograph;
@@ -204,8 +204,14 @@ body[data-document-style="feishu"] .crepe-host {
   --doc-h3: 1.25em;
   --doc-heading-gap: .95em;
   --doc-paragraph-gap: .5em;
-  --doc-link: color-mix(in srgb, #437aed 65%, var(--c-ink));
-  --doc-quote-line: color-mix(in srgb, var(--c-sub) 55%, var(--c-line));
+  --doc-text: #1f2329;
+  --doc-muted: #626974;
+  --doc-link: #245bdb;
+  --doc-link-hover: #1747b3;
+  --doc-check: #3266d9;
+  --doc-tint: #5e7491;
+  --doc-quote-line: color-mix(in srgb, var(--doc-muted) 58%, var(--c-line));
+  --doc-marker: var(--doc-muted);
 }
 body[data-document-style="notion"] .crepe-host {
   --doc-title-size: 2.5em;
@@ -215,10 +221,17 @@ body[data-document-style="notion"] .crepe-host {
   --doc-h3: 1.24em;
   --doc-heading-gap: 1.12em;
   --doc-paragraph-gap: .42em;
-  --doc-link: var(--c-text);
-  --doc-quote-line: var(--c-ink);
+  --doc-text: #37352f;
+  --doc-muted: #706d64;
+  --doc-link: var(--doc-text);
+  --doc-link-hover: #216aab;
+  --doc-check: #2475bd;
+  --doc-tint: #9b8b70;
+  --doc-marker: var(--doc-text);
+  --doc-quote-text: var(--doc-text);
+  --doc-quote-line: var(--doc-text);
   --doc-quote-width: 3px;
-  --doc-inline-code: color-mix(in srgb, #c25b50 60%, var(--c-ink));
+  --doc-inline-code: #a53d39;
 }
 body[data-document-style="obsidian"] .crepe-host {
   --doc-title-size: 2.05em;
@@ -231,9 +244,53 @@ body[data-document-style="obsidian"] .crepe-host {
   --doc-h6: 1em;
   --doc-heading-gap: 1.46em;
   --doc-paragraph-gap: .95em;
-  --doc-link: color-mix(in srgb, #9372db 62%, var(--c-ink));
+  --doc-text: #26252a;
+  --doc-muted: #66616d;
+  --doc-link: #7252bf;
+  --doc-link-hover: #5b38ae;
+  --doc-check: #7856c7;
+  --doc-tint: #787182;
+  --doc-marker: color-mix(in srgb, var(--doc-muted) 72%, var(--c-surface));
+  --doc-quote-text: var(--doc-text);
   --doc-quote-line: var(--doc-link);
   --doc-quote-width: 2px;
+}
+/* Each document surface takes its lightness from the current paper, including soft mode. */
+body:is([data-document-style="feishu"], [data-document-style="notion"], [data-document-style="obsidian"]) .crepe-host {
+  --doc-on-check: var(--c-surface);
+  --doc-selection: color-mix(in srgb, var(--doc-check) 24%, transparent);
+  --doc-code-bg: color-mix(in srgb, var(--doc-tint) 8%, var(--c-surface));
+  --doc-inline-bg: color-mix(in srgb, var(--doc-tint) 15%, var(--c-surface));
+  --doc-table-head: color-mix(in srgb, var(--doc-tint) 10%, var(--c-surface));
+  --doc-rule: color-mix(in srgb, var(--doc-tint) 34%, var(--c-surface));
+  --doc-code-border: color-mix(in srgb, var(--doc-tint) 20%, var(--c-surface));
+  --doc-table-border: color-mix(in srgb, var(--doc-tint) 30%, var(--c-surface));
+  --doc-callout: color-mix(in srgb, var(--doc-tint) 11%, var(--c-surface));
+}
+/* On dark paper, accents need a lighter foreground for links and checked tasks. */
+body[data-theme="dark"][data-document-style="feishu"] .crepe-host {
+  --doc-text: #dae0e8;
+  --doc-muted: #aab4c2;
+  --doc-link: #91b7ff;
+  --doc-link-hover: #bad2ff;
+  --doc-check: #8ab0ff;
+  --doc-tint: #aabed9;
+}
+body[data-theme="dark"][data-document-style="notion"] .crepe-host {
+  --doc-text: #ddd9d0;
+  --doc-muted: #b1aba1;
+  --doc-link-hover: #90c3f5;
+  --doc-check: #86b9eb;
+  --doc-inline-code: #ffa39b;
+  --doc-tint: #c7b59b;
+}
+body[data-theme="dark"][data-document-style="obsidian"] .crepe-host {
+  --doc-text: #d7d4df;
+  --doc-muted: #b1aabf;
+  --doc-link: #b5a0f3;
+  --doc-link-hover: #d2c0ff;
+  --doc-check: #b19ae9;
+  --doc-tint: #b3a9c4;
 }
 body[data-para="space"] .crepe-host .ProseMirror {
   --para-gap: var(--doc-paragraph-gap, .6em);
@@ -248,7 +305,7 @@ body[data-para="space"] .crepe-host .ProseMirror {
   font-size: var(--doc-h1, 1.62em);
   line-height: 1.35;
   font-weight: var(--doc-section-weight, 600);
-  color: var(--c-ink);
+  color: var(--doc-text, var(--c-ink));
   margin-block: 0 0.55em;
   letter-spacing: 0.01em;
 }
@@ -256,7 +313,7 @@ body[data-para="space"] .crepe-host .ProseMirror {
   font-size: var(--doc-h2, 1.38em);
   line-height: 1.4;
   font-weight: var(--doc-section-weight, 600);
-  color: var(--c-ink);
+  color: var(--doc-text, var(--c-ink));
   margin-block: var(--doc-heading-gap, 1.45em) 0.4em;
   letter-spacing: 0.01em;
 }
@@ -264,7 +321,7 @@ body[data-para="space"] .crepe-host .ProseMirror {
   font-size: var(--doc-h3, 1.15em);
   line-height: 1.48;
   font-weight: var(--doc-section-weight, 600);
-  color: var(--c-ink);
+  color: var(--doc-text, var(--c-ink));
   margin-block: var(--doc-heading-gap, 1.25em) 0.45em;
 }
 /*
@@ -277,20 +334,20 @@ body[data-para="space"] .crepe-host .ProseMirror {
 .crepe-host .milkdown .ProseMirror h4 {
   font-size: var(--doc-h4, 1.04em);
   font-weight: var(--doc-section-weight, 600);
-  color: var(--c-text);
+  color: var(--doc-text, var(--c-text));
   margin-block: 1.1em 0.35em;
 }
 .crepe-host .milkdown .ProseMirror h5 {
   font-size: var(--doc-h5, 0.98em);
   font-weight: var(--doc-section-weight, 600);
-  color: var(--c-text);
+  color: var(--doc-text, var(--c-text));
   letter-spacing: 0.01em;
   margin-block: 1em 0.3em;
 }
 .crepe-host .milkdown .ProseMirror h6 {
   font-size: var(--doc-h6, 0.92em);
   font-weight: var(--doc-section-weight, 600);
-  color: var(--c-sub);
+  color: var(--doc-muted, var(--c-sub));
   letter-spacing: 0.03em;
   margin-block: 0.95em 0.3em;
 }
@@ -349,7 +406,7 @@ body[data-para="space"] .crepe-host .ProseMirror {
   margin-block: 1.05em;
   padding-left: 1.35em;
   border: none;
-  color: var(--c-sub);
+  color: var(--doc-quote-text, var(--doc-muted, var(--c-sub)));
 }
 .crepe-host .milkdown .ProseMirror blockquote > :last-child {
   margin-bottom: 0;
@@ -393,15 +450,18 @@ body[data-para="space"] .crepe-host .ProseMirror {
 
 /* 分割线 */
 .crepe-host .milkdown .ProseMirror hr {
-  border-top: 1px solid var(--c-line);
+  border-top: 1px solid var(--doc-rule, var(--c-line));
   margin-block: 1.8em;
 }
 
-/* 链接：唯一的彩色 */
+/* 普通链接和库内文档引用共享当前正文风格。 */
 .crepe-host .milkdown .ProseMirror a {
   color: var(--doc-link, var(--c-accent));
   border-bottom: 1px solid color-mix(in srgb,currentColor 40%,transparent);
   text-decoration: none;
+}
+.crepe-host .milkdown .ProseMirror a:hover {
+  color: var(--doc-link-hover, var(--doc-link, var(--c-accent)));
 }
 /*
  * 文档引用：用 Notion 的 page mention 观感，而不是普通蓝色链接。
@@ -417,8 +477,8 @@ body[data-para="space"] .crepe-host .ProseMirror {
   padding: 1px 4px;
   margin: 0 1px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--c-accent) 5%, transparent);
-  color: var(--c-ink);
+  background: color-mix(in srgb, var(--doc-link, var(--c-accent)) 5%, transparent);
+  color: var(--doc-link, var(--c-ink));
   font-weight: 500;
   text-decoration: none;
   box-decoration-break: clone;
@@ -437,9 +497,10 @@ body[data-para="space"] .crepe-host .ProseMirror {
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h8l4 4v16H6z'/%3E%3Cpath d='M14 2v6h6'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .crepe-host .milkdown .ProseMirror .reader-doc-link:hover {
-  background: color-mix(in srgb, var(--c-accent) 9%, transparent);
+  color: var(--doc-link-hover, var(--c-ink));
+  background: color-mix(in srgb, var(--doc-link-hover, var(--c-accent)) 9%, transparent);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--c-accent) 45%, transparent);
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-underline-offset: 3px;
 }
 
@@ -490,7 +551,7 @@ body[data-para="space"] .crepe-host .ProseMirror {
   table-layout: auto;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid var(--c-line);
+  border: 1px solid var(--doc-table-border, var(--c-line));
   border-radius: 12px;
   margin-block: 1.15em;
   font-size: 0.86em;
@@ -507,7 +568,7 @@ body[data-para="space"] .crepe-host .ProseMirror {
 .crepe-host .milkdown .ProseMirror table:has(tr) th,
 .crepe-host .milkdown .ProseMirror table:has(tr) td {
   border: 0;
-  border-right: 1px solid var(--c-line);
+  border-right: 1px solid var(--doc-table-border, var(--c-line));
   border-bottom: 0;
 }
 .crepe-host .milkdown .ProseMirror table:has(tr) th:last-child,
@@ -520,7 +581,10 @@ body[data-para="space"] .crepe-host .ProseMirror {
 .crepe-host .milkdown .ProseMirror th {
   font-weight: 600;
   color: var(--c-ink);
-  background: var(--c-field);
+  background: var(--doc-table-head, var(--c-field));
+}
+:where(body[data-document-style]:not([data-document-style="default"])) .crepe-host .milkdown .ProseMirror table:has(tr) :is(thead tr, tr:not(:last-child)) > :is(th, td) {
+  border-bottom: 1px solid var(--doc-table-border);
 }
 /*
  * 单元格里的段落：**不能继承正文的段距和行距**。
@@ -937,14 +1001,58 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
   background: var(--c-code-bg);
 }
 
-/* Keep fenced code and its syntax colors independent of inline code styling. */
-body[data-document-style="notion"] .crepe-host .milkdown .ProseMirror :not(pre) > code {
-  color: var(--doc-inline-code);
+/* Static Markdown and the editor use different nodes for fences, markers and tasks. */
+body[data-document-style]:not([data-document-style="default"]) .crepe-host {
+  .ProseMirror :not(pre) > code {
+    color: var(--doc-inline-code);
+    background-color: var(--doc-inline-bg);
+  }
+  .milkdown-code-block, &.source-reading .ProseMirror pre {
+    background-color: var(--doc-code-bg);
+    box-shadow: inset 0 0 0 1px var(--doc-code-border);
+  }
+  .milkdown-code-block :is(.cm-editor, .cm-gutters) {
+    background-color: var(--doc-code-bg);
+  }
+  .ProseMirror pre > code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+  .ProseMirror li::marker, .milkdown-list-item-block .label-wrapper .label:is(.ordered, .bullet) {
+    color: var(--doc-marker);
+  }
+  .milkdown-list-item-block .label.bullet svg { fill: var(--doc-marker); }
+  .milkdown-list-item-block .label-wrapper .label.checked { color: var(--doc-check); }
+  .milkdown-list-item-block .label.checked svg { fill: var(--doc-check); }
+}
+/* Disabled native checkboxes ignore accent-color in some browsers. Use the
+ * same checked surface as the editor while keeping native read-only semantics. */
+@media (forced-colors: none) {
+  body[data-document-style]:not([data-document-style="default"]) .source-reading .task-list-item-checkbox:checked {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    width: .9em;
+    height: .9em;
+    vertical-align: -.06em;
+    border-radius: 2px;
+    background-color: var(--doc-check);
+    color: var(--doc-on-check);
+  }
+  body[data-document-style]:not([data-document-style="default"]) .source-reading .task-list-item-checkbox:checked::before {
+    content: '';
+    width: .28em;
+    height: .55em;
+    border: solid currentColor;
+    border-width: 0 .11em .11em 0;
+    transform: translateY(-.04em) rotate(45deg);
+  }
 }
 
-/* 选区使用独立灰阶，区别于控件选中态 */
+/* Selection is local to text in the document. */
 .crepe-host .milkdown .ProseMirror ::selection {
-  background: var(--c-selection);
+  background: var(--doc-selection, var(--c-selection));
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item[data-toolbar-item="reader-style"] .text-style-trigger {
   display:inline-flex;
@@ -994,7 +1102,7 @@ body[data-document-style="notion"] .crepe-host .milkdown .ProseMirror :not(pre) 
 @media(max-width:640px){.crepe-host .milkdown .ProseMirror .reader-columns{grid-template-columns:1fr;gap:20px}}
 
 /* Editable callout: the icon is decoration; the body is real editor content. */
-.crepe-host .milkdown .ProseMirror .reader-rich-callout{align-items:flex-start}
+.crepe-host .milkdown .ProseMirror .reader-rich-callout{align-items:flex-start;background:var(--doc-callout, var(--c-field))}
 .rich-callout-content{flex:1;min-width:0}
 .crepe-host .milkdown .ProseMirror .rich-callout-content>p{max-width:none;margin:0;padding:0;min-height:1.7em}
 .crepe-host .milkdown .ProseMirror .rich-callout-content>p+p{margin-top:.45em}

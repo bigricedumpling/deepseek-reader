@@ -1,7 +1,7 @@
 <template>
   <div class="reading-settings">
     <ReadingChoices v-model="reader.theme" label="外观" :options="themes" />
-    <ReadingChoices class="document-styles" v-model="reader.documentStyle" label="文档风格" :options="DOCUMENT_STYLES" />
+    <ReadingChoices class="document-styles" v-model="reader.documentStyle" label="主题风格" :options="DOCUMENT_STYLES" />
     <ReadingChoices v-model="reader.font" label="正文字体" :options="fonts" :columns="3" />
     <ReadingChoices v-model="reader.size" label="字号" :options="sizes" />
     <ReadingChoices v-model="reader.measure" label="正文宽度" :options="WIDTH_OPTIONS" />

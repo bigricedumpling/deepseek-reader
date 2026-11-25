@@ -173,6 +173,45 @@ body[data-theme="dark"] {
   color-scheme: dark;
 }
 
+/* A style supplies a quiet rail and a stronger color for actionable states.
+   Resolve dependent tokens on body as teleported menus inherit from it. */
+body[data-document-style="feishu"] {
+  --workspace-accent: #285cc6;
+  --workspace-tint: #5277ac;
+}
+body[data-document-style="notion"] {
+  --workspace-accent: #655847;
+  --workspace-tint: #a18966;
+}
+body[data-document-style="obsidian"] {
+  --workspace-accent: #7352af;
+  --workspace-tint: #88739e;
+}
+body[data-theme="dark"][data-document-style="feishu"] {
+  --workspace-accent: #93b9ff;
+  --workspace-tint: #839fc6;
+}
+body[data-theme="dark"][data-document-style="notion"] {
+  --workspace-accent: #d0bda3;
+  --workspace-tint: #b9a88e;
+}
+body[data-theme="dark"][data-document-style="obsidian"] {
+  --workspace-accent: #bca3f2;
+  --workspace-tint: #ac98c7;
+}
+body:is([data-document-style="feishu"], [data-document-style="notion"], [data-document-style="obsidian"]) {
+  --c-accent: var(--workspace-accent);
+  --color-accent: var(--c-accent);
+  --c-accent-hover: color-mix(in srgb, var(--c-accent) 84%, var(--c-ink));
+  --c-focus: var(--c-accent);
+  --c-active: color-mix(in srgb, var(--c-accent) 14%, transparent);
+  --c-hover: color-mix(in srgb, var(--workspace-tint) 9%, transparent);
+  --c-selection: color-mix(in srgb, var(--c-accent) 24%, transparent);
+  --c-panel: color-mix(in srgb, var(--workspace-tint) 8%, var(--c-surface));
+  --tab-marker-color: var(--c-accent);
+  --tab-marker-opacity: .17;
+  --selected-choice-face: color-mix(in srgb, var(--c-accent) 12%, var(--c-pop));
+}
 /* Resolve elevation on the themed body, including overlays teleported to it. */
 body {
   --surface-rim: inset 0 1px 0 rgb(255 255 255 / .54);
