@@ -38,14 +38,28 @@ export async function verifyReferences({ send, ev, root, appUrl, sleep }) {
   await until('后退恢复索引位置', link + ' && Math.abs(' + box + '.scrollTop - ' + before + ') < 3')
   await ev('history.forward()')
   await until('前进到同一节', located)
+  const previousPage = await ev('return performance.timeOrigin')
   await send('Page.reload')
-  await until('重载带章节的地址', located)
-  await ev('history.back()')
-  await until('返回索引中的 PDF 链接', "document.querySelector('.ProseMirror a[href*=\"page=3\"]')" + ' && Math.abs(' + box + '.scrollTop - ' + before + ') < 3')
+  await until('重载带章节的地址', 'performance.timeOrigin !== ' + previousPage + ' && ' + located)
+  // A back action can arrive before Vue mounts on a fresh page. Only the history
+  // entry knows this exact scroll offset if the local reading cache is unavailable.
+  const earlyBack = await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: "if (location.hash && history.state?.typocketReference) { localStorage.removeItem('reader.pos'); history.back() }"
+  })
+  try {
+    await send('Page.reload')
+    await until('冷启动时后退恢复索引', "document.querySelector('.ProseMirror a[href*=\"page=3\"]')" + ' && Math.abs(' + box + '.scrollTop - ' + before + ') < 3')
+  } finally {
+    await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: earlyBack.identifier })
+  }
+  const advanced = await ev('const scroller = ' + box + '; scroller.scrollTop += 110; return scroller.scrollTop')
+  const indexPage = await ev('return performance.timeOrigin')
+  await send('Page.reload')
+  await until('刷新停在刚读到的新位置', 'performance.timeOrigin !== ' + indexPage + ' && ' + link + ' && Math.abs(' + box + '.scrollTop - ' + advanced + ') < 3')
   await ev("document.querySelector('.ProseMirror a[href*=\"page=3\"]').click()")
   await until('PDF 第三页', "document.querySelector('[aria-label=\"PDF 页码\"]')?.value==='3' && document.querySelector('.pdf-paper canvas')?.clientHeight>100")
   await ev('history.back()')
-  await until('从 PDF 返回', link + ' && Math.abs(' + box + '.scrollTop - ' + before + ') < 3')
+  await until('从 PDF 返回', link + ' && Math.abs(' + box + '.scrollTop - ' + advanced + ') < 3')
   async function moveThroughMenu(file, destination) {
     const row = 'document.querySelector(' + JSON.stringify('[data-file="' + file + '"]') + ')'
     await until('文件树中的 ' + file,row)

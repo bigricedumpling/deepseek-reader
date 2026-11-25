@@ -4,6 +4,7 @@ import { documentRoutePath } from '../utils/routes.js'
 import { foldKey, unfoldKeys } from '../utils/toc-fold.js'
 import { scrollToTarget } from '../utils/scroll-target.js'
 
+const exitKey = 'reader.reference.exit'
 const headingSelector = 'h1,h2,h3,h4,h5,h6'
 const slug = text => text.trim().toLowerCase().replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '').replace(/\s+/g, '-')
 
@@ -37,7 +38,17 @@ function showAnchor(article, target) {
 export function useReferenceNavigation(store, scroller, { stopRestore, restorePosition }) {
   let stopWaiting = () => {}
   let generation = 0
-  let index = history.state?.typocketReference?.index ?? 0
+  let initialEntry = history.state?.typocketReference
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(exitKey))
+    sessionStorage.removeItem(exitKey)
+    if (saved && initialEntry && performance.getEntriesByType('navigation')[0]?.type === 'reload'
+      && saved.url === location.href && saved.entry.index === initialEntry.index
+      && saved.entry.file === initialEntry.file && saved.entry.id === initialEntry.id) {
+      initialEntry = saved.entry
+    }
+  } catch { /* Session storage may be disabled. The history entry still works. */ }
+  let index = initialEntry?.index ?? 0
   const initialPath = location.pathname
   const initialHash = location.hash.slice(1)
 
@@ -136,19 +147,41 @@ export function useReferenceNavigation(store, scroller, { stopRestore, restorePo
     await place(store.currentPath, hash, entry)
   }
 
-  // A pasted chapter URL can arrive before the library tree or editor is mounted.
-  if (initialHash) {
+  function rememberOnExit() {
+    const entry = history.state?.typocketReference
+    const box = scroller.value
+    if (entry?.top == null || !box || !store.currentLoaded || entry.file !== store.currentPath
+      || (entry.id && entry.id !== store.currentSourceId)) return
+    // Chrome takes its reload copy of history.state before pagehide. Keep the
+    // final reading position for this tab separately until the reload consumes it.
+    try {
+      sessionStorage.setItem(exitKey, JSON.stringify({
+        url: location.href, entry: { ...entry, top: box.scrollTop, page: store.pdfPage }
+      }))
+    } catch { /* The original history entry remains available. */ }
+  }
+
+  // A traversal can update history before the app is mounted, so no mounted
+  // popstate handler saw it. Restore the entry once its document is available.
+  if (initialHash || initialEntry?.top != null) {
     const unwatch = watch(() => [store.currentPath, store.currentLoaded], ([file, loaded]) => {
       if (!file || !loaded) return
       const suffix = '/' + documentRoutePath(file).split('/').map(encodeURIComponent).join('/')
       if (!initialPath.endsWith(suffix)) return
       unwatch()
-      place(file, initialHash)
+      if (generation) return
+      const position = initialEntry?.file === file && (!initialEntry.id || initialEntry.id === store.currentSourceId)
+        ? initialEntry : undefined
+      place(file, initialHash, position)
     }, { flush: 'post' })
   }
   watch(() => store.currentPath, () => stopWaiting(), { flush: 'sync' })
-  onMounted(() => window.addEventListener('popstate', revisit))
+  onMounted(() => {
+    window.addEventListener('popstate', revisit)
+    window.addEventListener('pagehide', rememberOnExit)
+  })
   onBeforeUnmount(() => {
+    window.removeEventListener('pagehide', rememberOnExit)
     generation++
     stopWaiting()
     window.removeEventListener('popstate', revisit)
