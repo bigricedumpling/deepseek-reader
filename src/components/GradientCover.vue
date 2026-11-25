@@ -26,8 +26,7 @@ let seconds = 0
 let lastTick = 0
 let frame = 0
 let timer = 0
-let lastWidth = 0
-let lastHeight = 0
+let lastPaint = -1
 
 function cancel() {
   clearTimeout(timer)
@@ -41,11 +40,15 @@ function redraw() {
   const ratio = Math.min(window.devicePixelRatio || 1, 1.5, 1280 / el.clientWidth, 550 / el.clientHeight)
   const width = Math.max(1, Math.round(el.clientWidth * ratio))
   const height = Math.max(1, Math.round(el.clientHeight * ratio))
-  if (width !== lastWidth || height !== lastHeight) {
-    el.width = lastWidth = width
-    el.height = lastHeight = height
+  if (width !== el.width || height !== el.height) {
+    el.width = width
+    el.height = height
+    lastPaint = -1
   }
-  return renderCoverFrame(el, props.cover, seconds)
+  if (lastPaint === seconds) return true
+  if (!renderCoverFrame(el, props.cover, seconds)) return false
+  lastPaint = seconds
+  return true
 }
 
 function moving() {
@@ -56,7 +59,10 @@ function tick(now) {
   if (!moving()) { cancel(); return }
   if (lastTick) seconds += Math.min(now - lastTick, 160) / 1000
   lastTick = now
-  if (redraw()) timer = setTimeout(() => { frame = requestAnimationFrame(tick) }, 40)
+  // Aim for a steady 30 fps. Leave room for the next display refresh, including
+  // time spent drawing; animating artwork must not monopolize the editor's frames.
+  if (redraw()) timer = setTimeout(() => { frame = requestAnimationFrame(tick) },
+    Math.max(0, 1000 / 30 - (performance.now() - now) - 8))
 }
 function sync() {
   cancel()
@@ -64,7 +70,7 @@ function sync() {
   if (reduced.matches || print.matches || !props.cover.animated) seconds = 0
   if (redraw() && moving()) frame = requestAnimationFrame(tick)
 }
-watch(() => props.cover, () => { seconds = 0; sync() }, { deep: true, flush: 'post' })
+watch(() => props.cover, () => { seconds = 0; lastPaint = -1; sync() }, { deep: true, flush: 'post' })
 watch(() => props.active, sync)
 onMounted(() => {
   reduced = matchMedia('(prefers-reduced-motion: reduce)')

@@ -4,6 +4,33 @@ import { randomUUID, randomBytes } from 'node:crypto'
 import { digest, fault } from '../storage/workspace.js'
 import { recordSource } from './sources.js'
 import { librarySearch } from './library-search.js'
+import { coverArtworkCatalog } from '../cover-artwork-catalog.js'
+
+function validateCover(cover) {
+  if (cover === null) return null
+  const { type } = cover
+  const height = ['small', 'medium', 'large'].includes(cover.height) ? cover.height : 'medium'
+  const y = Number(cover.position)
+  const position = Math.max(0, Math.min(100, Number.isFinite(y) ? y : 50))
+  if (type === 'artwork') {
+    if (!coverArtworkCatalog.some(item => item.id === cover.artwork)) throw fault('INVALID_METADATA', '图库中没有这张封面')
+    return { type, artwork: cover.artwork, height, position }
+  }
+  if (!['gradient', 'image'].includes(type)) throw fault('INVALID_METADATA', '封面类型无效')
+  if (type === 'image' && !/^[a-f\d-]{32,64}$/i.test(cover.asset || '')) throw fault('INVALID_METADATA', '封面资源无效')
+  if (cover.colors !== undefined && !Array.isArray(cover.colors)) throw fault('INVALID_METADATA', '颜色无效')
+  const colors = (cover.colors || ['#dbeafe', '#e9d5ff', '#fce7f3']).slice(0, 4)
+  if (colors.length < 3) throw fault('INVALID_METADATA', '至少需要三种颜色')
+  if (colors.some(color => !/^#[a-f\d]{6}$/i.test(color))) throw fault('INVALID_METADATA', '颜色无效')
+  return {
+    type, asset: cover.asset || '',
+    preset: ['mist', 'ribbon', 'grain', 'mesh', 'pixel', 'halftone'].includes(cover.preset) ? cover.preset : 'mist',
+    colors, animated: !!cover.animated, height, position,
+    seed: Math.max(0, Number(cover.seed) || 0),
+    speed: Math.max(1, Math.min(3, Number(cover.speed) || 1)),
+    grain: Math.max(0, Math.min(1, Number(cover.grain) || 0))
+  }
+}
 
 export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible,inReader}) {
   const searchLibraryDocuments = librarySearch(repo, assertMd, inReader)
@@ -21,19 +48,7 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible,inR
     if(value.icon!==undefined){const icon=String(value.icon);if(icon.length>200000||(!icon.startsWith('data:image/')&&!icon.startsWith('/')&&icon.length>40))throw fault('INVALID_METADATA','图标无效');if(/^data:image\/(?!png|jpeg|webp|gif)/.test(icon))throw fault('INVALID_METADATA','图标格式无效');out.icon=icon}
     if(value.description!==undefined)out.description=String(value.description).slice(0,1000)
     if(value.layout!==undefined){if(!['default','narrow','wide','full'].includes(value.layout))throw fault('INVALID_METADATA','版式无效');out.layout=value.layout}
-    if(value.cover!==undefined){
-      const c=value.cover
-      if(c===null)out.cover=null
-      else{
-        if(!['gradient','image'].includes(c.type))throw fault('INVALID_METADATA','封面类型无效')
-        if(c.type==='image' && !/^[a-f\d-]{32,64}$/i.test(c.asset||''))throw fault('INVALID_METADATA','封面资源无效')
-        if(c.colors!==undefined&&!Array.isArray(c.colors))throw fault('INVALID_METADATA','颜色无效')
-        const colors=(c.colors||['#dbeafe','#e9d5ff','#fce7f3']).slice(0,4)
-        if(colors.length<3)throw fault('INVALID_METADATA','至少需要三种颜色')
-        if(colors.some(x=>!/^#[a-f\d]{6}$/i.test(x)))throw fault('INVALID_METADATA','颜色无效')
-        out.cover={type:c.type,asset:c.asset||'',preset:['mist','ribbon','grain','mesh','pixel','halftone'].includes(c.preset)?c.preset:'mist',colors,animated:!!c.animated,height:['small','medium','large'].includes(c.height)?c.height:'medium',position:Math.max(0,Math.min(100,Number.isFinite(Number(c.position))?Number(c.position):50)),seed:Math.max(0,Number(c.seed)||0),speed:Math.max(1,Math.min(3,Number(c.speed)||1)),grain:Math.max(0,Math.min(1,Number(c.grain)||0))}
-      }
-    }
+    if (value.cover !== undefined) out.cover = validateCover(value.cover)
     return out
   }
   return {

@@ -1,7 +1,7 @@
 <template>
   <div class="document-shell h-full flex flex-col overflow-hidden" :class="{ 'chrome-collapsed': chromeCollapsed }">
     <Teleport to="#app-topbar-main" :disabled="!chromeCollapsed">
-    <div ref="topbar" class="doc-topbar" :class="{ 'in-topbar': chromeCollapsed, 'over-cover': coverAtBar }" :data-cover-tone="coverTone" :data-image-cover="store.pageMeta.cover?.type === 'image' || undefined" :style="docTopbarStyle">
+    <div ref="topbar" class="doc-topbar" :class="{ 'in-topbar': chromeCollapsed, 'over-cover': coverAtBar }" :data-image-cover="displayCover && displayCover.type !== 'gradient' || undefined" :style="docTopbarStyle">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
       <div v-if="docId || tabItems.length || store.switchingLibrary || libraryEmpty" class="topbar-left mr-auto flex min-w-0 items-center gap-2">
         <DocTabs v-if="tabItems.length" :items="tabItems" :active="docId" :class="{ 'is-topbar-tabs': chromeCollapsed }" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" @reorder="emit('reorder',$event)" />
@@ -145,7 +145,7 @@
       :data-cover-size="coverSize">
       <span v-if="slowDestination" class="doc-opening-status ui-font" role="status">正在打开《{{ slowDestination }}》</span>
       <span v-else-if="exportStatus" class="doc-opening-status ui-font" role="status">{{ exportStatus }}</span>
-      <div v-if="coverSize" ref="coverPlane" class="cover-plane" aria-hidden="true" @load.capture="readCoverImage()"></div>
+      <div v-if="coverSize" ref="coverPlane" class="cover-plane" aria-hidden="true"></div>
       <div
       id="main-scroll-container"
       ref="scroller"
@@ -173,7 +173,7 @@
         :src="pdfSrc"
         :title="meta.name || (isPdf ? 'PDF' : 'H5')"
       />
-      <PageHeader v-if="loaded && !isPreview" :cover-plane="coverPlane" :active="active" />
+      <PageHeader v-if="loaded && !isPreview" :cover-plane="coverPlane" :active="active" @preview-cover="previewCover = $event" />
       <MarkdownEditor
         ref="editor"
         v-if="loaded && !isPreview"
@@ -236,6 +236,7 @@ import VersionHistory from '../components/VersionHistory.vue'
 import AgentSharePanel from '../components/AgentSharePanel.vue'
 import DocumentInfo from '../components/DocumentInfo.vue'
 import PageHeader from '../components/PageHeader.vue'
+import { useCoverToolbar } from '../composables/useCoverToolbar.js'
 import DocPicker from '../components/DocPicker.vue'
 import { insertDocLink } from '../utils/editor-shortcuts'
 import { createEditorResumeCache } from '../utils/editor-resume.js'
@@ -473,51 +474,13 @@ function onPdfPageChange(page) {
 const scroller = ref(null)
 const coverPlane = ref(null)
 const coverAtBar = ref(false)
-const imageSample = ref(null)
-function readCoverImage() {
-  const image = coverPlane.value?.querySelector('img')
-  if (!(image instanceof HTMLImageElement) || !image.naturalWidth) return
-  const canvas = document.createElement('canvas')
-  canvas.width = 1
-  canvas.height = 1
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  // Downsample the visible crop, accounting for the user's vertical positioning.
-  const scale = Math.max(image.clientWidth / image.naturalWidth, image.clientHeight / image.naturalHeight)
-  if (!scale) return
-  const width = image.clientWidth / scale
-  const height = image.clientHeight / scale
-  const y = (image.naturalHeight - height) * (store.pageMeta.cover?.position ?? 50) / 100
-  try {
-    ctx.drawImage(image, (image.naturalWidth - width) / 2, y, width, height, 0, 0, 1, 1)
-    const [r, g, b, alpha] = ctx.getImageData(0, 0, 1, 1).data
-    imageSample.value = alpha > 200 ? { asset: store.pageMeta.cover?.asset, color: [r, g, b] } : null
-  } catch {
-    // A cross-origin image may display even when the browser restricts pixel access.
-    imageSample.value = null
-  }
-}
-watch(() => store.pageMeta.cover?.position, readCoverImage, { flush: 'post' })
-const coverTone = computed(() => {
-  const cover = store.pageMeta.cover
-  if (!cover) return undefined
-  const colors = cover.type === 'image'
-    ? (cover.asset === imageSample.value?.asset && imageSample.value ? [imageSample.value.color] : [])
-    : (cover.colors || []).filter(c => /^#[a-f0-9]{6}$/i.test(c))
-      .map(c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)))
-  if (!colors.length) return 'unknown'
-  let luminance = 0
-  for (const color of colors) {
-    const [r, g, b] = color.map(value => {
-      const s = value / 255
-      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
-    })
-    luminance += 0.2126 * r + 0.7152 * g + 0.0722 * b
-  }
-  return luminance / colors.length > 0.19 ? 'light' : 'dark'
-})
+const topbar = ref(null)
+const previewCover = shallowRef()
+const displayCover = computed(() => previewCover.value === undefined ? store.pageMeta.cover : previewCover.value)
+watch(() => props.docId, () => { previewCover.value = undefined }, { flush: 'sync' })
+const measureCoverToolbar = useCoverToolbar(displayCover, coverPlane, topbar, coverAtBar)
 const coverSize = computed(() => {
-  const cover = store.pageMeta.cover
+  const cover = displayCover.value
   return props.chromeCollapsed && props.loaded && !isPreview.value && cover ? cover.height || 'medium' : null
 })
 function syncCoverPosition() {
@@ -530,15 +493,15 @@ function syncCoverPosition() {
   const distance = Math.min(Math.max(0, scroller.value.scrollTop), height)
   const transform = `translateY(${-distance}px)`
   coverAtBar.value = height > distance && height - distance > scroller.value.getBoundingClientRect().top / 2
-  if (plane.style.transform !== transform) plane.style.transform = transform
+  if (plane.style.transform !== transform) {
+    plane.style.transform = transform
+    if (coverAtBar.value) measureCoverToolbar()
+  }
 }
 watch(coverPlane, (plane, _, onCleanup) => {
   syncCoverPosition()
   if (!plane) return
-  const observer = new ResizeObserver(() => {
-    syncCoverPosition()
-    readCoverImage()
-  })
+  const observer = new ResizeObserver(syncCoverPosition)
   observer.observe(plane)
   onCleanup(() => observer.disconnect())
 }, { flush: 'post' })
@@ -551,7 +514,6 @@ const open = ref(''), shareButton = ref(null)
 const actionsOpen = computed(() => ['more','export','share'].includes(open.value))
 const searchOpen = ref(false)
 const narrow = ref(false)
-const topbar = ref(null)
 const readingPopStyle = ref(null)
 const actionsPopStyle = ref(null)
 let narrowQuery = null
@@ -1189,37 +1151,37 @@ onBeforeUnmount(() => {
     --nav-cover-paper: #e4e5e7;
     --nav-cover-halo: rgb(255 255 255 / .94);
   }
-  :global(.app-topbar:has(.doc-topbar.over-cover[data-cover-tone="dark"])) {
+  :global(.app-topbar [data-cover-surface="dark"]) {
     --nav-cover-ink: #fff;
     --nav-cover-paper: #35383c;
     --nav-cover-halo: rgb(12 13 14 / .94);
   }
-  :global(.app-topbar:has(.doc-topbar.over-cover[data-cover-tone="unknown"])) {
+  :global(.app-topbar [data-cover-surface="unknown"]) {
     --topbar-chip-opacity: 100%;
     --topbar-chip-opacity-hover: 100%;
   }
-  .doc-topbar.over-cover > :is(.topbar-left, .doc-context, .doc-tools:not(.over-outline)) {
+  .doc-topbar.over-cover :deep([data-cover-surface]) {
     --c-ink: var(--nav-cover-ink);
     --c-sub: var(--c-ink);
     --c-focus: var(--c-ink);
   }
-  .doc-topbar.over-cover > .topbar-left {
+  .doc-topbar.over-cover :deep(.doc-tab) {
     --tab-marker-color: color-mix(in srgb, var(--nav-cover-paper) 84%, var(--workspace-accent, var(--nav-cover-paper)));
     --tab-marker-opacity: .54;
     --tab-hover-opacity: .26;
   }
-  .doc-topbar.over-cover[data-cover-tone="unknown"] > .topbar-left {
+  .doc-topbar.over-cover :deep(.doc-tab[data-cover-surface="unknown"]) {
     --tab-marker-opacity: 1;
   }
   /* Photos may have light and dark details within the same title. Shield the ink locally. */
-  .doc-topbar.over-cover[data-image-cover] > :is(.topbar-left, .doc-context, .doc-tools:not(.over-outline)) {
+  .doc-topbar.over-cover[data-image-cover] :deep([data-cover-surface]) {
     text-shadow: 0 0 2px var(--nav-cover-halo), 0 1px 2px var(--nav-cover-halo);
   }
   .doc-topbar.over-cover[data-image-cover] :is(.doc-quick, .doc-tools:not(.over-outline) .btn-icon) svg {
     filter: drop-shadow(0 0 1px var(--nav-cover-halo));
   }
   @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-    .doc-topbar.over-cover > .topbar-left { --tab-marker-opacity: 1; }
+    .doc-topbar.over-cover :deep(.doc-tab) { --tab-marker-opacity: 1; }
   }
   .document-shell.chrome-collapsed :deep(.page-header:not(.has-cover)) { padding-top: 8px; }
   .doc-body.is-web-preview .doc-content,

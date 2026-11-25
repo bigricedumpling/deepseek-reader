@@ -19,6 +19,9 @@ async function request(method,url,body,role='owner',local=true){
 }
 try{
  const before=await request('GET','/api/doc?path=Library/doc.md')
+ const metadata=await request('GET','/api/metadata?path=Library/doc.md')
+ const cover={type:'artwork',artwork:'overlap',height:'large',position:33}
+ assert((await request('PUT','/api/metadata',{path:'Library/doc.md',revision:metadata.data.revision,meta:{cover}})).ok)
  repo.setJSON('columns',{'Library/doc.md':{a:[100,200]}})
  assert.equal((await request('PUT','/api/access',{path:'Library',shared:true})).ok,true)
  assert.equal((await request('DELETE','/api/doc',{path:'Library/doc.md'})).ok,true)
@@ -74,6 +77,8 @@ try{
  assert.equal((await request('POST','/api/backups',{action:'open',restoredId:'../../escape'})).status,404)
  const live=await(await fetch(opened.data.url+'api/doc?path=Library/doc.md')).json()
  assert.equal(live.data.content,'# Original')
+ const page=await(await fetch(opened.data.url+'api/metadata?path=Library/doc.md')).json()
+ assert.deepEqual(page.data.meta.cover,cover)
  assert.equal(fs.readFileSync(path.join(root,'Library/doc.md'),'utf8'),'# Changed after backup')
  console.log('PASS: trash permission, private restore, stable IDs, layout recovery, collision protection, library restore and isolated full backup restore')
 }finally{stopRestoredReaders();await new Promise(resolve=>setTimeout(resolve,300));repo.db.close();fs.rmSync(temporary,{recursive:true,force:true})}

@@ -4,6 +4,7 @@ import path from 'node:path'
 import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
+import { coverArtworkCatalog } from '../server/cover-artwork-catalog.js'
 const root=fileURLToPath(new URL('../',import.meta.url))
 const manifest=JSON.parse(fs.readFileSync(path.join(root,'plugins/reader-workspace/package.json'),'utf8'))
 const archive=process.argv[2]||path.join(root,`${manifest.name}-${manifest.version}.tgz`)
@@ -12,6 +13,11 @@ try{
  const entries=execFileSync('tar',['-tf',archive],{encoding:'utf8'}).trim().split(/\r?\n/)
  assert(entries.includes('package/runtime/dist/index.html'))
  assert(entries.includes('package/runtime/server/serve.js'))
+ for (const { id } of coverArtworkCatalog) {
+   assert(entries.includes('package/runtime/dist/covers/' + id + '.webp'))
+   assert(entries.includes('package/runtime/dist/covers/' + id + '-thumb.webp'))
+ }
+ assert(entries.includes('package/runtime/dist/licenses/Met-Ejiri.txt'))
  assert(entries.includes('package/platform.js'))
  assert(!entries.some(name=>/(?:^|\/)(?:\.runtime|route-aliases)\//.test(name)), 'deployment-specific route mappings must stay local')
  assert(entries.includes('package/runtime/dist/pdfjs/LICENSE'))

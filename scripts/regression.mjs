@@ -18,6 +18,8 @@ import { createServer } from 'vite'
 import { verifyShareHandoff } from './e2e/share-handoff.mjs'
 import { verifyFind } from './e2e/find.mjs'
 import { verifyFormulaReading } from './e2e/formula-reading.mjs'
+import { verifyCoverMaterials } from './e2e/cover-materials.mjs'
+import { verifyCoverPicker } from './e2e/cover-picker.mjs'
 import { verifySurfaceMotion } from './e2e/surface-motion.mjs'
 import { runFormulaEditor } from './e2e/formula-editor.mjs'
 import { verifyEditorClipboard } from './e2e/editor-clipboard.mjs'
@@ -880,6 +882,12 @@ try {
   await send('Emulation.clearDeviceMetricsOverride')
   await runFormulaEditor({ send, ev, root: SB, appUrl, sleep })
   check('公式编辑、撤销、保存和重开保持原文', true)
+
+  await verifyCoverMaterials({ ev })
+  check('程序封面的小样、动态及可复现静帧', true)
+
+  await verifyCoverPicker({ send, ev, root: SB, appUrl, sleep })
+  check('封面试放、取消、图案、上传、局部对比度与窄屏保存', true)
 
   await verifySurfaceMotion({ send, ev, root: SB, appUrl, sleep })
   check('浮层在最终位置淡入，PDF 开关查找时正文保持原位', true)

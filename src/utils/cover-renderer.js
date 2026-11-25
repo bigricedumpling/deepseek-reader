@@ -88,18 +88,26 @@ function ridge(x, t, seed, layer) {
     + .11 * Math.sin(7.3 * x - .6 * t + seed * .7 + layer * .93)
 }
 
-// Small horizontal differences between bands reveal the shape of the flowing surface.
+// Translucent folds share one sweep. A fold narrows along its path, so the
+// ground colour remains visible between the lighter lip and the deeper overlap.
 function paintRibbons(ctx, colors, t, seed) {
   paintField(ctx, colors, t, seed, false)
-  for (let i = 0; i < 5; i++) {
-    const top = .11 + .14 * i
-    const gradient = ctx.createLinearGradient(0, top - .12, .24, top + .6)
-    gradient.addColorStop(0, ink(colors[i % colors.length], .94))
-    gradient.addColorStop(1, ink(colors[(i + 1) % colors.length], .48))
+  for (let layer = 0; layer < 4; layer++) {
+    const top = .18 + .19 * layer
+    const gradient = ctx.createLinearGradient(.05, top - .16, .28, top + .66)
+    gradient.addColorStop(0, ink(colors[layer % colors.length], .91))
+    gradient.addColorStop(.55, ink(mix(colors[layer % colors.length], colors[(layer + 1) % colors.length], .34), .76))
+    gradient.addColorStop(1, ink(colors[(layer + 1) % colors.length], .46))
     ctx.fillStyle = gradient
     ctx.beginPath()
     ctx.moveTo(0, 1)
-    for (let j = 0; j <= 80; j++) ctx.lineTo(j / 80, ridge(j / 80, t, seed, i))
+    for (let i = 0; i <= 64; i++) {
+      const x = i / 64
+      const turn = 4.75 * x + seed + .72 * t
+      const edge = top + .2 * Math.sin(turn + layer * .7)
+        + .09 * Math.sin(6.4 * x + .68 * seed - .38 * t + layer * .87)
+      ctx.lineTo(x, edge)
+    }
     ctx.lineTo(1, 1)
     ctx.closePath()
     ctx.fill()
@@ -126,38 +134,75 @@ function paperTexture(canvas, seed) {
   return tile
 }
 
-// Pixel silhouettes stay on one square grid at any aspect ratio.
-function paintPixels(ctx, w, h, colors, t, seed) {
-  const [a, b, c] = colors
-  const cell = Math.max(2, Math.round(h / 54))
-  const cols = Math.ceil(w / cell)
-  const rows = Math.ceil(h / cell)
-  const sky = ctx.createLinearGradient(0, 0, 0, h)
-  sky.addColorStop(0, ink(mix(c, a, .22)))
-  sky.addColorStop(.72, ink(b))
-  sky.addColorStop(1, ink(a))
-  ctx.fillStyle = sky
-  ctx.fillRect(0, 0, w, h)
-  ctx.fillStyle = ink(colors[3] || mix(b, [255, 255, 245], .54))
-  const radius = Math.max(3, Math.round(rows * .115))
-  const cx = Math.round(cols * (.64 + .12 * Math.sin(seed + .4 * t)))
-  const cy = Math.round(rows * (.25 + .065 * Math.sin(seed - .6 * t)))
-  for (let y = -radius; y <= radius; y++) {
-    const dx = Math.floor(Math.sqrt(radius * radius - y * y))
-    ctx.fillRect((cx - dx) * cell, (cy + y) * cell, (dx * 2 + 1) * cell, cell)
-  }
-  for (let band = 0; band < 3; band++) {
-    const color = [mix(b, a, .42), mix(c, a, .55), mix(a, [28, 34, 48], .38)][band]
-    ctx.fillStyle = ink(color)
-    for (let col = 0; col < cols; col++) {
-      const x = (col + .5) / cols
-      const edge = .45 + band * .14 + .1 * Math.sin(x * 6 + seed + t * (.48 + band * .15) + band)
-        + .043 * Math.cos(x * 15 - seed - t * .33 + band)
-      const row = Math.round(rows * edge)
-      ctx.fillRect(col * cell, row * cell, cell, h - row * cell)
+// The tiny bitmap is scaled on a square grid. Dither follows the colour
+// transition on fixed screen coordinates, so the texture does not shimmer.
+const pixelSurfaces = new WeakMap()
+const threshold4 = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5]
 
+function pixelSurface(canvas, cols, rows, colors) {
+  const key = colors.join('|')
+  let surface = pixelSurfaces.get(canvas)
+  if (!surface) {
+    const bitmap = canvas.ownerDocument.createElement('canvas')
+    const pen = bitmap.getContext('2d')
+    if (!pen) return null
+    surface = { bitmap, pen }
+    pixelSurfaces.set(canvas, surface)
+  }
+  if (!surface.image || surface.bitmap.width !== cols || surface.bitmap.height !== rows) {
+    surface.bitmap.width = cols
+    surface.bitmap.height = rows
+    surface.image = surface.pen.createImageData(cols, rows)
+    surface.sweep = new Float32Array(cols)
+    surface.bend = new Float32Array(cols)
+  }
+  if (surface.key !== key) {
+    const [a,b,c] = colors
+    const tones = [mix(a, [32,38,54], .43), a, b, colors[3] || mix(b,c,.53), c, mix(c,[32,38,54],.36)]
+    const inks = []
+    for (let i = 1; i < tones.length; i++) {
+      const left = oklab(tones[i - 1]), right = oklab(tones[i])
+      inks.push(tones[i - 1], srgb(left.map((value, k) => (value + right[k]) * .5)))
+    }
+    inks.push(tones.at(-1))
+    surface.inks = inks
+    surface.key = key
+  }
+  return surface
+}
+
+function paintPixels(ctx, w, h, colors, t, seed) {
+  const cell = Math.max(1, Math.round(h / 72), Math.ceil(w / 340))
+  const cols = Math.ceil(w / cell), rows = Math.ceil(h / cell)
+  const surface = pixelSurface(ctx.canvas, cols, rows, colors)
+  if (!surface) return
+  const { bitmap, pen, image, sweep, bend, inks } = surface
+  for (let col = 0; col < cols; col++) {
+    const x = (col + .5) / cols
+    sweep[col] = .13 + .65 * x + .16 * Math.sin(3.8 * x + seed + t * .36)
+    bend[col] = .48 + .24 * Math.sin(4.2 * x + seed * .7 - t * .27)
+  }
+  const last = inks.length - 1
+  const data = image.data
+  for (let row = 0; row < rows; row++) {
+    const y = (row + .5) / rows - .5
+    const shift = .065 * Math.cos(3.1 * y + seed - t * .37)
+    const matrixRow = (row & 3) * 4
+    for (let col = 0; col < cols; col++) {
+      const tone = Math.min(last, Math.max(0, (sweep[col] + y * bend[col] + shift) * last))
+      const level = Math.floor(tone)
+      const threshold = (threshold4[matrixRow + (col & 3)] + .5) / 16
+      const color = inks[level + (tone - level > threshold ? 1 : 0)]
+      const offset = (row * cols + col) * 4
+      data[offset] = color[0]
+      data[offset + 1] = color[1]
+      data[offset + 2] = color[2]
+      data[offset + 3] = 255
     }
   }
+  pen.putImageData(image, 0, 0)
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(bitmap, 0, 0, cols * cell, rows * cell)
 }
 
 function paintHalftone(ctx, w, h, colors, t, seed) {

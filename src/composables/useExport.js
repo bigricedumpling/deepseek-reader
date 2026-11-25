@@ -1,6 +1,8 @@
 import DOMPurify from 'dompurify'
 import { onMounted, onBeforeUnmount } from 'vue'
 import { readingDocument } from '../utils/safe-reading.js'
+import { getCoverArtwork } from '../utils/cover-artworks.js'
+import { coverPalettes } from '../utils/cover-presets.js'
 import { renderCoverFrame } from '../utils/cover-renderer.js'
 import documentFlow from '../styles/document-flow.css?inline'
 import { assetUrl } from '../utils/api.js'
@@ -72,36 +74,45 @@ function measurePrintMath(article) {
   }
 }
 
+// The picker can temporarily replace or hide the live artwork. Exports always
+// reconstruct the saved cover, including when printed during a preview.
+function exportedCover(cover, width) {
+  const box = document.createElement('div')
+  const height = { small: 160, medium: 240, large: 330 }[cover.height] || 240
+  box.className = 'page-cover ' + (cover.height || 'medium')
+  box.style.height = height + 'px'
+  box.style.overflow = 'hidden'
+  const image = document.createElement('img')
+  image.className = 'document-cover-image'
+  image.alt = ''
+  if (cover.type === 'gradient') {
+    const bitmap = document.createElement('canvas')
+    bitmap.width = Math.max(1, Math.min(1600, Math.round(width * 1.5)))
+    bitmap.height = Math.max(1, Math.round(bitmap.width * height / width))
+    if (renderCoverFrame(bitmap, cover, 0) === false) {
+      const [a, b, c] = cover.colors || coverPalettes[0]
+      box.style.backgroundImage = `radial-gradient(ellipse at 20% 30%, ${a}, transparent 75%), linear-gradient(110deg, ${b}, ${c})`
+      return box
+    }
+    image.src = bitmap.toDataURL('image/png')
+  } else {
+    const src = cover.type === 'artwork' ? getCoverArtwork(cover.artwork)?.url
+      : cover.type === 'image' && cover.asset ? assetUrl('/api/file?asset=' + encodeURIComponent(cover.asset)) : ''
+    if (!src) throw Error('无法读取已保存的封面')
+    image.src = src
+    image.style.objectPosition = 'center ' + (cover.position ?? 50) + '%'
+  }
+  box.append(image)
+  return box
+}
+
 function exportedHeader(original, cover) {
   const header = original.querySelector('.page-header')
   if (!header) return document.createDocumentFragment()
   const copy = header.cloneNode(true)
-  const coverBox = copy.querySelector('.page-cover')
-  const artwork = original.parentElement.querySelector('.cover-plane')?.firstElementChild
-    || header.querySelector('.page-cover > .gradient-cover, .page-cover > img')
-  if (coverBox && artwork) {
-    coverBox.querySelector('.gradient-cover, img.document-cover-image')?.remove()
-    if (cover?.type === 'gradient') {
-      // Print and offline HTML share a deterministic frame, including when the live cover is offscreen.
-      const bitmap = document.createElement('canvas')
-      const naturalHeight = { small: 160, medium: 240, large: 330 }[cover.height] || 240
-      const width = artwork.clientWidth || 960
-      const height = artwork.clientHeight || naturalHeight
-      bitmap.width = Math.min(1600, Math.round(width * 1.5))
-      bitmap.height = Math.max(1, Math.round(bitmap.width * height / width))
-      if (renderCoverFrame(bitmap, cover, 0) !== false) {
-        const still = document.createElement('img')
-        still.className = 'document-cover-image'
-        still.alt = ''
-        still.src = bitmap.toDataURL('image/png')
-        coverBox.prepend(still)
-      } else {
-        coverBox.style.backgroundImage = getComputedStyle(artwork).backgroundImage
-      }
-    } else {
-      coverBox.prepend(artwork.cloneNode(true))
-    }
-  }
+  copy.querySelector('.page-cover')?.remove()
+  copy.classList.toggle('has-cover', !!cover)
+  if (cover) copy.prepend(exportedCover(cover, original.clientWidth || 960))
   for (const icon of copy.querySelectorAll('button.page-icon')) {
     const span = document.createElement('span')
     span.className = 'page-icon'

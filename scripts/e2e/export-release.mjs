@@ -210,8 +210,46 @@ try {
   await api('POST', 'trash/restore', { trashId: trash.items[0].id })
   assert.equal(fs.readFileSync(report, 'utf8'), saved)
   assert.equal(fs.readFileSync(source, 'utf8'), markdown)
+  // The library cover is page metadata. HTML and PDF include the saved full
+  // artwork while Markdown-with-attachments remains an ordinary Markdown handoff.
+  const artFile = (await api('POST', 'doc', {dir:'Samples', name:'Artwork', content:'# Print proof\n'})).file
+  const artMeta = await api('GET', 'metadata?path=' + encodeURIComponent(artFile))
+  await api('PUT', 'metadata', {path:artFile, revision:artMeta.revision, meta:{
+    cover:{type:'artwork', artwork:'overlap', height:'small', position:65}
+  }})
+  await send('Page.navigate', {url:base + '/doc/Samples/Artwork?lib=Samples'})
+  await waitFor('saved full artwork on the document', () => evaluate("document.querySelector('.editor-shell') && document.querySelector('.cover-plane img[src$=\"/covers/overlap.webp\"]')?.naturalWidth > 500"))
+  await clickExport('Markdown 和附件')
+  const artZip = path.join(downloads, 'Artwork.zip')
+  await waitFor('artwork Markdown export', () => fs.existsSync(artZip))
+  const artEntries = unzipSync(fs.readFileSync(artZip))
+  assert.deepEqual(Object.keys(artEntries), ['Artwork.md'])
+  assert.equal(strFromU8(artEntries['Artwork.md']), fs.readFileSync(path.join(docs, artFile), 'utf8'))
+  await clickExport('网页')
+  const artHtml = path.join(downloads, 'Artwork.html')
+  await waitFor('artwork HTML export', () => fs.existsSync(artHtml))
+  const artSource = fs.readFileSync(path.join(runtime, 'dist/covers/overlap.webp'))
+  assert(fs.readFileSync(artHtml, 'utf8').includes('data:image/webp;base64,' + artSource.toString('base64')))
+  await evaluate("document.querySelector('.cover-actions button').click()")
+  await waitFor('featured choices', () => evaluate("!!document.querySelector('.cover-picker input[value=resonance]')"))
+  await evaluate("document.querySelector('.cover-picker input[value=resonance]').click()")
+  await waitFor('unsaved print preview', () => evaluate("document.querySelector('.cover-plane img[src$=\"/covers/resonance.webp\"]')?.naturalWidth > 500"))
+  await evaluate(`window.addEventListener('beforeprint', () => {
+    const img = document.querySelector('.typocket-print .page-cover.small img')
+    window.printedArtwork = [img?.getAttribute('src'), img?.style.objectPosition]
+  }, {once:true})`)
+  const artPdf = await send('Page.printToPDF', {printBackground:true, preferCSSPageSize:true, displayHeaderFooter:false})
+  const printedArtwork = await evaluate('window.printedArtwork')
+  assert(printedArtwork[0].endsWith('/covers/overlap.webp'))
+  assert.match(printedArtwork[1], /^(center|50%) 65%$/)
+  const artPdfPath = path.join(temp, 'artwork.pdf')
+  fs.writeFileSync(artPdfPath, Buffer.from(artPdf.data, 'base64'))
+  const printImages = execFileSync(process.env.PDFIMAGES_BIN || 'pdfimages', ['-list', artPdfPath], {encoding:'utf8'})
+  assert(/^\s*1\s+\d+\s+image\s+/m.test(printImages), 'the PDF first page embeds the library artwork')
   await send('Network.enable')
   await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 })
+  await send('Page.navigate', {url:pathToFileURL(artHtml).href})
+  await waitFor('offline artwork and crop', () => evaluate("document.querySelector('.page-cover.small img')?.naturalWidth > 500 && getComputedStyle(document.querySelector('.page-cover img')).objectPosition === '50% 65%'"))
   await send('Page.navigate', { url: pathToFileURL(html).href })
   await waitFor('offline file', () => evaluate("location.protocol==='file:' && document.body?.textContent.includes('LAST-PAGE')"))
   assert.equal(await evaluate("document.querySelectorAll('img').length"), 3)
@@ -251,7 +289,7 @@ try {
     return block.scrollWidth > block.clientWidth && block.getBoundingClientRect().right <= innerWidth
       && getComputedStyle(block).overflowX === 'auto' && document.documentElement.scrollWidth <= innerWidth
   })()`), 'long block math scrolls within its column in the offline file')
-  console.log('PASS: isolated workflow, saved edit, byte-identical Markdown, editable ZIP with attachments, offline HTML, embedded cover and two figures, CORS failure, ' + sheets.length + ' nonempty PDF pages, trash restore; browser ready ' + ready + ' ms at ' + slowdown + 'x CPU slowdown')
+  console.log('PASS: isolated workflow, saved edit, byte-identical Markdown, editable ZIP with attachments, offline HTML, embedded static and procedural covers, printed saved artwork during trial, two figures, CORS failure, ' + sheets.length + ' nonempty PDF pages, trash restore; browser ready ' + ready + ' ms at ' + slowdown + 'x CPU slowdown')
 } finally {
   socket?.close()
   await stop(chrome)
