@@ -5,8 +5,8 @@ Typocket is a local Markdown reading and editing tool with a DSH interface and a
 ## Product boundary
 
 - The product is local-first. It is not a cloud notebook, team workspace or publishing service.
-- Do not add public sharing, guest links, share scopes, cloud publishing or an Agent access token UI. Legacy backend routes may remain for compatibility, but they are not product surfaces.
-- Export is the delivery path: Markdown source, self-contained HTML, or print / PDF. Do not turn export into a share system.
+- Temporary sharing hands a scoped static-export prompt to the user’s Agent. Keep the running workspace local. Do not add a hosted share service, guest administration or an Agent access token UI. Legacy backend routes may remain for compatibility, but they are not product surfaces.
+- Export is the delivery path: Markdown source, self-contained HTML, or print / PDF. A user may hand an explicit document or library snapshot to an Agent for temporary hosting.
 - Agents read and write the same local files as the user. Do not add permission or token setup for local agents; `READER_URL` and `READER_TOKEN` are not required for local work.
 
 ## Knowledge base files

@@ -174,13 +174,37 @@ export async function verifyNavigationMotion({send, ev, root, appUrl, sleep}) {
       }
     }
 
+    const outlineHint = "document.querySelector('.rail-toc-hint')?.textContent === '展开文档目录'"
+    const key = async (name, code) => {
+      await send('Input.dispatchKeyEvent', {type:'keyDown', key:name, code:name, windowsVirtualKeyCode:code, text:name === 'Enter' ? '\r' : undefined})
+      await send('Input.dispatchKeyEvent', {type:'keyUp', key:name, code:name, windowsVirtualKeyCode:code})
+    }
+    if (await ev("return matchMedia('(hover:hover) and (pointer:fine)').matches")) {
+      const point = await ev("const r = document.querySelector('.rail-toc-handle').getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}")
+      await send('Input.dispatchMouseEvent', {type:'mouseMoved', ...point})
+      await ready(outlineHint)
+      assert(await ev("return !document.querySelector('.reader-tooltip.is-visible')"), '章节导航同时只显示一种提示')
+      await send('Input.dispatchMouseEvent', {type:'mouseMoved', x:10, y:10})
+      await ready("!document.querySelector('.rail-toc-hint')")
+    }
+    await key('Tab', 9)
+    await ev("document.querySelector('.rail-toc-handle').focus()")
+    await ready(outlineHint)
+    await key('Enter', 13)
+    await ready("document.activeElement.matches('.toc-item,.toc-collapse-chip') && !document.querySelector('.rail-toc-hint')")
+    await key('Escape', 27)
+    await ready("document.activeElement.matches('.rail-toc-handle')")
+
     // A touch-only tablet has a single outline button. Opening it must pick up
     // the current chapter; attaching a mouse should also wake the compact rail.
     await send('Emulation.setTouchEmulationEnabled', {enabled:true, maxTouchPoints:1})
     await ready("document.querySelector('.rail-toc-handle')?.checkVisibility() && document.querySelector('.rail-toc-stops')?.clientHeight===0")
     const touch = await ev('return ('+measureOutline.toString()+')(true, 67)')
     assert.equal(touch.reads, 0, '触屏上的隐藏目录标记应停止测量正文')
-    await click('.rail-toc-handle')
+    const touchButton = await ev("const r = document.querySelector('.rail-toc-handle').getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width,height:r.height}")
+    assert(touchButton.width >= 44 && touchButton.height >= 44, '触屏的目录入口须可直接点按')
+    await send('Input.dispatchTouchEvent',{type:'touchStart', touchPoints:[{x:touchButton.x,y:touchButton.y}]})
+    await send('Input.dispatchTouchEvent',{type:'touchEnd', touchPoints:[]})
     await ready("document.querySelector('.toc-item.is-active')?.textContent.trim()==='章节 67'")
     await click('.toc-collapse-chip')
     await ready("document.querySelector('.rail-toc-stops')?.clientHeight===0")

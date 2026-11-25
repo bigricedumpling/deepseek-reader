@@ -193,33 +193,79 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   max-width: var(--measure, 960px);
 }
 
+/* Document presets affect the page, independently of light/dark mode and the
+   reader's font, size, line height, measure and paragraph indentation. */
+body[data-document-style="feishu"] .crepe-host {
+  --doc-title-size: 2.15em;
+  --doc-title-weight: 600;
+  --doc-section-weight: 550;
+  --doc-h1: 1.68em;
+  --doc-h2: 1.42em;
+  --doc-h3: 1.25em;
+  --doc-heading-gap: .95em;
+  --doc-paragraph-gap: .5em;
+  --doc-link: color-mix(in srgb, #437aed 65%, var(--c-ink));
+  --doc-quote-line: color-mix(in srgb, var(--c-sub) 55%, var(--c-line));
+}
+body[data-document-style="notion"] .crepe-host {
+  --doc-title-size: 2.5em;
+  --doc-title-weight: 750;
+  --doc-h1: 1.86em;
+  --doc-h2: 1.5em;
+  --doc-h3: 1.24em;
+  --doc-heading-gap: 1.12em;
+  --doc-paragraph-gap: .42em;
+  --doc-link: var(--c-text);
+  --doc-quote-line: var(--c-ink);
+  --doc-quote-width: 3px;
+  --doc-inline-code: color-mix(in srgb, #c25b50 60%, var(--c-ink));
+}
+body[data-document-style="obsidian"] .crepe-host {
+  --doc-title-size: 2.05em;
+  --doc-title-weight: 700;
+  --doc-h1: 1.82em;
+  --doc-h2: 1.6em;
+  --doc-h3: 1.42em;
+  --doc-h4: 1.24em;
+  --doc-h5: 1.1em;
+  --doc-h6: 1em;
+  --doc-heading-gap: 1.46em;
+  --doc-paragraph-gap: .95em;
+  --doc-link: color-mix(in srgb, #9372db 62%, var(--c-ink));
+  --doc-quote-line: var(--doc-link);
+  --doc-quote-width: 2px;
+}
+body[data-para="space"] .crepe-host .ProseMirror {
+  --para-gap: var(--doc-paragraph-gap, .6em);
+}
+
 /* Section headings follow the starting edge even when the body is justified. */
 .crepe-host .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
   text-align: start;
   overflow-wrap: anywhere;
 }
 .crepe-host .milkdown .ProseMirror h1 {
-  font-size: 1.62em;
+  font-size: var(--doc-h1, 1.62em);
   line-height: 1.35;
-  font-weight: 600;
+  font-weight: var(--doc-section-weight, 600);
   color: var(--c-ink);
   margin-block: 0 0.55em;
   letter-spacing: 0.01em;
 }
 .crepe-host .milkdown .ProseMirror h2 {
-  font-size: 1.38em;
+  font-size: var(--doc-h2, 1.38em);
   line-height: 1.4;
-  font-weight: 600;
+  font-weight: var(--doc-section-weight, 600);
   color: var(--c-ink);
-  margin-block: 1.45em 0.4em;
+  margin-block: var(--doc-heading-gap, 1.45em) 0.4em;
   letter-spacing: 0.01em;
 }
 .crepe-host .milkdown .ProseMirror h3 {
-  font-size: 1.15em;
+  font-size: var(--doc-h3, 1.15em);
   line-height: 1.48;
-  font-weight: 600;
+  font-weight: var(--doc-section-weight, 600);
   color: var(--c-ink);
-  margin-block: 1.25em 0.45em;
+  margin-block: var(--doc-heading-gap, 1.25em) 0.45em;
 }
 /*
  * 四、五、六级标题。
@@ -229,21 +275,21 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
  * 六级再小一档并转成次级灰，扫一眼就能分出层次。
  */
 .crepe-host .milkdown .ProseMirror h4 {
-  font-size: 1.04em;
-  font-weight: 600;
+  font-size: var(--doc-h4, 1.04em);
+  font-weight: var(--doc-section-weight, 600);
   color: var(--c-text);
   margin-block: 1.1em 0.35em;
 }
 .crepe-host .milkdown .ProseMirror h5 {
-  font-size: 0.98em;
-  font-weight: 600;
+  font-size: var(--doc-h5, 0.98em);
+  font-weight: var(--doc-section-weight, 600);
   color: var(--c-text);
   letter-spacing: 0.01em;
   margin-block: 1em 0.3em;
 }
 .crepe-host .milkdown .ProseMirror h6 {
-  font-size: 0.92em;
-  font-weight: 600;
+  font-size: var(--doc-h6, 0.92em);
+  font-weight: var(--doc-section-weight, 600);
   color: var(--c-sub);
   letter-spacing: 0.03em;
   margin-block: 0.95em 0.3em;
@@ -253,9 +299,10 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 .crepe-host .milkdown .ProseMirror > h1 {
   margin-block-start: 1.7em;
 }
-.crepe-host .milkdown .ProseMirror > h1.reader-document-title {
-  font-size: clamp(1.95em, 3.5vw, 2.65em);
-  font-weight: 750;
+.crepe-host .milkdown .ProseMirror > h1.reader-document-title,
+.crepe-host.source-reading .milkdown .ProseMirror > h1:first-child {
+  font-size: var(--doc-title-size, clamp(1.95em, 3.5vw, 2.65em));
+  font-weight: var(--doc-title-weight, 750);
   line-height: var(--article-title-leading);
   letter-spacing: -.025em;
   margin-block-start: 0;
@@ -308,10 +355,10 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   margin-bottom: 0;
 }
 .crepe-host .milkdown .ProseMirror blockquote::before {
-  width: 3px;
+  width: var(--doc-quote-width, 3px);
   top: 0;
   bottom: 0;
-  background: var(--c-line);
+  background: var(--doc-quote-line, var(--c-line));
   border-radius: 2px;
 }
 
@@ -352,7 +399,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 
 /* 链接：唯一的彩色 */
 .crepe-host .milkdown .ProseMirror a {
-  color: var(--c-accent);
+  color: var(--doc-link, var(--c-accent));
   border-bottom: 1px solid color-mix(in srgb,currentColor 40%,transparent);
   text-decoration: none;
 }
@@ -888,6 +935,11 @@ body[data-theme="dark"] .crepe-host .milkdown .ProseMirror code {
 }
 body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
   background: var(--c-code-bg);
+}
+
+/* Keep fenced code and its syntax colors independent of inline code styling. */
+body[data-document-style="notion"] .crepe-host .milkdown .ProseMirror :not(pre) > code {
+  color: var(--doc-inline-code);
 }
 
 /* 选区使用独立灰阶，区别于控件选中态 */

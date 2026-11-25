@@ -1,6 +1,7 @@
 <template>
   <div class="reading-settings">
     <ReadingChoices v-model="reader.theme" label="外观" :options="themes" />
+    <ReadingChoices class="document-styles" v-model="reader.documentStyle" label="文档风格" :options="DOCUMENT_STYLES" />
     <ReadingChoices v-model="reader.font" label="正文字体" :options="fonts" :columns="3" />
     <ReadingChoices v-model="reader.size" label="字号" :options="sizes" />
     <ReadingChoices v-model="reader.measure" label="正文宽度" :options="WIDTH_OPTIONS" />
@@ -36,7 +37,7 @@
 
 <script setup>
 import { PhCaretDown, PhSun, PhMoon, PhCircleHalf } from '../icons/remix'
-import { useReaderStore, WIDTH_OPTIONS } from '../stores/reader'
+import { useReaderStore, DOCUMENT_STYLES, WIDTH_OPTIONS } from '../stores/reader'
 import ReadingChoices from './ReadingChoices.vue'
 
 const reader = useReaderStore()
@@ -76,7 +77,7 @@ const zooms = [80, 90, 100, 115, 130, 150]
 </script>
 
 <style scoped>
-.reading-settings { --setting-label: 52px; --setting-gap: 12px; min-width: 0; display: grid; gap: 12px; }
+.reading-settings { container-type: inline-size; --setting-label: 52px; --setting-gap: 12px; min-width: 0; display: grid; gap: 12px; }
 .slider-row, .zoom-row { display: grid; grid-template-columns: var(--setting-label) minmax(0, 1fr) auto; gap: var(--setting-gap); position: relative; align-items: center; min-height: 30px; font-size: 12px; color: var(--c-sub); }
 .slider-row input { appearance: none; width: 100%; height: 30px; min-width: 0; margin: 0; background: transparent; cursor: pointer; }
 .slider-row input::-webkit-slider-runnable-track { height: 3px; border-radius: 3px; background: var(--c-line); }
@@ -93,5 +94,8 @@ const zooms = [80, 90, 100, 115, 130, 150]
 .zoom-row { grid-template-columns: var(--setting-label) minmax(0, 1fr); }
 .zoom-row select { appearance: none; width: fit-content; border-radius: var(--radius-control); min-height: 30px; min-width: 72px; padding: 4px 25px 4px 9px; background: var(--c-field); color: var(--c-text); }
 .zoom-row svg { position: absolute; left: calc(var(--setting-label) + var(--setting-gap) + 51px); pointer-events: none; }
+@container (max-width: 285px) {
+  .document-styles :deep(.choice-options) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (pointer:coarse) { .slider-row input, .zoom-row select, .reading-details summary { min-height: 44px; } }
 </style>

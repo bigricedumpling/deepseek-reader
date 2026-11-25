@@ -471,9 +471,9 @@ function onStripResize() {
     const active = host.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
     if (active && !host.querySelector('.tab-leave-active')) {
       const left = active.offsetLeft - host.scrollLeft
-      // A mobile file list hides the strip entirely. On desktop, keep a
-      // visible tab in view without overriding a user's horizontal browsing.
-      if (!previousStripWidth || (left >= -1 && left + active.offsetWidth <= previousStripWidth + 1)) {
+      // A changing library name can narrow the strip mid-reveal. Follow the
+      // selected tab to its final edge while preserving manual scrolling.
+      if (!previousStripWidth || revealWatch || (left >= -1 && left + active.offsetWidth <= previousStripWidth + 1)) {
         scrollActiveIntoView(false)
       }
     }

@@ -20,6 +20,7 @@ const KEY = {
   measure: 'reader.measure',
   zoom: 'reader.zoom',
   theme: 'reader.theme',
+  documentStyle: 'reader.documentStyle',
   para: 'reader.para',
   // 行距：KEY 里原来漏了这一项，setItem(undefined) 写进了名叫 undefined 的键，
   // 所以行距永远是默认值 1.95（设置面板里以前也没有这个入口，一直没暴露）
@@ -64,8 +65,15 @@ export const WIDTH_OPTIONS = [
   { value: 0, label: '宽', ratio: 100 }
 ]
 
+export const DOCUMENT_STYLES = [
+  { value: 'default', label: '默认' }, { value: 'feishu', label: '飞书' },
+  { value: 'notion', label: 'Notion' }, { value: 'obsidian', label: 'Obsidian' }
+]
+
 export const useReaderStore = defineStore('reader', () => {
   /* ---------- 正文排版 ---------- */
+  const storedStyle = str('documentStyle', 'default')
+  const documentStyle = ref(DOCUMENT_STYLES.some(style => style.value === storedStyle) ? storedStyle : 'default')
   const rawFont = storageGet(KEY.font)
   /* 旧默认衬线会在首次打开时自动换成当前默认字体。只迁移一次，之后手动选衬线仍会保留。 */
   const migrateOldDefault = !storageGet(SANS_DEFAULT_MIGRATION)
@@ -137,6 +145,7 @@ export const useReaderStore = defineStore('reader', () => {
    */
   function apply() {
     const b = document.body
+    b.dataset.documentStyle = documentStyle.value
     b.dataset.font = font.value
     b.dataset.italic = italicFace.value
     b.dataset.strong = strongFace.value
@@ -147,6 +156,7 @@ export const useReaderStore = defineStore('reader', () => {
     b.style.setProperty('--reading-lh', String(leading.value))
     b.style.setProperty('--reading-tracking', tracking.value + 'em')
 
+    storageSet(KEY.documentStyle, documentStyle.value)
     storageSet(KEY.font, font.value)
     storageSet(KEY.size, String(size.value))
     storageSet(KEY.measure, String(measure.value))
@@ -168,7 +178,7 @@ export const useReaderStore = defineStore('reader', () => {
   watch(
     [
       font, size, measure, leading, tracking, paraStyle, strongFace, italicFace,
-      theme, zoom, tableWidth, tableAlign, tocOpen, tocWidth, navCollapsed, navWidth
+      documentStyle, theme, zoom, tableWidth, tableAlign, tocOpen, tocWidth, navCollapsed, navWidth
     ],
     apply,
     { immediate: true }
@@ -176,7 +186,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   return {
     font, size, measure, leading, tracking, paraStyle, strongFace, italicFace,
-    theme, zoom, tableWidth, tableAlign,
+    documentStyle, theme, zoom, tableWidth, tableAlign,
     tocOpen, tocWidth, tocDragging, navCollapsed, navWidth,
     readingStyle, isDark, resolvedTheme
   }

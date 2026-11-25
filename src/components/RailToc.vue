@@ -1,7 +1,8 @@
 <template>
   <nav v-if="items.length && !reader.tocOpen" class="rail-toc" aria-label="章节快捷导航" @pointerleave="clearHint" @keydown.esc="clearHint">
-    <button class="rail-toc-handle" aria-label="展开完整目录" aria-controls="document-outline" @click.stop="emit('open')">
-      <PhCaretLeft class="rail-caret" :size="14" />
+    <button type="button" class="rail-toc-handle" aria-label="展开文档目录" aria-expanded="false" aria-controls="document-outline"
+      @pointerenter="hoverHint" @pointerleave="clearHint" @focus="focusHint" @blur="clearHint" @click.stop="emit('open')">
+      <PhCaretLeft class="rail-caret" :size="16" />
       <PhListDashes class="rail-list-icon" :size="17" />
     </button>
     <div ref="stops" class="rail-toc-stops no-scrollbar" @scroll="onMarkerScroll">
@@ -134,11 +135,10 @@ onBeforeUnmount(() => {
 .rail-toc{display:flex;flex-direction:column;position:absolute;top:50%;right:6px;z-index:5;transform:translateY(-50%);width:32px;max-height:60vh;padding:4px 0}
 .rail-toc-stops{position:relative;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 .rail-list-icon{display:none}
-.rail-toc-handle{flex:none;display:flex;justify-content:center;align-items:center;width:32px;height:24px;margin-bottom:2px;border-radius:6px;background:transparent;color:var(--c-faint);opacity:.4;transition:opacity .15s,background .15s,color .15s}
-.rail-toc:hover .rail-toc-handle{opacity:.85}
-.rail-toc-handle:hover,.rail-toc-handle:focus-visible{opacity:1;background:transparent;color:var(--c-accent)}
+.rail-toc-handle{flex:none;display:grid;place-items:center;width:32px;height:26px;margin-bottom:2px;border-radius:var(--radius-control);color:var(--c-sub);opacity:.78;transition:opacity 150ms ease,background-color 150ms ease,color 150ms ease}
+.rail-toc-handle:is(:hover,:focus-visible){opacity:1;background:var(--c-hover);color:var(--c-ink)}
 .rail-toc-stop{display:flex;justify-content:center;align-items:center;width:32px;height:15px;outline-offset:-2px}
-.rail-toc-stop span{height:1.5px;flex-shrink:0;border-radius:2px;background:var(--c-faint);opacity:.26;transition:opacity .15s,background .15s}
+.rail-toc-stop span{height:1.5px;flex-shrink:0;border-radius:2px;background:var(--c-faint);opacity:.36;transition:opacity .15s,background .15s}
 .rail-toc-stop.active span{opacity:.85;background:var(--c-ink)}
 .rail-toc-stop:hover span,.rail-toc-stop:focus-visible span{opacity:1;background:var(--c-accent)}
 .rail-toc-hint{position:fixed;transform:translateY(-50%);max-width:min(280px,calc(100vw - 64px));padding:5px 10px;border-radius:8px;font-size:11.5px;line-height:1.5;pointer-events:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

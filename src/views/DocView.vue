@@ -38,7 +38,7 @@
 
       <!-- 文档操作：放在这条顶栏的最右端，跟随文档标签一起搬 -->
       <div class="doc-more">
-        <button ref="moreButton" class="btn-icon" title="更多" aria-label="更多" :aria-expanded="open === 'more' || open === 'export'" :class="{ 'is-active': open === 'more' || open === 'export' }" @click="toggle('more')"><PhDotsThree :size="18" weight="bold" /></button>
+        <button ref="moreButton" class="btn-icon" title="更多" aria-label="更多" :aria-expanded="actionsOpen" :class="{ 'is-active': actionsOpen }" @click="toggle('more')"><PhDotsThree :size="18" weight="bold" /></button>
         <Teleport to="body">
         <transition name="pop">
           <div v-if="open === 'more'" ref="actionsPanel" @keydown.tab="exitPanelOnTab($event, moreButton)" class="pop-menu is-panel document-actions more-menu actions-pop" :style="actionsPopStyle">
@@ -50,6 +50,7 @@
             <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open = ''; historyOpen = true"><PhClockCounterClockwise :size="15" /> 历史版本</button>
             <div class="doc-options-divider" />
             <button ref="exportButton" class="pop-item" @click="showActionsPage('export')"><PhExport :size="15" /><span>导出</span><PhCaretRight :size="13" class="menu-tail" /></button>
+            <button v-if="!store.isGuest" ref="shareButton" class="pop-item" @click="showActionsPage('share')"><PhChatCircle :size="15" /><span>通过 Agent 分享</span><PhCaretRight :size="13" class="menu-tail" /></button>
             <a v-if="embedded" class="pop-item" :href="browserUrl" target="_blank" rel="noopener noreferrer" @click="open = ''"><PhArrowSquareOut :size="15" /> 在浏览器打开</a>
             <div class="doc-options-divider" />
             <div class="more-stats ui-font">
@@ -60,6 +61,9 @@
               <template v-else><span>{{ stats.total }} 字</span><span>{{ stats.lines }} 行</span></template>
             </div>
             <p v-if="saveStateText && !error" class="more-save ui-font">{{ saveStateText }}</p>
+          </div>
+          <div v-else-if="open === 'share' && !store.isGuest" ref="actionsPanel" role="dialog" aria-label="通过 Agent 分享" @keydown.tab="exitPanelOnTab($event, moreButton)" class="pop-menu is-panel document-actions actions-pop" :style="actionsPopStyle">
+            <AgentSharePanel :key="docId" :file="docId" :id="store.currentSourceId" @back="showActionsPage('more')" />
           </div>
           <div v-else-if="open === 'export'" ref="actionsPanel" @keydown.tab="exitPanelOnTab($event, moreButton)" class="pop-menu is-panel document-actions export-menu actions-pop" :style="actionsPopStyle">
             <button class="pop-item" @click="showActionsPage('more')"><PhCaretLeft :size="15" />导出</button>
@@ -199,7 +203,7 @@ import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick 
 // 弹层里那些小图标：宽度 / 加粗斜体 / 段落 / 表格 / 主题 / 缩放 / 导出 / pdf 翻译
 import {
   PhMagnifyingGlass, PhArrowsOutLineHorizontal,
-  PhExport, PhArrowSquareOut, PhX, PhSpinnerGap, PhWarningCircle,
+  PhExport, PhChatCircle, PhArrowSquareOut, PhX, PhSpinnerGap, PhWarningCircle,
   PhCaretLeft, PhCaretRight, PhCircleHalf, PhPrinter, PhInfo, PhClockCounterClockwise,
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
@@ -218,6 +222,7 @@ import ContentIcon from '../components/ContentIcon.vue'
 import ReadingSettings from '../components/ReadingSettings.vue'
 import ConflictDialog from '../components/ConflictDialog.vue'
 import VersionHistory from '../components/VersionHistory.vue'
+import AgentSharePanel from '../components/AgentSharePanel.vue'
 import DocumentInfo from '../components/DocumentInfo.vue'
 import PageHeader from '../components/PageHeader.vue'
 import DocPicker from '../components/DocPicker.vue'
@@ -529,7 +534,8 @@ const pdfPreview = ref(null)
 const quickButton = ref(null)
 const quickOpen = ref(false)
 const quickOpenStyle = ref({})
-const open = ref('')
+const open = ref(''), shareButton = ref(null)
+const actionsOpen = computed(() => ['more','export','share'].includes(open.value))
 const searchOpen = ref(false)
 const narrow = ref(false)
 const topbar = ref(null)
@@ -698,7 +704,8 @@ function openSearch() {
   nextTick(() => document.querySelector('.doc-search-panel input')?.focus())
 }
 async function toggle(name) {
-  open.value = open.value === name ? '' : name
+  const alreadyOpen = name === 'more' ? actionsOpen.value : open.value === name
+  open.value = alreadyOpen ? '' : name
   if (!open.value) return
   await nextTick()
   placePopovers()
@@ -708,13 +715,14 @@ async function toggle(name) {
   first?.focus({ preventScroll: true })
 }
 async function showActionsPage(name) {
+  const parentButton = open.value === 'share' ? shareButton : exportButton
   open.value = name
   await nextTick()
-  const first = name === 'more' ? exportButton.value : actionsPanel.value?.querySelector('button')
+  const first = name === 'more' ? parentButton.value : actionsPanel.value?.querySelector('button')
   first?.focus({ preventScroll: true })
 }
 function exitPanelOnTab(event, trigger) {
-  const controls = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href]')]
+  const controls = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea, summary, a[href]')]
     .filter(el => el.tabIndex >= 0 && (el.type !== 'radio' || el.checked) && el.getClientRects().length)
   const boundary = event.shiftKey ? controls[0] : controls.at(-1)
   if (document.activeElement !== boundary) return
@@ -817,7 +825,7 @@ function onFindKey(e) {
   if(e.key==='Escape' && open.value){
     e.preventDefault()
     if(open.value==='reading')closeReading()
-    else if(open.value==='export')showActionsPage('more')
+    else if(open.value==='export' || open.value==='share')showActionsPage('more')
     else{open.value='';moreButton.value?.focus()}
     return
   }

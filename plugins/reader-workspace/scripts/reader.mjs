@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises'
 import { existsSync, realpathSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { readerDataDirectory } from '../platform.js'
+import { sharePrompt } from './share-prompt.mjs'
+import { BRAND_NAME } from '../brand.js'
 import { getReaderSkill } from '../skill-provider.js'
 import manifest from '../package.json' with { type: 'json' }
 import { fileURLToPath } from 'node:url'
@@ -134,13 +136,31 @@ export async function callTool(name, args = {}, options = {}) {
   return out
 }
 const tools=definitions.map(([name,description,method,,inputSchema])=>({name,description,inputSchema,annotations:{readOnlyHint:method==='GET',destructiveHint:method!=='GET',idempotentHint:true,openWorldHint:false}}))
+const shareBrief = {
+  name:'share_snapshot', description:'为选定的文档或知识库准备临时只读分享提示词。',
+  arguments:[
+    {name:'scope', description:'document 或 library', required:true},
+    {name:'target', description:'包含知识库的完整文档路径，或一个知识库名称', required:true},
+    {name:'id', description:'单篇文档的稳定标识（可选）'}
+  ]
+}
 const mcpVersions = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']
 async function dispatch(m){
  if(m.id===undefined)return
  let result,error
  try{
- if(m.method==='initialize')result={protocolVersion:mcpVersions.includes(m.params?.protocolVersion) ? m.params.protocolVersion : mcpVersions[0],capabilities:{tools:{}},instructions:getReaderSkill().content,serverInfo:{name:'reader-workspace',version:manifest.version}}
+ if(m.method==='initialize')result={protocolVersion:mcpVersions.includes(m.params?.protocolVersion) ? m.params.protocolVersion : mcpVersions[0],capabilities:{tools:{},prompts:{}},instructions:getReaderSkill().content,serverInfo:{name:'reader-workspace',version:manifest.version}}
  else if(m.method==='ping')result={}
+ else if(m.method==='prompts/list')result={prompts:[shareBrief]}
+ else if(m.method==='prompts/get'){
+   if(m.params?.name!==shareBrief.name)error={code:-32602,message:'Unknown prompt'}
+   else {
+     try {
+       const text=sharePrompt(BRAND_NAME,m.params.arguments || {})
+       result={description:shareBrief.description,messages:[{role:'user',content:{type:'text',text}}]}
+     } catch(e){error={code:-32602,message:e.message}}
+   }
+ }
  else if(m.method==='tools/list')result={tools}
  else if(m.method==='tools/call'){const out=await callTool(m.params?.name,m.params?.arguments);result={content:[{type:'text',text:JSON.stringify(out)}],isError:!out.ok}}
  else error={code:-32601,message:'Method not found'}

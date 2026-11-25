@@ -70,6 +70,15 @@ try {
   assert.match(init.instructions, /requestId/)
   assert.match(init.instructions, /revision/)
   send({ method: 'notifications/initialized' })
+  assert(init.capabilities.prompts)
+  const { prompts } = await rpc('prompts/list')
+  assert(prompts.some(prompt => prompt.name === 'share_snapshot'))
+  for (const args of [{scope:'library', target:library}, {scope:'document', target:library + '/摘录.md', id:'sample-id'}]) {
+    const { messages } = await rpc('prompts/get', {name:'share_snapshot', arguments:args})
+    assert.equal(messages[0].role, 'user')
+    assert(messages[0].content.text.includes(JSON.stringify(args.target)))
+    assert.equal(messages[0].content.text.includes('sample-id'), args.scope === 'document')
+  }
   const list = await rpc('tools/list')
   assert.equal(list.tools.length, 14)
   assert(list.tools.find(tool => tool.name === 'reader_update').inputSchema.required.includes('revision'))

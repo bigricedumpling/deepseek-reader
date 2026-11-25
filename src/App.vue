@@ -591,6 +591,7 @@ async function openLibraryMatch(hit) {
   gap: 12px;
   background: transparent;
 }
+.app-main-col:not(.is-browsing-files) .app-topbar { gap:6px; }
 .app-topbar.is-open {
   height: var(--workspace-topbar-height);
   pointer-events: none;

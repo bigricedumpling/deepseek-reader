@@ -8,7 +8,7 @@
       <template v-else-if="receiveTimedOut">没有收到工作区文件。请回到 DSH 重新打开这篇 Markdown。</template>
       <template v-else>正在读取工作区文件…</template>
     </div>
-    <div v-else class="preview-reader" @click="onArticleClick">
+    <div v-else class="preview-reader" :style="reader.readingStyle" @click="onArticleClick">
       <MarkdownEditor :key="readerVersion" :value="readerRaw" :readonly="true" :doc-id="filePath" :workspace-name="workspaceReference" />
     </div>
     <Transition name="overlay"><div v-if="picker" class="picker-mask" @click.self="closePicker">
@@ -52,10 +52,12 @@ import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { workspaceImages, rewriteWorkspaceImages } from '../../server/services/workspace-images.js'
 import { useDialogFocus } from '../composables/useDialogFocus.js'
 import { API_BASE } from '../utils/api'
+import { useReaderStore } from '../stores/reader'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import LibraryDestinationList from '../components/LibraryDestinationList.vue'
 import { PhMagnifyingGlass, PhX } from '../icons/remix'
 
+const reader = useReaderStore()
 const embedded = window.parent !== window
 const title = ref('')
 const filePath = ref('')
@@ -354,7 +356,6 @@ body { margin: 0; }
 .collect-button:hover,.picker-actions button:hover { background: var(--c-hover); }
 .preview-state { padding: 30px; color: var(--c-faint); font-size: 13px; }
 .preview-reader { min-height: calc(100vh - 44px); padding: 8px 0 80px; }
-.preview-reader .editor-shell { max-width: var(--measure,850px); margin: auto; }
 .picker-mask {
   --picker-top: max(16px, calc((100dvh - min(270px, 35dvh) - 260px) / 2));
   position: fixed; inset: 0; z-index: var(--layer-modal-backdrop); display: grid; place-items: start center;

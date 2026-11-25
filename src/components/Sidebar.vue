@@ -24,6 +24,12 @@
         @click.stop="onLibPanelClick"
       >
         <div class="lib-panel-head">
+          <button
+            v-if="!isGuest" ref="shelfTrigger" type="button" class="icon-btn lib-overview-trigger"
+            :data-tooltip="shelfTriggerLabel" :aria-label="shelfTriggerLabel"
+            :aria-current="managerOpen && !shelfLevel.path ? 'page' : undefined"
+            aria-controls="drawer-gallery-page" @click.stop="toggleManager"
+          ><PhSquaresFour :size="16" /></button>
           <span class="lib-panel-title">知识库</span>
           <span v-if="!managerOpen" class="lib-panel-head-acts">
             <button class="icon-btn" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="知识库排序" aria-label="知识库排序" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu">
@@ -107,9 +113,6 @@
             </div>
           </div>
           </TransitionGroup>
-        </div>
-        <div class="lib-panel-footer">
-          <button v-if="!isGuest" type="button" class="icon-btn" ref="shelfTrigger" :data-tooltip="shelfTriggerLabel" :aria-label="shelfTriggerLabel" :aria-current="managerOpen && !shelfLevel.path ? 'page' : undefined" aria-controls="drawer-gallery-page" @click.stop="toggleManager"><PhSquaresFour :size="16" weight="regular" /></button>
         </div>
       </aside>
     </transition>
@@ -236,8 +239,8 @@
     -->
     <Teleport to="#app-topbar-left" :disabled="!chromeCollapsed">
       <div class="kb-header-rail">
-        <span ref="compactReserve" class="kb-header-reserve" aria-hidden="true" inert>
-          <span class="kb-reserve-title">{{ libraryNamesForWidth }}</span>
+        <span ref="compactMeasure" class="kb-header-measure" aria-hidden="true" inert>
+          <span class="kb-measure-title">{{ currentLib || '知识库' }}</span>
         </span>
         <div class="kb-header-row">
           <div class="side-header" :class="{ 'is-topbar': chromeCollapsed, 'is-compact': chromeCompact, 'is-collapsing': collapsed && !chromeCompact, 'is-expanding': chromeExpanding, 'is-merged': !collapsed }" @click.self="onCompactHeaderClick">
@@ -869,10 +872,8 @@ const managerLibs = computed(() => {
 
 /** 当前所在的知识库：文档根的名字（每个实例一个根，所以直接问服务端） */
 const currentLib = computed(() => store.activeLibrary)
-// The compact slot fits the widest available library up to its responsive cap.
-// Switching and closing documents can then leave every tab's hit area in place.
-const compactReserve = ref(null)
-const libraryNamesForWidth = computed(() => [...libPanel.libs.map(lib => lib.name), currentLib.value || '知识库'].join('\n'))
+// Measure the current compact layout even while its visible header fills the sidebar.
+const compactMeasure = ref(null)
 watch(currentLib, name => {
   if (name) rememberLib(name)
   applyCurrentLib()
@@ -1624,8 +1625,7 @@ function useIdentitySwap(source, element) {
 const shownLib = useIdentitySwap(currentLib, titleEl)
 const shownLibIcon = useIdentitySwap(currentLibIcon, glyphEl)
 
-// Only the compact button follows the text width. Its reserve and the tab
-// strip stay still, including when an in-flight size change reverses.
+// Animate the title in flow so the button and its neighboring tabs move together.
 let widthMotion
 watch([currentLib, identityCanMove], async ([next, enabled], [previous, wasEnabled], onCleanup) => {
   const el = titleWrap.value
@@ -2531,7 +2531,7 @@ watch(() => props.collapsed, (compact) => {
 })
 
 function compactHeaderWidth() {
-  return compactReserve.value?.getBoundingClientRect().width || props.width
+  return compactMeasure.value?.getBoundingClientRect().width || props.width
 }
 
 async function startCreate(kind = 'doc') {
@@ -2625,7 +2625,6 @@ onMounted(loadActivityUnread)
     curve to 0 10% with var(--row-waist) 33% / 0 27%, close);
 }
 .lib-row.is-draft .lib-row-blob { background: color-mix(in srgb, var(--c-accent) 10%, transparent); }
-.lib-panel-footer { display:flex;flex-direction:column;margin:5px 8px 12px;gap:2px; }
 .lib-empty { color: var(--c-faint); font-size: 12px; text-align: center; padding: 24px 0; }
 
 .lib-preview-entry { display:flex;align-items:center;gap:13px;width:100%;min-height:44px;margin-bottom:5px;padding:8px 12px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left; }.lib-preview-entry:hover { background:var(--c-hover);color:var(--c-ink); }.lib-preview-detail { margin:0 24px 24px;padding:16px;background:var(--c-field);border-radius:22px;corner-shape:var(--corner-ui); }.lib-preview-detail-head { display:flex;justify-content:space-between;gap:12px;font-size:12px; }.lib-preview-detail-head span,.lib-preview-source { color:var(--c-faint);font-size:11px; }.lib-preview-source { overflow-wrap:anywhere;margin:8px 0; }.lib-preview-body { max-height:300px;overflow:auto;padding:12px 0;font-size:12px;line-height:1.7;overflow-wrap:anywhere; }.lib-preview-body img { max-width:100%; }.lib-preview-body pre { overflow:auto; }.lib-preview-actions { display:flex;justify-content:flex-end;gap:8px; }.lib-preview-actions button { padding:8px 12px;border-radius:var(--radius-control);background:var(--c-pop);font-size:12px; }.lib-preview-actions button:disabled { opacity:.45;cursor:default; }
@@ -2718,8 +2717,8 @@ onMounted(loadActivityUnread)
 .lib-row:hover .acts-btn,
 .lib-row:focus-within .acts-btn { opacity: 1; }
 .lib-row-act:hover { background: var(--c-line); color: var(--c-ink); }
-/* The rail reserves tab space independently of the visible button. The actual
-   header can grow into the panel and shrink back to the current name. */
+/* Only the visible header sizes the rail. Its off-flow copy measures the
+   destination before closing an expanded sidebar. */
 .kb-header-rail {
   --kb-start:10px;
   --kb-end:2px;
@@ -2728,17 +2727,18 @@ onMounted(loadActivityUnread)
   --kb-gap:2px;
   --kb-actions:32px;
   --kb-title-limit:140px;
-  display:grid;
-  grid-template-columns:minmax(0,1fr);
+  position:relative;
+  display:flex;
   align-items:center;
   flex:1 1 auto;
   min-width:0;
   pointer-events:none;
 }
-.kb-header-row, .kb-header-reserve { grid-area:1 / 1; min-width:0; }
-.kb-header-row { display:flex; align-items:center; }
-.kb-header-reserve {
-  justify-self:start;
+.kb-header-row { display:flex; flex:1; min-width:0; align-items:center; }
+.kb-header-measure {
+  position:absolute;
+  width:max-content;
+  inset-inline-start:0;
   display:flex;
   height:0;
   overflow:hidden;
@@ -2746,7 +2746,7 @@ onMounted(loadActivityUnread)
   padding-left:calc(var(--kb-start) + var(--kb-pad) + var(--kb-logo) + var(--kb-pad));
   padding-right:calc(var(--kb-actions) + var(--kb-end));
 }
-.kb-reserve-title {
+.kb-measure-title {
   margin-left:var(--kb-gap);
   max-width:var(--kb-title-limit);
   overflow:hidden;
@@ -2788,7 +2788,7 @@ onMounted(loadActivityUnread)
 .side-header .kb-title-wrap { position:relative; flex:1 1 auto; min-width:0; }
 .side-header .kb-title-label,
 .side-header .kb-title,
-.kb-reserve-title {
+.kb-measure-title {
   display:block;
   box-sizing:border-box;
   min-width:0;
@@ -3197,10 +3197,15 @@ onMounted(loadActivityUnread)
 
 /* ---------- 切换面板 ---------- */
 @media (min-width: 821px) {
-  .lib-panel-head, .lib-panel-sort, .lib-panel-list, .lib-panel-footer { min-width: var(--lib-w, 236px); }
+  .lib-panel-head, .lib-panel-sort, .lib-panel-list { min-width: var(--lib-w, 236px); }
 }
-.lib-panel-head { height: 44px; padding: 0 12px; }
-.lib-panel-title { font-size: 12px; color: var(--c-sub); white-space: nowrap; flex: none; }
+.lib-panel-head { height: 44px; flex: none; padding: 0 12px; }
+.lib-panel-title { margin-inline-end: auto; font-size: 12px; color: var(--c-sub); white-space: nowrap; }
+.lib-panel-head .lib-overview-trigger { flex: none; width: 28px; height: 28px; margin-inline-end: 3px; color: var(--c-sub); }
+.lib-overview-trigger[aria-current="page"] { background: var(--c-active); color: var(--c-ink); }
+@media (pointer:coarse) {
+  .lib-panel-head .lib-overview-trigger { width: 44px; height: 44px; }
+}
 .lib-panel-head-acts { gap: 2px; flex: none; }
 .lib-panel-list { padding: 2px 8px 6px; }
 .lib-row + .lib-row { margin-top: 4px; }
@@ -3283,25 +3288,11 @@ onMounted(loadActivityUnread)
 }
 .lib-create-row { cursor: text; background: var(--c-field); }
 .lib-create-icon { flex: none; color: var(--c-sub); }
-.lib-panel-footer {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 4px 12px 10px;
-  border: 0;
-}
-.lib-panel-footer .icon-btn { width:32px; height:32px; color:var(--c-sub); }
-@media (pointer:coarse) {
-  .lib-panel-footer .icon-btn { width:44px; height:44px; }
-}
-.lib-panel-footer .icon-btn:hover, .lib-panel-footer .icon-btn[aria-current="page"] { opacity: 1; }
-.lib-panel-footer .icon-btn[aria-current="page"] { background: var(--c-active); }
 @media (max-width:820px) { .lib-panel.is-gallery-nav { display:none; } }
 .lib-create-toggle svg { transition: transform 180ms var(--motion-pop); }
 .lib-create-toggle.is-open svg { transform: rotate(45deg); }
 .sidebar-chevron { display:block; flex-shrink:0; }
-:is(.lib-panel-head .icon-btn,.lib-panel-footer .icon-btn,.lib-row-actions .icon-btn,.lib-manager-card-more):focus-visible {
+:is(.lib-panel-head .icon-btn,.lib-row-actions .icon-btn,.lib-manager-card-more):focus-visible {
   outline: none;
   background: var(--c-hover);
   color: var(--c-ink);
@@ -3326,7 +3317,7 @@ onMounted(loadActivityUnread)
   .kb-header-rail { --kb-title-limit:clamp(32px,calc(100vw - 326px),140px); }
 }
 @media screen and (max-width:380px) {
-  .side-header:is(.is-compact,.is-collapsing) .kb-title-wrap, .kb-reserve-title { display:none; }
+  .side-header:is(.is-compact,.is-collapsing) .kb-title-wrap, .kb-measure-title { display:none; }
   .side-header.is-compact .sidebar-actions:not(.is-revealed) .kb-list-btn { visibility:hidden; opacity:0; pointer-events:none; }
 }
 </style>

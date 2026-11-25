@@ -32,6 +32,7 @@
     "skill-provider.js",
     "cordis.patch.yml",
     "scripts/reader.mjs",
+    "scripts/share-prompt.mjs",
     "skills/**",
     ".codex-plugin/**",
     ".claude-plugin/**",

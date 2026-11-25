@@ -15,6 +15,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
+import { verifyShareHandoff } from './e2e/share-handoff.mjs'
 import { verifyFind } from './e2e/find.mjs'
 import { verifyFormulaReading } from './e2e/formula-reading.mjs'
 import { verifySurfaceMotion } from './e2e/surface-motion.mjs'
@@ -143,6 +144,9 @@ try {
   for (const name of ['src', 'server', 'public', 'preview', 'index.html', 'package.json', 'vite.config.js', 'brand.mjs']) {
     fs.cpSync(path.join(ROOT, name), path.join(appRoot, name), { recursive: true })
   }
+  const shareModule = 'plugins/reader-workspace/scripts/share-prompt.mjs'
+  fs.mkdirSync(path.dirname(path.join(appRoot, shareModule)), { recursive:true })
+  fs.copyFileSync(path.join(ROOT, shareModule), path.join(appRoot, shareModule))
   fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(appRoot, 'node_modules'), 'junction')
   server = http.createServer((req, res) => vite.middlewares(req, res))
   vite = await createServer({
@@ -596,11 +600,22 @@ try {
     await waitForPage(el)
     await ev(el + '.click()')
   }
-  const entering = '.lib-panel-footer button'
+  const entering = '.lib-panel-head .lib-overview-trigger'
   const drawer = '.drawer-card-main[data-path="内容"]'
   const folder = '.drawer-entry[data-path="内容/分类甲"]'
   const article = '.drawer-entry[data-path="内容/分类甲/临时拖放样本.md"]'
-  await clickShelf(entering)
+  check('文档总览入口位于知识库标题旁，列表滚动时仍可访问', await ev(`
+    const button = document.querySelector(${JSON.stringify(entering)})
+    const title = button.nextElementSibling, panel = button.closest('.lib-panel')
+    const entry = button.getBoundingClientRect(), label = title.getBoundingClientRect()
+    return panel.querySelectorAll('[aria-controls="drawer-gallery-page"]').length === 1 &&
+      button.getAttribute('aria-label') === '文档总览' && entry.right <= label.left + 1 &&
+      Math.abs(entry.y + entry.height / 2 - label.y - label.height / 2) < 1 &&
+      entry.bottom <= panel.querySelector('.lib-panel-list').getBoundingClientRect().top + 1`))
+  await ev(`document.querySelector(${JSON.stringify(entering)}).focus()`)
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r'})
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13})
+  await waitForPage("document.activeElement.matches('.drawer-heading')")
   await waitForPage("document.querySelector('.drawer-card-main[data-path=参考] .drawer-card-preview')?.textContent === '文档一'")
   check('知识库预览和计数都只包含实际可浏览的文档', await ev("return document.querySelector('.drawer-card-main[data-path=参考] .drawer-card-meta').textContent.trim() === '1 篇'"))
   check('总览沿用文档名称，卡片前盖保留连续描边', await ev(`const lip = getComputedStyle(document.querySelector('.drawer-card-main .pocket-lip'))
@@ -688,6 +703,7 @@ try {
   check('浏览其他知识库和文件夹保留原文档、地址与标签', await ev("return window.__reader.currentPath === '参考/文档一.md' && new URL(location.href).searchParams.get('lib') === '参考' && !window.__reader.tabs.includes('内容/分类甲/临时拖放样本.md')"))
   await clickShelf('.drawer-close')
   await waitForPage("!document.querySelector('.drawer-browser')")
+  check('退出文档总览后焦点回到知识库标题旁的入口', await ev('return document.activeElement.matches(' + JSON.stringify(entering) + ')'))
   await clickShelf(entering)
   await clickShelf(drawer)
   await clickShelf(folder)
@@ -890,6 +906,9 @@ try {
 
   await verifyTabMotion({ send, ev, root: SB, appUrl, sleep })
   check('标签背景平滑变宽、反向续接、跟随关闭和滚动，减少动态时立即对齐', true)
+
+  await verifyShareHandoff({ send, ev, root: SB, appUrl, sleep })
+  check('分享提示词只携带所选目标，支持拒绝剪贴板后的手动复制', true)
 
   const real = consoleErrors.filter(e => !/favicon|DevTools|Download the Vue/i.test(e))
   check('运行期无控制台报错', real.length === 0, real.slice(0, 2).join(' | '))

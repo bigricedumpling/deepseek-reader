@@ -30,11 +30,12 @@ function recordTabFrames({files, actions, trackHandoff}) {
         goalHeight: box.height - parseFloat(style.top) - parseFloat(style.bottom),
         contour: canShapeWaist ? style.clipPath : null,
         waist: parseFloat(style.getPropertyValue('--tab-waist')) || 0,
-        opacity: Number(style.opacity), scroll: strip.scrollLeft, viewport: strip.clientWidth, stripLeft
+        opacity: Number(style.opacity), scroll: strip.scrollLeft, viewport: strip.clientWidth, stripLeft,
+        chipGap: stripLeft - document.querySelector('.side-header').getBoundingClientRect().right
       }
       const departing = trackHandoff ? strip.querySelector('.doc-tab-indicator.is-departing') : null
       if (trackHandoff) {
-        frame.tabPositions = [...strip.querySelectorAll('.doc-tab')].map(el => el.getBoundingClientRect().left)
+        frame.tabPositions = [...strip.querySelectorAll('.doc-tab')].map(el => el.getBoundingClientRect().left - origin)
         const firstOpacity = el => {
           const value = el.getAnimations()[0]?.effect.getKeyframes()[0].opacity
           return value == null ? null : Number(value)
@@ -86,7 +87,7 @@ function recordTabFrames({files, actions, trackHandoff}) {
 
 export async function verifyTabMotion({send, ev, root, appUrl, sleep}) {
   const lib = '标签背景测试'
-  const otherLib = '跨库参考'
+  const otherLib = '跨知识库资料与交互设计参考文档集合'
   const files = ['S14', '跨文档导航与原文排版验证', '00-索引', '调查记录一', '调查记录二', '调查记录三', '来源说明', '00-索引']
     .map((name, i) => (i === 1 || i === 7 ? otherLib : lib) + '/' + name + '.md')
   for (const library of [lib, otherLib]) fs.mkdirSync(path.join(root, library))
@@ -165,9 +166,14 @@ export async function verifyTabMotion({send, ev, root, appUrl, sleep}) {
     await ev('await window.__reader.select(' + JSON.stringify(files[0]) + '); await document.fonts.ready')
     await settle()
 
+    await ev(`const toggle = document.querySelector('.sidebar-toggle')
+      if (toggle.getAttribute('aria-expanded') === 'true') toggle.click()`)
+    await settle()
     const forward = await capture([{to:1}])
     checkLiquidTravel(forward, 0, 1)
-    assert(forward.every(frame => Math.abs(frame.stripLeft - forward[0].stripLeft) <= 1), '跨库相邻标签切换时顶部标签不应横移')
+    assert(Math.abs(forward[0].stripLeft - forward.at(-1).stripLeft) > 10 &&
+      forward.every(frame => Math.abs(frame.chipGap - forward[0].chipGap) <= 1 && frame.chipGap <= 12),
+      '相邻标签跨库时，标签栏应跟随变宽或变窄的库名并保持紧凑间距')
     await readerShows(files[1])
     const backward = await capture([{to:0}])
     checkLiquidTravel(backward, 1, 0)

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import assert from 'node:assert/strict'
+import { openReadingSettings, chooseReadingSetting } from './reading-settings.mjs'
 
 export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
   const libraries = ['图', '交互设计方案与技术验证资料库']
@@ -45,6 +46,9 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
         frames.push({
           viewport:innerWidth, strip:box(strip).left, more:box(more).left,
           compact:header.classList.contains('is-compact'), width:box(header).width,
+          gap:box(strip).left - box(header).right,
+          targetLeft:box(trigger.parentElement).left - box(strip).left,
+          targetRight:box(strip).right - box(trigger.parentElement).right,
           library:title.textContent, titleOpacity:opacity(title),
           icon:glyph?.querySelector('.content-icon')?.textContent || '', iconOpacity:opacity(glyph),
           labels:tabs.map(tab => box(tab).left + strip.scrollLeft - box(strip).left),
@@ -66,8 +70,13 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     const range = key => Math.max(...frames.map(f => f[key])) - Math.min(...frames.map(f => f[key]))
     const scenario = `${frames[0].viewport}px 切换到 ${file}`
     const stripDrift = range('strip'), moreDrift = range('more')
-    assert(stripDrift <= 1 && moreDrift <= 1,
-      `${scenario} 时顶栏控件移位，标签栏 ${stripDrift}px，更多菜单 ${moreDrift}px`)
+    assert(moreDrift <= 1, `${scenario} 时更多菜单移位 ${moreDrift}px`)
+    if (frames[0].compact) {
+      assert(frames.every(frame => frame.gap >= 4 && frame.gap <= 12) && range('gap') <= 1,
+        `${scenario} 时标签栏未贴着知识库按钮，间距从 ${Math.min(...frames.map(f => f.gap))} 到 ${Math.max(...frames.map(f => f.gap))}px`)
+    } else {
+      assert(stripDrift <= 1, `${scenario} 时展开的侧栏挤动标签栏 ${stripDrift}px`)
+    }
     for (const [index, origin] of frames[0].labels.entries()) {
       const drift = Math.max(...frames.map(frame => Math.abs(frame.labels[index] - origin)))
       assert(drift <= 1, `${scenario} 时第 ${index + 1} 个标签在滚动之外又移动了 ${drift}px`)
@@ -75,6 +84,8 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     assert(frames.every(frame => frame.titles <= 1), '两个知识库名称在同一位置重影')
     assert(!frames.some(f => f.outside || f.overlap > 1), '顶栏溢出或标题压住操作按钮')
     const first = frames[0], last = frames.at(-1)
+    assert(last.targetLeft >= -1 && last.targetRight >= -1,
+      `${scenario} 后选中标签仍被裁切，左右余量 ${last.targetLeft}px / ${last.targetRight}px`)
     const target = file.split('/')[0]
     assert(last.library === target && last.icon === (target === libraries[1] ? '📚' : ''), '按钮未显示目标库名和图标')
     const low = Math.min(first.width, last.width), high = Math.max(first.width, last.width)
@@ -186,6 +197,33 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     await checkCompactTitleGap(390)
     await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion', value:'reduce'}]})
     await capture(files[1], true)
+
+    // Reopen another fixture through a full navigation, not the in-memory tab store.
+    await openReadingSettings(ev)
+    const previous = await ev(`return Object.fromEntries([...document.querySelectorAll('.reading-panel [role=radiogroup]')].map(row => [
+      document.getElementById(row.getAttribute('aria-labelledby')).textContent,
+      row.querySelector('input:checked')?.getAttribute('aria-label')
+    ]))`)
+    try {
+      await chooseReadingSetting(ev, '字号', '大')
+      await chooseReadingSetting(ev, '文档风格', '默认')
+      const headingSize = () => ev("const h = document.querySelector('.ProseMirror h2'); return h && parseFloat(getComputedStyle(h).fontSize)")
+      const baseline = await headingSize()
+      await chooseReadingSetting(ev, '文档风格', 'Obsidian')
+      const styled = await headingSize()
+      assert(baseline > 0 && styled > baseline, '选择 Obsidian 后正文标题应有可见变化')
+      await send('Page.navigate', {url:new URL('doc/' + files[0].slice(0, -3) + '?lib=' + libraries[0], appUrl).href})
+      await ready(files[0])
+      await openReadingSettings(ev)
+      for (let i = 0; i < 60 && !await headingSize(); i++) await sleep(50)
+      assert.equal(await headingSize(), styled, '重新打开文档后应恢复同一标题尺度')
+      assert(await ev(`const checked = label => document.querySelector('.reading-panel input[aria-label="' + label + '"]').checked
+        return checked('Obsidian') && checked('大')`), '文档风格和手动字号应分别保留')
+    } finally {
+      await chooseReadingSetting(ev, '文档风格', previous['文档风格'])
+      await chooseReadingSetting(ev, '字号', previous['字号'])
+      await ev("document.querySelector('button[aria-label=阅读设置]').click()")
+    }
   } finally {
     await send('Emulation.setEmulatedMedia', {features:[]})
     await send('Emulation.setTouchEmulationEnabled', {enabled:false})
