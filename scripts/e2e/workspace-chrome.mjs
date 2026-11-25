@@ -24,7 +24,8 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
   function track(file) {
     const strip = document.querySelector('.doc-tabs')
     const tabs = [...strip.querySelectorAll('.doc-tab-main')]
-    const trigger = tabs.find(el => el.title === file)
+    const tabPath = el => el?.title || el?.dataset.tooltip
+    const trigger = tabs.find(el => tabPath(el) === file)
     const more = document.querySelector('.doc-more > button')
     const frames = []
     let arrival = 0
@@ -34,7 +35,7 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
         const titles = [...document.querySelectorAll('.kb-title-text')].filter(n => Number(getComputedStyle(n).opacity) > .15 && n.checkVisibility())
         frames.push({
           strip:box(strip).left, more:box(more).left, first:box(tabs[0]).left + strip.scrollLeft,
-          selected:strip.querySelector('.doc-tab.is-active .doc-tab-main')?.title,
+          selected:tabPath(strip.querySelector('.doc-tab.is-active .doc-tab-main')),
           titles:titles.length, overlap:document.querySelector('.kb-title-label').getBoundingClientRect().right - document.querySelector('.sidebar-actions').getBoundingClientRect().left,
           outside:document.documentElement.scrollWidth > innerWidth
         })
@@ -55,8 +56,23 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     assert(metrics.titles <= 1, '两个知识库名称在同一位置重影')
     assert(!frames.some(f => f.outside || f.overlap > 1), '顶栏溢出或标题压住操作按钮')
   }
+  async function setFilesOpen(open) {
+    await ev(`const toggle = document.querySelector('.sidebar-toggle')
+      if (toggle.getAttribute('aria-expanded') !== '${open}') toggle.click()
+      await new Promise(requestAnimationFrame)
+      const panel = document.querySelector('.app-sidebar > aside')
+      const header = document.querySelector('#app-topbar-left')
+      await Promise.allSettled([panel, header].flatMap(el => el.getAnimations()).map(a => a.finished))`)
+  }
+  async function checkCompactTitleGap(viewportWidth) {
+    const gap = await ev(`const text = document.createRange()
+      text.selectNodeContents(document.querySelector('.kb-title-text'))
+      return document.querySelector('.sidebar-toggle').getBoundingClientRect().left - text.getBoundingClientRect().right`)
+    assert(gap >= 0 && gap <= 24, viewportWidth + 'px 窗口的收起按钮应紧贴当前短库名，实测间距 ' + gap + 'px')
+  }
   try {
     await viewport(1180)
+    await ev("localStorage.setItem('reader.navW', '180')")
     await send('Page.navigate', {url:new URL('doc/' + files[0].slice(0, -3) + '?lib=' + libraries[0], appUrl).href})
     await ready(files[0])
     await ev('const s=window.__reader; for(const f of s.tabs.slice()) if(f !== s.currentPath) s.closeTab(f)')
@@ -69,6 +85,7 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     await sleep(430)
     await capture(files[1])
     await capture(files[0])
+    await checkCompactTitleGap(1180)
     await ev('document.querySelector(".sidebar-toggle").click()')
     await sleep(350)
     await capture(files[1])
@@ -111,10 +128,29 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
       return delta
     `)
     assert(offset <= 1, '顶栏移动后，阅读设置与 Aa 按钮错开 ' + Math.round(offset) + 'px')
+    await select(files[0])
+    for (const size of [721, 720, 696]) {
+      await viewport(size)
+      await setFilesOpen(false)
+      await checkCompactTitleGap(size)
+      await setFilesOpen(true)
+      const layout = await ev(`const panel = document.querySelector('.app-sidebar > aside').getBoundingClientRect()
+        const header = document.querySelector('#app-topbar-left').getBoundingClientRect()
+        const main = document.querySelector('.workspace-reader main').getBoundingClientRect()
+        return {panel:panel.width, header:header.width, body:main.width, gap:main.left - panel.right}`)
+      assert(Math.abs(layout.panel - grip.width - dx) <= 1 && Math.abs(layout.header - layout.panel) <= 1 &&
+        Math.abs(layout.gap) <= 1 && layout.body > size / 2,
+        size + 'px 窄桌面应保留拖动后的侧栏宽度，并排显示正文：' + JSON.stringify(layout))
+    }
+    await setFilesOpen(false)
+    await send('Emulation.setTouchEmulationEnabled', {enabled:true})
     await viewport(390, true)
     await sleep(350)
+    await capture(files[1])
     await capture(files[0])
+    await checkCompactTitleGap(390)
   } finally {
+    await send('Emulation.setTouchEmulationEnabled', {enabled:false})
     await send('Emulation.clearDeviceMetricsOverride')
   }
 }

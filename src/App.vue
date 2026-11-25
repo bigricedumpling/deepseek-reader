@@ -29,8 +29,8 @@
       ref="sidebarRef"
       :nodes="store.treeNodes"
       :current-path="store.currentPath"
-      :width="reader.navWidth"
-      @update:width="reader.navWidth = $event"
+      :width="navPanelWidth"
+      @update:width="reader.navWidth = Math.min($event, navWidthLimit)"
       @update:dragging="setNavDragging"
       :collapsed="reader.navCollapsed"
       :chrome-collapsed="chromeCollapsed"
@@ -162,6 +162,12 @@ const isPdfDoc = computed(() => store.currentNode?.type === 'pdf')
  * 这里只留布局相关的瞬态（目录里的回顶信号），它不需要持久化、也不跨组件共享语义。
  */
 const reader = useReaderStore()
+const viewportWidth = ref(window.innerWidth)
+const mobileFileView = computed(() => viewportWidth.value <= 520)
+const navWidthLimit = computed(() => Math.floor(viewportWidth.value / 2))
+const navPanelWidth = computed(() => mobileFileView.value
+  ? viewportWidth.value
+  : Math.min(reader.navWidth, navWidthLimit.value))
 
 /* 顶栏常驻：侧栏展开/收起只改变左段宽度，不再把 header 和标签搬回文档区。 */
 const chromeCollapsed = ref(true)
@@ -171,7 +177,7 @@ const chromeCompact = ref(reader.navCollapsed)
 const chromeWidth = ref('')
 const chromeExpanding = ref(false)
 const topbarLeftStyle = computed(() => ({
-  width: chromeWidth.value || (reader.navCollapsed ? 'auto' : reader.navWidth + 'px')
+  width: chromeWidth.value || (reader.navCollapsed ? 'auto' : navPanelWidth.value + 'px')
 }))
 const topbarLeftEl = ref(null)
 let navChange = 0
@@ -190,7 +196,7 @@ function setNavDragging(active) {
 async function toggleNav() {
   const change = ++navChange
   const closing = !reader.navCollapsed
-  if (mobileFileView() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (mobileFileView.value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     reader.navCollapsed = closing
     chromeCompact.value = closing
     chromeExpanding.value = false
@@ -199,8 +205,8 @@ async function toggleNav() {
   }
 
   const slot = topbarLeftEl.value
-  const start = slot?.getBoundingClientRect().width || reader.navWidth
-  const end = closing ? (sidebarRef.value?.compactHeaderWidth() || reader.navWidth) : reader.navWidth
+  const start = slot?.getBoundingClientRect().width || navPanelWidth.value
+  const end = closing ? (sidebarRef.value?.compactHeaderWidth() || navPanelWidth.value) : navPanelWidth.value
   chromeCompact.value = false
   chromeExpanding.value = !closing
   chromeWidth.value = start + 'px'
@@ -326,7 +332,6 @@ function onReorderTabs(files) {
   store.reorderTabs(files)
 }
 
-const mobileFileView = () => window.matchMedia('(max-width:720px)').matches
 async function openDocumentOutline() {
   reader.tocOpen = true
   await nextTick()
@@ -336,7 +341,7 @@ async function openDocumentOutline() {
 }
 
 function returnToReading() {
-  if (reader.navCollapsed || !mobileFileView()) return
+  if (reader.navCollapsed || !mobileFileView.value) return
   collapseNavNow(true)
   nextTick(() => document.querySelector('.doc-tab.is-active .doc-tab-main, .sidebar-toggle')?.focus({ preventScroll: true }))
 }
@@ -511,13 +516,16 @@ watchForStaleCode()
 let lastW = null
 function fitViewport() {
   const w = window.innerWidth
+  const wasMobileFileView = mobileFileView.value
+  viewportWidth.value = w
   if (lastW === null) {
     if (w < 1180) reader.tocOpen = false
     if (w < 900) collapseNavNow(true)
   } else {
     const crossed = (px) => lastW >= px && w < px
     if (crossed(1180) && reader.tocOpen) reader.tocOpen = false
-    if (crossed(900) && !reader.navCollapsed) collapseNavNow()
+    if (mobileFileView.value && !wasMobileFileView) collapseNavNow(true)
+    else if (crossed(900) && !reader.navCollapsed) collapseNavNow()
   }
   lastW = w
 }
@@ -633,7 +641,7 @@ async function openLibraryMatch(hit) {
   .is-gallery-open > .workspace-reader { transition: opacity 120ms ease-in, visibility 0s linear 120ms; }
 }
 #app-topbar-left {
-  pointer-events: auto;
+  pointer-events: none;
   flex: 0 0 auto;
   min-width: 0;
   display: flex;
@@ -641,7 +649,7 @@ async function openLibraryMatch(hit) {
   /* 宽度动画和侧栏同步，收起态宽度由内容撑开 */
   transition: width 0.22s cubic-bezier(0,0,.2,1);
 }
-@media screen and (max-width:720px) {
+@media screen and (max-width:520px) {
   .app-main-col.is-browsing-files #app-topbar-left { width:100% !important; }
   .app-main-col.is-browsing-files :is(#app-topbar-main, main),
   .app-main-col.is-browsing-files :deep(.toc-panel) { display:none; }

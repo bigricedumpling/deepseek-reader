@@ -235,23 +235,29 @@
       disabled 让同一份 DOM 在两个位置之间切换，而不是复制两套按钮。
     -->
     <Teleport to="#app-topbar-left" :disabled="!chromeCollapsed">
-      <div class="side-header" :class="{ 'is-topbar': chromeCollapsed, 'is-compact': chromeCompact, 'is-collapsing': collapsed && !chromeCompact, 'is-expanding': chromeExpanding, 'is-merged': !collapsed }" @click.self="onCompactHeaderClick">
-        <div class="kb-identity" :class="{ 'is-compact': collapsed }">
-          <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick"><CollectedDrawerIcon :value="currentLibIcon" :file="store.currentPath" :doc-id="store.currentNode?.id" :loaded="store.currentLoaded" /></button>
-          <div class="kb-title-wrap min-w-0">
-            <!-- 同一个名称随侧栏改变可用宽度。只有聚焦改名时才由输入框绘制文字。 -->
-            <button type="button" class="brand-line kb-title-label" :tabindex="collapsed ? undefined : -1" :title="currentLib || '知识库'" :aria-label="'展开侧栏，' + (currentLib || '知识库')" :aria-hidden="!collapsed" @click.stop="onCompactTitleClick">
-              <span class="kb-title-stack">
-                <span aria-hidden="true" class="kb-title-measure">{{ libraryNamesForWidth }}</span>
-                <span :key="currentLib || '知识库'" class="kb-title-text">{{ currentLib || '知识库' }}</span>
-              </span>
-            </button>
-            <input v-model="brandTitle" class="brand-line brand-input is-title kb-title" :disabled="collapsed" spellcheck="false" :readonly="isGuest || !currentLibEditable" :title="currentLib || '知识库'" :aria-label="isGuest || !currentLibEditable ? '当前知识库' : '编辑知识库名称'" :aria-hidden="collapsed" @keydown="onTitleKey" @change="onBrandEdited($event.target.value)" />
+      <div class="kb-header-rail">
+        <span ref="compactReserve" class="kb-header-reserve" aria-hidden="true" inert>
+          <span class="kb-reserve-title">{{ libraryNamesForWidth }}</span>
+        </span>
+        <div class="kb-header-row">
+          <div class="side-header" :class="{ 'is-topbar': chromeCollapsed, 'is-compact': chromeCompact, 'is-collapsing': collapsed && !chromeCompact, 'is-expanding': chromeExpanding, 'is-merged': !collapsed }" @click.self="onCompactHeaderClick">
+            <div class="kb-identity" :class="{ 'is-compact': collapsed }">
+              <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick"><CollectedDrawerIcon :value="currentLibIcon" :file="store.currentPath" :doc-id="store.currentNode?.id" :loaded="store.currentLoaded" /></button>
+              <div class="kb-title-wrap min-w-0">
+                <!-- 同一个名称随侧栏改变可用宽度。只有聚焦改名时才由输入框绘制文字。 -->
+                <button type="button" class="brand-line kb-title-label" :tabindex="collapsed ? undefined : -1" :title="currentLib || '知识库'" :aria-label="'展开侧栏，' + (currentLib || '知识库')" :aria-hidden="!collapsed" @click.stop="onCompactTitleClick">
+                  <span class="kb-title-stack">
+                    <span :key="currentLib || '知识库'" class="kb-title-text">{{ currentLib || '知识库' }}</span>
+                  </span>
+                </button>
+                <input v-model="brandTitle" class="brand-line brand-input is-title kb-title" :disabled="collapsed" spellcheck="false" :readonly="isGuest || !currentLibEditable" :title="currentLib || '知识库'" :aria-label="isGuest || !currentLibEditable ? '当前知识库' : '编辑知识库名称'" :aria-hidden="collapsed" @keydown="onTitleKey" @change="onBrandEdited($event.target.value)" />
+              </div>
+            </div>
+            <div class="sidebar-actions" :class="{ 'is-compact': collapsed, 'is-revealed': compactActionsHover }" @pointerenter="onCompactActionsEnter" @pointerleave="onCompactActionsLeave">
+              <button class="icon-btn kb-list-btn" :class="{ 'is-active': libPanel.open }" title="切换知识库" aria-label="知识库列表" :aria-expanded="libPanel.open" @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"><PhStack :size="16" /></button>
+              <button class="icon-btn sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click.stop="toggleSidebar"><MorphIcon :icon="collapsed ? caretRight : caretLeft" :size="16" class="sidebar-chevron" spring="smooth" reduced-motion="user" /></button>
+            </div>
           </div>
-        </div>
-        <div class="sidebar-actions" :class="{ 'is-compact': collapsed, 'is-revealed': compactActionsHover }" @pointerenter="onCompactActionsEnter" @pointerleave="onCompactActionsLeave">
-          <button class="icon-btn kb-list-btn" :class="{ 'is-active': libPanel.open }" title="切换知识库" aria-label="知识库列表" :aria-expanded="libPanel.open" @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"><PhStack :size="16" /></button>
-          <button class="icon-btn sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click.stop="toggleSidebar"><MorphIcon :icon="collapsed ? caretRight : caretLeft" :size="16" class="sidebar-chevron" spring="smooth" reduced-motion="user" /></button>
         </div>
       </div>
     </Teleport>
@@ -861,7 +867,8 @@ const managerLibs = computed(() => {
 const currentLib = computed(() => store.activeLibrary)
 // The compact slot fits the widest available library up to its responsive cap.
 // Switching and closing documents can then leave every tab's hit area in place.
-const libraryNamesForWidth = computed(() => libPanel.libs.map(lib => lib.name).join('\n'))
+const compactReserve = ref(null)
+const libraryNamesForWidth = computed(() => [...libPanel.libs.map(lib => lib.name), currentLib.value || '知识库'].join('\n'))
 watch(currentLib, name => {
   if (name) rememberLib(name)
   applyCurrentLib()
@@ -2483,31 +2490,7 @@ watch(() => props.collapsed, (compact) => {
 })
 
 function compactHeaderWidth() {
-  const header = document.querySelector('.side-header')
-  if (!header) return props.width
-  /* 复制一份到屏幕外，套上 compact 样式量真实宽度：比按字体估算可靠，也不会闪 */
-  const clone = header.cloneNode(true)
-  clone.classList.add('is-compact')
-  clone.querySelector('.kb-identity')?.classList.add('is-compact')
-  clone.querySelector('.sidebar-actions')?.classList.add('is-compact')
-  clone.classList.remove('is-collapsing', 'is-expanding', 'is-merged')
-  clone.setAttribute('aria-hidden', 'true')
-  clone.inert = true
-  clone.style.position = 'fixed'
-  clone.style.left = '-9999px'
-  clone.style.top = '0'
-  clone.style.width = 'max-content'
-  clone.style.visibility = 'hidden'
-  clone.style.pointerEvents = 'none'
-  document.body.appendChild(clone)
-  let width = 0
-  try {
-    const cs = getComputedStyle(clone)
-    width = clone.getBoundingClientRect().width + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0)
-  } finally {
-    clone.remove()
-  }
-  return width
+  return compactReserve.value?.getBoundingClientRect().width || props.width
 }
 
 async function startCreate(kind = 'doc') {
@@ -2686,24 +2669,58 @@ onMounted(loadActivityUnread)
 .lib-row:hover .acts-btn,
 .lib-row:focus-within .acts-btn { opacity: 1; }
 .lib-row-act:hover { background: var(--c-line); color: var(--c-ink); }
+/* The rail reserves tab space independently of the visible button. The actual
+   header can grow into the panel and shrink back to the current name. */
+.kb-header-rail {
+  --kb-start:10px;
+  --kb-end:2px;
+  --kb-logo:22px;
+  --kb-pad:4px;
+  --kb-gap:2px;
+  --kb-actions:32px;
+  --kb-title-limit:140px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  align-items:center;
+  flex:1 1 auto;
+  min-width:0;
+  pointer-events:none;
+}
+.kb-header-row, .kb-header-reserve { grid-area:1 / 1; min-width:0; }
+.kb-header-row { display:flex; align-items:center; }
+.kb-header-reserve {
+  justify-self:start;
+  display:flex;
+  height:0;
+  overflow:hidden;
+  visibility:hidden;
+  padding-left:calc(var(--kb-start) + var(--kb-pad) + var(--kb-logo) + var(--kb-pad));
+  padding-right:calc(var(--kb-actions) + var(--kb-end));
+}
+.kb-reserve-title {
+  margin-left:var(--kb-gap);
+  max-width:var(--kb-title-limit);
+  overflow:hidden;
+  white-space:pre;
+}
 /* 左上角展开知识库的提示 */
 .brand-line.is-title { font-size: 17px; }
-.side-header { position:relative; isolation:isolate; display:flex; align-items:center; gap:4px; height:40px; padding:0 2px 0 10px; min-width:0; flex-shrink:0; width:100%; }
-.side-header .brand-logo { margin-top: 0; }
+.side-header { position:relative; isolation:isolate; display:flex; align-items:center; gap:4px; height:40px; padding:0 var(--kb-end) 0 var(--kb-start); min-width:0; flex:1 1 auto; pointer-events:auto; }
+.side-header .brand-logo { width:var(--kb-logo); margin-top:0; }
 .side-header .icon-btn { flex-shrink: 0; }
 .side-header .kb-identity,
-.side-header .sidebar-actions { position:relative; isolation:isolate; display:flex; align-items:center; min-width:0; height:32px; padding:2px 4px; border-radius:18px; corner-shape:var(--corner-ui); }
+.side-header .sidebar-actions { position:relative; isolation:isolate; display:flex; align-items:center; min-width:0; height:32px; padding:2px var(--kb-pad); border-radius:18px; corner-shape:var(--corner-ui); }
 .side-header .kb-identity::before,
 .side-header .sidebar-actions::before { content:''; position:absolute; inset:0; z-index:0; border-radius:inherit; corner-shape:inherit; background-color:var(--topbar-chip-bg); -webkit-backdrop-filter:var(--topbar-glass-filter); backdrop-filter:var(--topbar-glass-filter); box-shadow:var(--topbar-glass-shadow); pointer-events:none; transition:background-color 160ms ease,box-shadow 160ms ease; }
 .side-header .kb-identity > *,
 .side-header .sidebar-actions > * { position:relative; z-index:1; }
-.side-header .kb-identity { gap:2px; flex:1 1 0; }
+.side-header .kb-identity { gap:var(--kb-gap); flex:1 1 0; }
 .side-header.is-compact .kb-identity { flex:0 1 auto; }
-.side-header .sidebar-actions { gap:0; flex:none; margin-left:auto; width:32px; padding:2px 4px; display:flex; align-items:center; justify-content:flex-end; }
+.side-header .sidebar-actions { gap:0; flex:none; margin-left:auto; width:var(--kb-actions); padding:2px var(--kb-pad); display:flex; align-items:center; justify-content:flex-end; }
 .side-header.is-merged .sidebar-actions { width:56px; }
-.side-header { transition:gap 220ms cubic-bezier(0,0,.2,1); }
+.side-header { transition:gap 220ms cubic-bezier(0,0,.2,1), flex-grow 220ms cubic-bezier(0,0,.2,1); }
 .side-header .sidebar-actions { transition:width 220ms cubic-bezier(0,0,.2,1); }
-.side-header.is-collapsing { gap:0; }
+.side-header.is-collapsing { gap:0; flex-grow:0; }
 .side-header.is-collapsing .sidebar-actions .kb-list-btn,
 .side-header.is-expanding .sidebar-actions .kb-list-btn { width:0!important; padding:0!important; margin:0!important; opacity:0!important; visibility:hidden; overflow:hidden; pointer-events:none; transition:none!important; animation:none!important; }
 .side-header .sidebar-actions .icon-btn:hover { background:transparent; color:var(--c-ink); }
@@ -2721,12 +2738,11 @@ onMounted(loadActivityUnread)
 .side-header.is-merged .sidebar-actions::before { background-color:transparent; box-shadow:none; -webkit-backdrop-filter:blur(0) saturate(1); backdrop-filter:blur(0) saturate(1); transition:background-color 180ms cubic-bezier(.4,0,.2,1) 40ms,box-shadow 180ms cubic-bezier(.4,0,.2,1) 40ms; }
 .side-header .kb-title-wrap { position:relative; flex:1 1 auto; min-width:0; }
 .side-header .kb-title-label,
-.side-header .kb-title {
+.side-header .kb-title,
+.kb-reserve-title {
   display:block;
   box-sizing:border-box;
-  width:100%;
   min-width:0;
-  margin:0;
   padding:1px 3px;
   border:0;
   font-size:15px;
@@ -2735,6 +2751,7 @@ onMounted(loadActivityUnread)
   letter-spacing:-0.01em;
   text-align:left;
 }
+.side-header .kb-title-label, .side-header .kb-title { width:100%; margin:0; }
 .side-header .kb-title-label { overflow:hidden; }
 .side-header .kb-title {
   position:absolute;
@@ -2745,7 +2762,7 @@ onMounted(loadActivityUnread)
 .side-header .kb-title:disabled { display:none; }
 .side-header .kb-title:focus { opacity:1; outline:1px solid var(--c-focus); }
 .side-header .kb-title-wrap:has(> .kb-title:focus) .kb-title-label { visibility:hidden; }
-.side-header.is-topbar { width:100%; }
+.side-header.is-topbar { width:auto; }
 /* 展开时知识库图标从紧凑态的滑出位置收进 header，给一小段出现动效。 */
 .side-header:not(.is-expanding):not(.is-compact) .kb-list-btn { animation:kb-icon-in 300ms var(--motion-pop); }
 @keyframes kb-icon-in {
@@ -2754,10 +2771,10 @@ onMounted(loadActivityUnread)
 }
 /* 收起静止态：知识库标识和侧栏开关是两个组块；hover 开关时盒子图标从下方滑出。 */
 .side-header.is-compact {
-  width:auto;
+  flex-grow:0;
   height:40px;
-  margin:0 0 0 10px;
-  padding:0 2px 0 0;
+  margin:0 0 0 var(--kb-start);
+  padding:0 var(--kb-end) 0 0;
   gap:0;
   border:0;
   background:transparent;
@@ -2842,25 +2859,16 @@ onMounted(loadActivityUnread)
 .kb-identity.is-compact {
   display:flex;
   align-items:center;
-  gap:2px;
+  gap:var(--kb-gap);
   height:32px;
-  padding:2px 4px;
+  padding:2px var(--kb-pad);
   border-radius:18px;
   corner-shape:var(--corner-ui);
 }
-.side-header.is-compact .kb-title-wrap { flex:0 1 auto; max-width:140px; }
+.side-header:is(.is-compact,.is-collapsing) .kb-title-wrap { flex:0 1 auto; max-width:var(--kb-title-limit); }
 .side-header.is-compact .kb-title-label:hover { color:var(--nav-cover-ink, var(--c-accent)); }
 .kb-title-stack { position:relative; display:grid; grid-template-columns:minmax(0,1fr); min-width:0; max-width:100%; vertical-align:top; }
 .kb-title-text { grid-area:1 / 1; justify-self:stretch; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.kb-title-measure { display:none; }
-.side-header.is-compact .kb-title-measure {
-  display:block;
-  grid-area:1 / 1;
-  height:0;
-  overflow:hidden;
-  visibility:hidden;
-  white-space:pre;
-}
 @media (prefers-reduced-motion:no-preference) {
   .kb-title-text { animation:kb-title-in 115ms ease-out; }
   @keyframes kb-title-in { from { opacity:.65; } to { opacity:1; } }
@@ -2873,7 +2881,7 @@ onMounted(loadActivityUnread)
   align-items:center;
   justify-content:flex-end;
   flex:none;
-  width:32px;
+  width:var(--kb-actions);
   height:32px;
   border-radius:18px;
   corner-shape:var(--corner-ui);
@@ -3258,18 +3266,20 @@ onMounted(loadActivityUnread)
 </style>
 
 <style scoped>
-@media screen and (max-width:720px) {
+@media screen and (max-width:520px) {
   .app-sidebar > aside { transition:none; }
   .app-sidebar.is-browsing-files, .app-sidebar.is-browsing-files > aside { width:100% !important; }
   .app-sidebar.is-browsing-files > aside { border-right:0; }
   .file-nav-resize { display:none; }
-  .side-header.is-compact .kb-title-wrap { max-width:clamp(32px,calc(100vw - 326px),140px); }
   .side-header:not(.is-compact) .sidebar-actions { width:auto !important; }
   .side-header:not(.is-compact) .sidebar-actions .icon-btn { width:44px; height:44px; }
   .side-header.is-compact .sidebar-toggle::after { content:''; position:absolute; inset:-10px -4px; }
 }
+@media screen and (max-width:720px) {
+  .kb-header-rail { --kb-title-limit:clamp(32px,calc(100vw - 326px),140px); }
+}
 @media screen and (max-width:380px) {
-  .side-header.is-compact .kb-title-wrap { display:none; }
+  .side-header:is(.is-compact,.is-collapsing) .kb-title-wrap, .kb-reserve-title { display:none; }
   .side-header.is-compact .sidebar-actions:not(.is-revealed) .kb-list-btn { visibility:hidden; opacity:0; pointer-events:none; }
 }
 </style>
