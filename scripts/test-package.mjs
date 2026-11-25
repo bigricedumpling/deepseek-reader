@@ -18,6 +18,8 @@ try{
  assert(entries.some(name=>name.includes('pdf.worker')&&name.endsWith('.mjs')))
  assert(!entries.some(name=>/state\.sqlite|\.admin-password|\.分享\.json|service\.json|runtime\/dist\/kb\.json|Weixin\.otf|\.知识库\.json/.test(name)),'private runtime data must not be packaged')
  execFileSync('tar',['-xf',archive,'-C',temp])
- execFileSync(process.execPath,[path.join(root,'scripts/test-managed-server.mjs')],{stdio:'inherit',env:{...process.env,READER_TEST_RUNTIME:path.join(temp,'package/runtime')}})
+ const env={...process.env,READER_TEST_RUNTIME:path.join(temp,'package/runtime'),READER_TEST_PLUGIN:path.join(temp,'package')}
+ execFileSync(process.execPath,[path.join(root,'scripts/test-managed-server.mjs')],{stdio:'inherit',env})
+ execFileSync(process.execPath,[path.join(root,'scripts/test-plugin.mjs')],{stdio:'inherit',env})
  console.log(`PASS: actual archive ${entries.length} entries, ${(fs.statSync(archive).size/1e6).toFixed(2)} MB; runtime startup and privacy checks`)
 }finally{fs.rmSync(temp,{recursive:true,force:true})}

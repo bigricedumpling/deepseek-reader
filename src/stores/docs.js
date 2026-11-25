@@ -1,7 +1,8 @@
 import {readerApi as api} from '../services/readerClient'
 import { mergeDocument } from '../utils/merge-document.js'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { documentDrafts } from '../utils/document-drafts.js'
 import { renderMarkdown, extractToc } from '../utils/markdown'
 import { API_BASE } from '../utils/api'
 import { documentRoutePath, findRoutedDocument } from '../utils/routes.js'
@@ -132,11 +133,8 @@ export const useDocsStore = defineStore('docs', () => {
     () => allDocs.value.find((d) => d.file === currentPath.value) || null
   )
   // Another local client can recreate a file before the sidebar tree refreshes.
-  const lastReadIdentity = ref(null)
-  const currentSourceId = computed(() =>
-    lastReadIdentity.value?.path === currentPath.value
-      ? lastReadIdentity.value.id : currentNode.value?.id
-  )
+  const readIdentities = ref({})
+  const currentSourceId = computed(() => readIdentities.value[currentPath.value]?.id ?? currentNode.value?.id)
   const currentMeta = computed(() => currentNode.value ? {...currentNode.value, meta:pageMeta.value} : {name:'未选择',file:''})
   const currentRaw = computed(() => rawMap.value[currentPath.value] ?? '')
   const currentHtml = computed(() => renderMarkdown(currentRaw.value))
@@ -173,6 +171,60 @@ export const useDocsStore = defineStore('docs', () => {
     return rawMap.value[path] !== (savedMap.value[path] ?? '')
   })
 
+  const drafts = documentDrafts()
+  const readWorkspace = computed(() => readIdentities.value[currentPath.value]?.workspaceId)
+  const draftScope = computed(() => currentLoaded.value && !currentReadonly.value && currentNode.value?.type === 'doc' && readWorkspace.value && currentSourceId.value
+    ? 'typocket.draft:v1:' + JSON.stringify([API_BASE, readWorkspace.value, role.value, currentSourceId.value]) : '')
+  const recovery = ref(null)
+  function findDraft() {
+    recovery.value = drafts.latest(draftScope.value, savedMap.value[currentPath.value])
+  }
+  function refreshDraftNotice(event) {
+    if (recovery.value && (event.key === null || event.key === recovery.value.key)) findDraft()
+  }
+  function checkpointDraft() {
+    const path = currentPath.value
+    return drafts.checkpoint(draftScope.value, savedMap.value[path], revisionMap.value[path], rawMap.value[path])
+  }
+  function prepareToLeave() {
+    const flushed = flushActiveEditor(currentPath.value)
+    const protectedDraft = !isDirty.value || checkpointDraft()
+    return flushed && protectedDraft
+  }
+  function discardRecoveredDraft(draft) {
+    if (!draft || draft !== recovery.value || draft.scope !== draftScope.value) return
+    drafts.remove(draft)
+    findDraft()
+  }
+  function checkReadIdentity(disk) {
+    if ((currentSourceId.value && disk.id !== currentSourceId.value) ||
+        (readWorkspace.value && disk.workspaceId !== readWorkspace.value)) {
+      throw Error('工作区或文档已经更换，请重新打开原文档')
+    }
+  }
+  async function recoverDraft() {
+    const draft = recovery.value, path = currentPath.value
+    if (!draft || draft.scope !== draftScope.value || !flushActiveEditor(path) || isDirty.value || saving.value) return
+    try {
+      const { data: disk } = await api('GET', '/doc?path=' + encodeURIComponent(path))
+      if (draft !== recovery.value || path !== currentPath.value || draft.scope !== draftScope.value ||
+          !flushActiveEditor(path) || isDirty.value || saving.value) return
+      checkReadIdentity(disk)
+      if (!drafts.stillCurrent(draft)) { findDraft(); return }
+      const text = disk.revision === draft.revision ? draft.text : mergeDocument(draft.base, draft.text, disk.content)
+      drafts.accept(draft)
+      recovery.value = null
+      if (text === null) {
+        // Keep the original common ancestor if this conflict is interrupted again.
+        adoptRevision(path, { content: draft.base, revision: draft.revision }, draft.text)
+        conflict.value = { path, local: draft.text, remote: disk.content, revision: disk.revision }
+      } else {
+        adoptRevision(path, disk, text)
+        if (text === disk.content) { drafts.finish(draftScope.value); findDraft() }
+      }
+    } catch (e) { setError(e.message || e, 'load') }
+  }
+
   /* ---------- 缓存自愈 ---------- */
 
   /**
@@ -190,6 +242,7 @@ export const useDocsStore = defineStore('docs', () => {
         delete rawMap.value[k]
         delete savedMap.value[k]
         delete revisionMap.value[k]
+        delete readIdentities.value[k]
       }
     }
   }
@@ -309,6 +362,8 @@ export const useDocsStore = defineStore('docs', () => {
       /* 问不到就按"我"处理（本机 dev 一直是这个分支） */
     }
   }
+
+  watch([draftScope, currentPath], findDraft)
 
   function saveTabs() {
     try {
@@ -612,7 +667,7 @@ export const useDocsStore = defineStore('docs', () => {
     rawMap.value[file] = json.data.content
     savedMap.value[file] = json.data.content
     revisionMap.value[file] = json.data.revision
-    if (currentPath.value === file && json.data.id) lastReadIdentity.value = { path: file, id: json.data.id }
+    if (json.data.id) readIdentities.value[file] = { id: json.data.id, workspaceId: json.data.workspaceId }
     if (changed && currentPath.value === file) contentEpoch.value++
     return json.data.content
   }
@@ -663,7 +718,7 @@ export const useDocsStore = defineStore('docs', () => {
     if (commitTree) commitTree()
     if (document) {
       documentReads.delete(file)
-      lastReadIdentity.value = { path: file, id: document.data.id ?? node.id }
+      readIdentities.value[file] = { id: document.data.id ?? node.id, workspaceId: document.data.workspaceId }
       rawMap.value[file] = document.data.content
       savedMap.value[file] = document.data.content
       revisionMap.value[file] = document.data.revision
@@ -805,7 +860,7 @@ export const useDocsStore = defineStore('docs', () => {
       if (isDirty.value || saving.value || revisionMap.value[file] !== revision) {
         return await saveBeforeNavigation(stillWanted) && stillWanted()
       }
-      lastReadIdentity.value = { path: file, id: document.data.id }
+      readIdentities.value[file] = { id: document.data.id, workspaceId: document.data.workspaceId }
       adoptRevision(file, document.data, document.data.content, true)
       return true
     } catch (error) {
@@ -925,12 +980,14 @@ export const useDocsStore = defineStore('docs', () => {
     const path = currentPath.value
     rawMap.value[path] = text
     if (conflict.value?.path === path) conflict.value.local = text
+    if (drafts.isTracked(draftScope.value)) checkpointDraft()
   }
 
   /** 丢掉当前这篇没保存的改动，退回上次保存的内容 */
   function discard() {
     if (!currentPath.value) return
     rawMap.value[currentPath.value] = savedMap.value[currentPath.value] ?? ''
+    drafts.finish(draftScope.value)
   }
 
   /**
@@ -957,7 +1014,9 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   async function writeRevision(path, content, revision) {
-    const result = await api('PUT', '/doc', { path, content, revision })
+    const id = path === currentPath.value ? currentSourceId.value : undefined
+    const workspaceId = path === currentPath.value ? readWorkspace.value : undefined
+    const result = await api('PUT', '/doc', { path, id, workspaceId, content, revision })
     saveTimes.value.set(result.data.id, result.savedAt || Date.now())
     return { content, revision: result.data.revision }
   }
@@ -996,6 +1055,7 @@ export const useDocsStore = defineStore('docs', () => {
             const local = rawMap.value[path]
             const merged = mergeDocument(base, local, disk.content)
             if (merged === null) {
+              if (path === currentPath.value) checkpointDraft()
               conflict.value = { path, local, remote: disk.content, revision: disk.revision }
               return false
             }
@@ -1005,7 +1065,10 @@ export const useDocsStore = defineStore('docs', () => {
           }
         }
       } catch (error) {
-        setError('保存失败：' + String(error.message || error), 'save')
+        if (path === currentPath.value) flushActiveEditor(path)
+        const protectedDraft = path === currentPath.value && checkpointDraft()
+        const recoveryNote = protectedDraft ? '。未保存的修改已保留在此浏览器。' : '。请保留窗口或复制正文。'
+        setError('保存失败：' + String(error.message || error) + recoveryNote, 'save')
         return false
       } finally {
         saving.value = false
@@ -1016,10 +1079,13 @@ export const useDocsStore = defineStore('docs', () => {
     if (saveTask === task) saveTask = null
     if (!ok) return false
     // 写入期间如果又输入了内容，继续存到最新版本再报告成功。
-    return rawMap.value[path] === savedMap.value[path] ? true : savePath(path)
+    if (rawMap.value[path] !== savedMap.value[path]) return savePath(path)
+    if (path === currentPath.value && drafts.finish(draftScope.value)) findDraft()
+    return true
   }
 
   async function save() {
+    if (!flushActiveEditor(currentPath.value)) return false
     return savePath(currentPath.value)
   }
 
@@ -1032,6 +1098,8 @@ export const useDocsStore = defineStore('docs', () => {
       rawMap.value[to] = rawMap.value[from]
       savedMap.value[to] = savedMap.value[from]
       revisionMap.value[to] = revisionMap.value[from]
+      readIdentities.value[to] = readIdentities.value[from]
+      delete readIdentities.value[from]
       delete revisionMap.value[from]
       delete rawMap.value[from]
       delete savedMap.value[from]
@@ -1048,9 +1116,11 @@ export const useDocsStore = defineStore('docs', () => {
   async function deleteDoc(file) {
     if (saveTask) await saveTask
     await api('DELETE', '/doc', { path: file })
+    if (file === currentPath.value) drafts.finish(draftScope.value)
     delete rawMap.value[file]
     delete savedMap.value[file]
     delete revisionMap.value[file]
+    delete readIdentities.value[file]
     tabIcons.value.delete(file)
     // 标签里也别留着一篇已经不存在的文档
     tabs.value = tabs.value.filter((f) => f !== file)
@@ -1069,7 +1139,7 @@ export const useDocsStore = defineStore('docs', () => {
 
   /** 改名并保留文档标识 */
   async function renameDoc(file, name) {
-    if (currentPath.value === file && rawMap.value[file] !== undefined && !(await savePath(file))) {
+    if (currentPath.value === file && rawMap.value[file] !== undefined && !(await saveBeforeNavigation())) {
       throw new Error(error.value || '保存失败，未改名')
     }
     const { data } = await api('PATCH', '/doc', { path: file, name })
@@ -1133,6 +1203,7 @@ export const useDocsStore = defineStore('docs', () => {
     remap(rawMap)
     remap(savedMap)
     remap(revisionMap)
+    remap(readIdentities)
     remapTabs(path, data.path)
     const movingCurrent = currentPath.value.startsWith(path + '/')
     const movedFile = movingCurrent ? data.path + currentPath.value.slice(path.length) : ''
@@ -1149,7 +1220,7 @@ export const useDocsStore = defineStore('docs', () => {
   }
 
   async function renameCategory(path, name) {
-    if (currentPath.value.startsWith(path + '/') && rawMap.value[currentPath.value] !== undefined && !(await savePath(currentPath.value))) {
+    if (currentPath.value.startsWith(path + '/') && rawMap.value[currentPath.value] !== undefined && !(await saveBeforeNavigation())) {
       throw new Error(error.value || '保存失败，文件夹尚未重命名')
     }
     const { data } = await api('PATCH', '/category', { path, name })
@@ -1164,6 +1235,7 @@ export const useDocsStore = defineStore('docs', () => {
     remap(rawMap)
     remap(savedMap)
     remap(revisionMap)
+    remap(readIdentities)
     remapTabs(path, data.path)
     if (currentPath.value === path || currentPath.value.startsWith(path + '/')) {
       currentPath.value = data.path + currentPath.value.slice(path.length)
@@ -1245,6 +1317,8 @@ export const useDocsStore = defineStore('docs', () => {
         continue
       }
       adoptRevision(path, disk, disk.content)
+      drafts.finish(draftScope.value)
+      findDraft()
       conflict.value = null
       clearError()
       return
@@ -1269,12 +1343,15 @@ export const useDocsStore = defineStore('docs', () => {
         if (!c.copy || c.copy.content !== local) c.copy = { content: local, requestId: crypto.randomUUID() }
         const parts = path.split('/')
         const name = parts.pop().replace(/\.md$/i, '') + '（冲突副本）'
-        await api('POST', '/doc', { dir: parts.join('/'), name, ...c.copy })
+        await api('POST', '/doc', { dir: parts.join('/'), name, workspaceId: readWorkspace.value, ...c.copy })
       }
       const { data } = await api('GET', '/doc?path=' + encodeURIComponent(path))
       if (conflict.value !== c) return
+      checkReadIdentity(data)
       if (!flushActiveEditor(path) || rawMap.value[path] !== local) throw Error('你的修改有更新，请确认最新内容')
       adoptRevision(path, data, data.content)
+      drafts.finish(draftScope.value)
+      findDraft()
       conflict.value = null
       clearError()
       if (mode === 'copy') await loadTree()
@@ -1283,12 +1360,12 @@ export const useDocsStore = defineStore('docs', () => {
     }
   }
   async function renameLibrary(from,to) {
-    if(isDirty.value && !(await save()))throw new Error(error.value)
+    if (!(await saveBeforeNavigation())) throw new Error(error.value || '请先完成当前输入')
     const result=await api('PUT','/lib/name',{from,to,requestId:crypto.randomUUID()})
     const previous=currentPath.value
     const wasActive = activeLibrary.value === from
     const convert=v=>v===from||v.startsWith(from+'/')?to+v.slice(from.length):v
-    for(const map of [rawMap,savedMap,revisionMap])map.value=Object.fromEntries(Object.entries(map.value).map(([k,v])=>[convert(k),v]))
+    for(const map of [rawMap,savedMap,revisionMap,readIdentities])map.value=Object.fromEntries(Object.entries(map.value).map(([k,v])=>[convert(k),v]))
     remapTabs(from, to);currentPath.value=convert(previous)
     if (wasActive) activeLibrary.value = to
     saveTabs();rememberDoc(currentPath.value);syncUrl();libEpoch.value++
@@ -1351,7 +1428,7 @@ export const useDocsStore = defineStore('docs', () => {
     updateContent,
     discard,
     save,
-    saveBeforeNavigation,
+    saveBeforeNavigation, prepareToLeave, recovery, recoverDraft, discardRecoveredDraft, refreshDraftNotice,
     refreshActivityDocument,
     createDoc,
     deleteDoc,

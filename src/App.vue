@@ -474,6 +474,10 @@ onMounted(async () => {
   // 先挂监听再加载，否则加载期间 ⌘S 和关闭提醒是失效的
   window.addEventListener('keydown', onKey)
   window.addEventListener('beforeunload', onBeforeUnload)
+  window.addEventListener('pagehide', store.prepareToLeave)
+  window.addEventListener('online', retryAfterReconnect)
+  window.addEventListener('storage', store.refreshDraftNotice)
+  document.addEventListener('visibilitychange', protectHiddenEditor)
   await store.loadAll()
 
   /*
@@ -538,10 +542,21 @@ onBeforeUnmount(() => {
   clearInterval(staleTimer)
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('beforeunload', onBeforeUnload)
+  window.removeEventListener('pagehide', store.prepareToLeave)
+  window.removeEventListener('online', retryAfterReconnect)
+  window.removeEventListener('storage', store.refreshDraftNotice)
+  document.removeEventListener('visibilitychange', protectHiddenEditor)
+  clearTimeout(saveTimer)
 })
 
+function retryAfterReconnect() {
+  if (store.isDirty && !store.saving && !store.conflict) store.save()
+}
+function protectHiddenEditor() {
+  if (document.visibilityState === 'hidden') store.prepareToLeave()
+}
 function onBeforeUnload(e) {
-  if (!store.isDirty) return
+  if (store.prepareToLeave()) return
   e.preventDefault()
   e.returnValue = ''
 }

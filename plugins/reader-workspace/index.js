@@ -11,6 +11,10 @@ export const name = 'reader-workspace'
 export const inject = ['tools', 'connection']
 
 function validateInput(schema, value, field = '参数') {
+  if (schema.type === 'integer') {
+    if (!Number.isSafeInteger(value) || value < schema.minimum || value > schema.maximum) throw Error(`${field}无效`)
+    return
+  }
   if (schema.type === 'string') {
     if (typeof value !== 'string' || schema.enum && !schema.enum.includes(value)) throw Error(`${field}无效`)
     return

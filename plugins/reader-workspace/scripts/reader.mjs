@@ -14,8 +14,9 @@ const str={type:'string'},obj=(properties,required=[])=>({type:'object',properti
 const source=obj({kind:{type:'string',enum:['conversation','workspace-file','import','manual']},workspace:str,reference:str,note:str},['kind'])
 export const definitions=[
  ['reader_libraries','列出此连接可访问的知识库。保存文档前先选知识库。','GET','agent-libs',obj({})],
- ['reader_tree','列出已授权知识库的文件。', 'GET','tree',obj({lib:str},['lib'])],
+ ['reader_tree','列出指定知识库的文件树。分享时传 limit（1–100）读取仅含 path 和 id 的分页清单，以 nextOffset 和 revision 续页。', 'GET','tree',obj({lib:str,offset:{type:'integer',minimum:0},limit:{type:'integer',minimum:1,maximum:100},revision:str},['lib'])],
  ['reader_read','读取文档及 revision。更新前必须先读取。','GET','doc',obj({id:str,path:str})],
+ ['reader_share_file','在本机读取所选 Markdown、PDF、HTML 或其正文引用的本地图片。每块最多 24 KiB，可用 limit 减小每次响应。返回 base64、nextOffset 和 revision，续读传入上次的 nextOffset 与 revision。','GET','share-file',obj({path:str,id:str,image:str,offset:{type:'integer',minimum:0},limit:{type:'integer',minimum:1,maximum:24576},revision:str},['path'])],
  ['reader_search','在指定知识库中搜索正文。','GET','search',obj({lib:str,q:str},['lib','q'])],
  ['reader_create','在所选知识库中新建文档，可附私人来源记录。重试必须使用相同 requestId。','POST','doc',obj({dir:str,name:str,content:str,source,requestId:str},['dir','name','content','requestId'])],
  ['reader_update','使用读取时的 revision 保存。冲突时重新读取并合并，不强制覆盖。','PUT','doc',obj({id:str,path:str,content:str,revision:str,requestId:str},['content','revision','requestId'])],
@@ -89,6 +90,7 @@ export async function callTool(name, args = {}, options = {}) {
   }
   if (!base.pathname.endsWith('/')) base.pathname += '/'
   const local = loopback.has(base.hostname)
+  if (name === 'reader_share_file' && !local) throw Error('分享文件需要本机 Typocket 连接。')
   const token = process.env.READER_TOKEN
   if (!local && (!endpoint.explicit || base.protocol !== 'https:' || !token)) throw Error('远程连接需要显式 HTTPS 地址及已有 READER_TOKEN。')
   const requestSignal = () => {

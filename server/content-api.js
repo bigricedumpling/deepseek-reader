@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 import { createShare, roleOf, EDIT_PASSWORD } from './share.js'
 import { workspace, digest, fault } from './storage/workspace.js'
 import { resources } from './services/resources.js'
+import { readShareFile, shareManifest } from './services/share-file.js'
 import { publicSession } from './services/public-session.js'
 import { documentRoutes } from './services/documents.js'
 import { drawerPreview } from './services/drawer-preview.js'
@@ -44,6 +45,8 @@ const DOCS_ROOT = process.env.DOCS_ROOT
   : path.resolve(READER_ROOT, '../知识库')
 /** 分享状态（谁能看到什么）：只有两种身份，见 server/share.js */
 const repo = workspace(DOCS_ROOT)
+// A restored copy can have identical document IDs at another workspace root.
+const workspaceId = digest(fs.realpathSync(DOCS_ROOT))
 const assets = resources(repo)
 const share = createShare(DOCS_ROOT)
 const publicSharing = publicSession(repo, share)
@@ -176,17 +179,16 @@ function originalMovePath(undo, source, parent) {
 
 /* ---------- 扫盘 ---------- */
 
-let scanned = 0
-
 /**
  * 扫一个目录，返回子节点数组：文档在前、目录在后，各自按名字排。
  * 跳过隐藏项、软链、node_modules 和阅读器自己那套：树是给人看的，不是磁盘镜像。
  */
-function scanDir(abs, rel, depth, order) {
+function scanDir(abs, rel, depth, order, scan) {
   let entries = []
   try {
     entries = fs.readdirSync(abs, { withFileTypes: true })
   } catch {
+    scan.complete = false
     return []
   }
   const docs = []
@@ -194,18 +196,25 @@ function scanDir(abs, rel, depth, order) {
   for (const e of entries) {
     if (e.name.startsWith('.')) continue
     if (e.isSymbolicLink()) continue
-    if (scanned >= MAX_NODES || depth >= MAX_DEPTH) break
     const childAbs = path.join(abs, e.name)
     const childRel = relJoin(rel, e.name)
-    if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name) || childAbs === READER_ROOT) continue
-      scanned++
-      folders.push({ ...repo.node(childRel, 'folder'), type: 'folder', name: e.name, path: childRel, children: scanDir(childAbs, childRel, depth + 1, order) })
-      /*
-       * 树里认三种文件：markdown、pdf、h5（html/htm）。
-       * h5 与 pdf 一样是「成品文件」——阅读器不解析它，交给浏览器整页渲染。
-       */
-    } else if (e.isFile() && /\.(md|pdf|html?)$/i.test(e.name)) {
+    const folder = e.isDirectory()
+    if (folder ? SKIP_DIRS.has(e.name) || childAbs === READER_ROOT : !e.isFile() || !/\.(md|pdf|html?)$/i.test(e.name)) continue
+    if (scan.count >= MAX_NODES || depth >= MAX_DEPTH) { scan.complete = false; break }
+    scan.count++
+    if (folder) {
+      const node = scan.files ? null : repo.node(childRel, 'folder')
+      const children = scanDir(childAbs, childRel, depth + 1, order, scan)
+      if (node) folders.push({ ...node, type: 'folder', name: e.name, path: childRel, children })
+    } else if (scan.files) {
+      // The share inventory needs identities, not metadata or the full UI tree.
+      // Stat the directory entry again so concurrent replacements invalidate the list.
+      try {
+        const stat = fs.lstatSync(childAbs, { bigint: true })
+        if (stat.isFile()) scan.files.push({ path: childRel, identity: [stat.dev, stat.ino, stat.birthtimeNs].join(':') })
+        else scan.complete = false
+      } catch { scan.complete = false }
+    } else {
       let mtime = 0
       let size = 0
       try {
@@ -215,7 +224,6 @@ function scanDir(abs, rel, depth, order) {
       } catch {
         /* 读不到 stat 就当时长为 0，不影响列表 */
       }
-      scanned++
       const isPdf = /\.pdf$/i.test(e.name)
       docs.push({
         ...repo.node(childRel, isPdf ? 'pdf' : /\.html?$/i.test(e.name) ? 'h5' : 'doc'),
@@ -995,16 +1003,31 @@ function syncRegistry() {
 
 function ensureDraftLibrary() {
   const state = repo.getJSON('onboarding', {})
-  if (state.defaultLibraryInitialized) return
+  if (state.defaultLibraryInitialized) return state
   const reg = syncRegistry()
   if (!reg.libs.some(lib => !lib.missing)) {
     repo.mkdir(safeResolve('草稿'))
     share.setShared('草稿', false)
     const created = syncRegistry()
     const lib = created.libs.find(item => item.name === '草稿')
-    if (lib) { lib.icon = 'icon:draft'; writeRegistry(created) }
+    if (lib) {
+      lib.icon = 'icon:draft'
+      writeRegistry(created)
+      state.firstLibraryId = lib.id
+    }
   }
-  repo.setJSON('onboarding', {...state, defaultLibraryInitialized:true})
+  state.defaultLibraryInitialized = true
+  repo.setJSON('onboarding', state)
+  return state
+}
+
+function firstLibraryHint(state, libs) {
+  if (!state?.firstLibraryId) return false
+  if (libs.length === 1 && libs[0].id === state.firstLibraryId && libs[0].docs === 0 &&
+      !repo.db.prepare("SELECT 1 FROM nodes WHERE kind IN ('doc','pdf','h5') LIMIT 1").get()) return true
+  delete state.firstLibraryId
+  repo.setJSON('onboarding', state)
+  return false
 }
 
 function listLibs(includePreview = false) {
@@ -1164,7 +1187,7 @@ const routes = {
    * 图标与说明是给人看的附加信息，存在根目录的 .知识库.json 里（可缺省）。
    */
   'GET /libs': async (_body, url, ctx) => {
-    if (ctx.role === 'owner') ensureDraftLibrary()
+    const onboarding = ctx.role === 'owner' ? ensureDraftLibrary() : null
     const cfg = syncRegistry().config
     /*
      * 访客只看得到对外可见的库 —— 连"存在一个不公开的库"这件事都不该知道。
@@ -1172,7 +1195,7 @@ const routes = {
      */
     const all = listLibs(ctx.role === 'owner' && url.searchParams.get('preview') === '1')
     const libs = ctx.role === 'owner' ? all : all.filter((l) => l.shared)
-    return { ok: true, data: { libs, config: cfg } }
+    return { ok: true, data: { libs, config: cfg, showFirstLibraryHint: firstLibraryHint(onboarding, libs) } }
   },
 
   /** 改一个知识库的显示名（= 重命名它的文件夹） */
@@ -1305,19 +1328,25 @@ const routes = {
    * 并且把每个节点的路径补上库名前缀 —— 这样前端拿到的 file 仍是相对文档根的全路径，
    * 读文档、存文档那一整套都不用改。
    */
-  'GET /tree': async (_body, url) => {
-    scanned = 0
+  'GET /tree': async (_body, url, { role }) => {
+    const scan = { count: 0, complete: true }
     const lib = String(url.searchParams.get('lib') || '')
+    if (['limit', 'offset', 'revision'].some(field => url.searchParams.has(field))) {
+      if (role !== 'owner' || !lib) throw fault('FORBIDDEN', '分页清单需要指定已授权的知识库', 403)
+      scan.files = []
+    }
     if (lib) {
       if (lib === '.' || lib === '..' || lib.startsWith('.') || /[/\\]/.test(lib)) {
         throw new Error('知识库名称无效')
       }
       const abs = safeResolve(lib)
       if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new Error('知识库不存在：' + lib)
-      const nodes = scanDir(abs, lib, 0, readOrder())
-      return { ok: true, data: { nodes, lib } }
+      const nodes = scanDir(abs, lib, 0, scan.files ? null : readOrder(), scan)
+      if (scan.files) return { ok: true, data: shareManifest(repo, lib, scan, url.searchParams) }
+      return { ok: true, data: { nodes, lib, complete: scan.complete } }
     }
-    return { ok: true, data: { nodes: scanDir(DOCS_ROOT, '', 0, readOrder()) } }
+    const nodes = scanDir(DOCS_ROOT, '', 0, readOrder(), scan)
+    return { ok: true, data: { nodes, complete: scan.complete } }
   },
 
   /** 读一篇文档 */
@@ -1326,7 +1355,7 @@ const routes = {
     const abs = assertMd(rel)
     if (!fs.existsSync(abs)) throw new Error('文档不存在: ' + rel)
     const content = fs.readFileSync(abs, 'utf-8'); const n = repo.node(rel); assets.legacy(rel)
-    return { ok: true, data: { path: rel, id: n.id, meta:n.meta, content, revision: digest(content) } }
+    return { ok: true, data: { path: rel, id: n.id, workspaceId, meta:n.meta, content, revision: digest(content) } }
   },
 
   /** 哪些标题明确设成折叠标题；正文仍保持标准 Markdown。 */
@@ -1356,11 +1385,14 @@ const routes = {
   'PUT /doc': async (body, _url, { operationId }) => {
     const abs = assertMd(body.path)
     if (!fs.existsSync(abs)) throw fault('NOT_FOUND', '文档不存在', 404)
+    const n = repo.node(body.path)
+    if (body.id && body.id !== n.id) {
+      throw fault('DOCUMENT_CHANGED', '工作区或文档已经更换，请重新打开原文档', 409)
+    }
     const old = fs.readFileSync(abs, 'utf8'), next = String(body.content ?? '')
     const currentRevision = digest(old)
     if (!body.revision) throw fault('REVISION_REQUIRED', '请重新读取文档后再保存', 428)
     if (body.revision !== currentRevision) throw fault('CONFLICT', '文档已被其他编辑者修改，已保留你的内容，请比较后合并', 409, { content: old, revision: currentRevision })
-    const n=repo.node(body.path)
     if (old !== next) {
       recordDocumentChange(repo, operationId, n.id, old, next)
       repo.write(abs, next)
@@ -1829,6 +1861,9 @@ export async function handleApi(req, res, ctx = {}) {
     }
     const body = req.method === 'GET' ? {} : await readBody(req, key === 'POST /asset' ? 15 * 1024 * 1024 : key === 'POST /import-workspace-doc' ? 20 * 1024 * 1024 : undefined)
     if(credential && !agent)throw fault('UNAUTHORIZED','Agent 凭据无效或已过期',401)
+    if ((key === 'PUT /doc' || key === 'POST /doc') && body.workspaceId && body.workspaceId !== workspaceId) {
+      throw fault('DOCUMENT_CHANGED', '工作区已经更换，请重新打开原文档', 409)
+    }
     if (key === 'POST /reveal') {
       if (role !== 'owner' || agent || !localFileManagerRequest(req)) throw fault('FORBIDDEN', '仅可在本机管理界面打开文件位置', 403)
       const rel = repo.resolve(String(body.path || ''))
@@ -1847,12 +1882,12 @@ export async function handleApi(req, res, ctx = {}) {
     if (requestId.length > 160) throw fault('INVALID_REQUEST', '操作编号过长')
     const fingerprint = requestId && 'v2:' + digest(key + url.search + JSON.stringify(body))
     const id=body.id||url.searchParams.get('id')
-    if(id && !key.includes('agent-keys') && !key.includes('/activity')) {
+    if(id && key !== 'GET /share-file' && !key.includes('agent-keys') && !key.includes('/activity')) {
       const n=repo.byId(id);if(!n)throw fault('NOT_FOUND','文档不存在',404)
       if(req.method==='GET')url.searchParams.set('path',n.path);else body.path=n.path
     }
     if(agent){
-      const allowed=new Set(['GET /me','GET /agent-libs','GET /tree','GET /doc','GET /metadata','GET /resolve','GET /history','GET /search','GET /sources','POST /sources','POST /doc','PUT /doc','PATCH /doc','PUT /metadata','POST /asset','PUT /move/doc','DELETE /doc','GET /file'])
+      const allowed=new Set(['GET /me','GET /agent-libs','GET /tree','GET /doc','GET /metadata','GET /resolve','GET /history','GET /search','GET /sources','POST /sources','POST /doc','PUT /doc','PATCH /doc','PUT /metadata','POST /asset','PUT /move/doc','DELETE /doc','GET /file','GET /share-file'])
       if(!allowed.has(key))throw fault('FORBIDDEN','Agent 无权执行此操作',403)
       if(req.method!=='GET'&&!JSON.parse(agent.permissions).includes('write'))throw fault('FORBIDDEN','此 Agent 只有读取权限',403)
       const scopes=JSON.parse(agent.scopes).map(x=>repo.byId(x)?.path).filter(Boolean)
@@ -1866,6 +1901,12 @@ export async function handleApi(req, res, ctx = {}) {
       // Attribution only. The service must already have authenticated the local owner.
       if (role !== 'owner' || !localFileManagerRequest(req)) throw fault('FORBIDDEN', '需要本机 Typocket 连接', 403)
       ctx.actor = 'agent:local'
+    }
+    if (key === 'GET /share-file') {
+      if (role !== 'owner' || (!agent && ctx.actor !== 'agent:local') || !localFileManagerRequest(req) || process.env.READER_PUBLIC_SNAPSHOT === '1') {
+        throw fault('FORBIDDEN', '仅可通过本机 Agent 读取分享文件', 403)
+      }
+      return send(res, 200, { ok: true, data: readShareFile(repo, assets, assertFile, url.searchParams) })
     }
     if (key === 'GET /backups' || key === 'POST /backups') {
       if (role !== 'owner' || ctx.agentScopes || !localFileManagerRequest(req)) throw fault('FORBIDDEN', '备份管理仅限本机使用', 403)
@@ -1930,7 +1971,12 @@ export async function handleApi(req, res, ctx = {}) {
       if(isGuest && !share.isShared(rel)) throw fault('FORBIDDEN','内容不可访问',403)
       return sendFile(req,res,rel,{allowTranslate:true})
     }
-    for (const field of ['path','file','lib']) { const v=url.searchParams.get(field);if(v)url.searchParams.set(field,repo.resolve(v)) }
+    for (const field of ['path','file','lib']) {
+      // A share handoff names the library at this exact path.
+      if (field === 'lib' && key === 'GET /tree' && ['limit', 'offset', 'revision'].some(k => url.searchParams.has(k))) continue
+      const v = url.searchParams.get(field)
+      if (v) url.searchParams.set(field, repo.resolve(v))
+    }
     const handler = routes[key]
     if (!handler) return send(res, 404, { ok: false, error: '接口不存在' })
     /* 标记已读是收件箱自己的状态，不该再生成一条“操作”写进收件箱。 */

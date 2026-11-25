@@ -126,6 +126,17 @@
           </div>
           <button class="doc-notice-close" :aria-label="store.errorKind === 'save' ? '关闭错误提示' : '知道了'" @click="store.clearError()"><PhX :size="14" /></button>
         </div>
+        <div v-else-if="store.recovery && !store.isDirty && !store.saving && !store.conflict" class="doc-notice" role="status">
+          <div class="doc-notice-copy">
+            <p>这篇文档有一份未保存的浏览器草稿。</p>
+            <div class="doc-notice-actions">
+              <button @click="store.recoverDraft()">恢复草稿</button>
+              <button v-if="discardingDraft !== store.recovery" @click="discardingDraft = store.recovery">丢弃草稿</button>
+              <button v-else @click="store.discardRecoveredDraft(discardingDraft)">确认丢弃这份草稿</button>
+            </div>
+          </div>
+          <button class="doc-notice-close" aria-label="稍后恢复草稿" @click="store.recovery = null"><PhX :size="14" /></button>
+        </div>
       </Transition>
     </Teleport>
 
@@ -245,6 +256,8 @@ async function closeHistory(){historyOpen.value=false;await nextTick();moreButto
 const restoredEpoch=ref(0)
 function restoreContent(text){emit('input',text);restoredEpoch.value++}
 const store = useDocsStore()
+const discardingDraft = ref(null)
+watch(() => store.recovery, () => { discardingDraft.value = null })
 const canRevealInFinder = computed(() => !store.isGuest && fileManagerAvailable() && !!props.docId)
 async function showInFinder() {
   open.value = ''

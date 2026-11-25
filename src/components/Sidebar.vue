@@ -144,6 +144,9 @@
           </header>
           <div ref="shelfScroll" class="drawer-scroll" :aria-busy="shelfLoading || !!pendingShelf">
             <div :key="shelfLevel.path" class="drawer-page-inner" :data-step="shelfStep">
+              <p v-if="showFirstLibraryHint" class="drawer-first-library-hint">
+                在 DSH 文件区打开 Agent 生成的 Markdown，点「保存到知识库」，就能在这里继续编辑。
+              </p>
               <div v-if="shelfError" class="drawer-status" role="alert">
                 <p>{{ shelfError }}</p><button v-if="shelfLoadError" type="button" class="drawer-retry" @click="retryShelf">重试</button>
               </div>
@@ -647,7 +650,7 @@ const libIconInput = ref(null)
 
 /* ---------- 知识库面板：列出所有库，可切换 / 改名 / 换图标 / 管可见性 ---------- */
 
-const libPanel = reactive({ open: false, libs: [], busy: '' })
+const libPanel = reactive({ open: false, libs: [], busy: '', showFirstLibraryHint: false })
 function onCompactHeaderClick() {
   if (props.collapsed) emit('toggle-collapse')
 }
@@ -893,6 +896,7 @@ async function loadLibs() {
     if (request !== libRequest) return
     if (!data.ok) throw Error(data.error || '读取知识库失败')
     libPanel.libs = data.data.libs.filter(l => l && l.name)
+    libPanel.showFirstLibraryHint = data.data.showFirstLibraryHint === true
     if (preview && managerOpen.value) {
       shelfPreviews.value = Object.fromEntries(libPanel.libs.map(lib => [lib.path, lib.preview]))
     }
@@ -1060,6 +1064,11 @@ const shelfStep = ref('')
 const shelfOpening = ref(false)
 let shelfRequest
 const shelfError = computed(() => shelfLoadError.value || shelfOpenError.value)
+const showFirstLibraryHint = computed(() =>
+  libPanel.showFirstLibraryHint && !isGuest.value && libPanel.libs.length === 1 &&
+  !libQuery.value.trim() && !shelfLoading.value && !shelfError.value && !libCreate.active &&
+  shelfLevels.value.length <= 2 && !shelfLevel.value.nodes?.length
+)
 const shelfSearchLabel = computed(() => !shelfLevel.value.path ? '搜索知识库' : '筛选当前目录')
 const shelfEntries = computed(() => {
   const items = shelfLevel.value.nodes || []

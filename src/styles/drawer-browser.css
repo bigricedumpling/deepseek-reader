@@ -52,6 +52,7 @@
 .drawer-search input::placeholder { color:var(--c-sub); }
 .drawer-search:focus-within, .drawer-name-input:focus { outline: 2px solid var(--c-focus); outline-offset:2px; }
 .drawer-scroll { min-height:0; flex:1; overflow-y:auto; overscroll-behavior:contain; padding:0 0 32px; scroll-padding-block:12px; }
+.drawer-first-library-hint { margin:0 0 16px; color:var(--c-sub); font-size:13px; line-height:1.65; text-wrap:pretty; }
 .drawer-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(min(205px, 100%), 1fr)); column-gap:clamp(16px,2cqw,30px); row-gap:clamp(14px,1.8cqw,26px); }
 .drawer-card { position:relative; min-width:0; }
 .drawer-card-main { display:block; width:100%; position:relative; border-radius:var(--radius-card); text-align:start; }

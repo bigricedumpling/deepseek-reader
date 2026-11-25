@@ -26,6 +26,7 @@ import { verifyReferences } from './e2e/references.mjs'
 import { verifyNavigationMotion } from './e2e/navigation-motion.mjs'
 import { verifyTabMotion } from './e2e/tab-motion.mjs'
 import { verifyWorkspaceChrome } from './e2e/workspace-chrome.mjs'
+import { verifyDraftRecovery } from './e2e/draft-recovery.mjs'
 import { verifyConcurrentEdits } from './e2e/concurrent-edits.mjs'
 import { verifyEditorStartupRecovery } from './e2e/editor-startup.mjs'
 
@@ -897,6 +898,9 @@ try {
 
   await verifyConcurrentEdits({ send, ev, root: SB, appUrl, sleep })
   check('并发编辑自动合并、手动草稿、采用最新磁盘版本和重开', true)
+
+  await verifyDraftRecovery({ send, ev, root: SB, appUrl, sleep })
+  check('即时保存、刷新和保存失败后的本机草稿恢复', true)
 
   await verifyReferences({ send, ev, root: SB, appUrl, sleep })
   check('跨库引用恢复章节、PDF 页码和索引的阅读位置', true)

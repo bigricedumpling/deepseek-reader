@@ -46,6 +46,18 @@ try {
     } })
     if (url.pathname === '/api/me') return Response.json({ ok: true, data: { role: 'owner' } })
     if (url.pathname === '/api/agent-libs') return Response.json({ ok: true, data: { libs: [] } })
+    if (url.pathname === '/api/tree') {
+      assert.deepEqual(Object.fromEntries(url.searchParams), {lib:'test', limit:'1', offset:'1', revision:'listing'})
+      return Response.json({ok:true, data:{files:[{path:'test/Report.pdf', id:'pdf'}], nextOffset:null}})
+    }
+    if (url.pathname === '/api/share-file') {
+      assert.equal(init.method, 'GET')
+      assert.equal(url.searchParams.get('path'), 'test/Report.pdf')
+      assert.equal(url.searchParams.get('offset'), '24576')
+      assert.equal(url.searchParams.get('limit'), '7')
+      assert.equal(url.searchParams.get('revision'), 'r1')
+      return Response.json({ok:true, data:{nextOffset:null}})
+    }
     assert.equal(url.pathname, '/api/doc')
     assert.equal(init.method, 'POST')
     assert.equal(init.headers['x-typocket-client'], 'local-agent')
@@ -53,7 +65,12 @@ try {
     return Response.json({ ok: true, data: { file: 'test/Example.md' } })
   }
   const tools = register()
-  assert.equal(tools.size, 14)
+  assert.equal(tools.size, 15)
+  const shareFile = tools.get('reader_share_file')
+  const listing = await tools.get('reader_tree').execute({lib:'test', limit:1, offset:1, revision:'listing'}, execution)
+  assert.equal(listing.data.files[0].id, 'pdf')
+  const page = {path:'test/Report.pdf', offset:24576, revision:'r1', limit:7}
+  assert.equal((await shareFile.execute(page, execution)).data.nextOffset, null)
   const create = tools.get('reader_create')
   assert(create.parameters.required.includes('requestId'))
   assert.equal(create.parameters.additionalProperties, false)
@@ -84,7 +101,7 @@ try {
   await assert.rejects(create.execute(args, headless), /DSH Agent/)
   assert.equal(writes, 2)
   process.env.READER_TOKEN = 'fixture-only'
-  assert.equal(register().size, 14)
+  assert.equal(register().size, 15)
   policy = { mode: 'read-only', workspaceRoot: root }
   await assert.rejects(create.execute(args, execution), /只读/)
   console.log('PASS: tokenless and scoped DSH tool discovery, session policies and per-call approval')

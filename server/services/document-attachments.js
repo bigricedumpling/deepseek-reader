@@ -33,10 +33,14 @@ function sourceLines(source, node, prefix) {
   }
 }
 
-function htmlChanges(html, resolve, add) {
+function htmlChanges(html, resolve, add, display) {
   const fragment = parseFragment(html, { sourceCodeLocationInfo: true })
   function visit(node) {
     if (['pre', 'code', 'script', 'style', 'textarea'].includes(node.tagName)) return
+    if (display) {
+      if (node.tagName === 'template' || node.attrs?.some(attr => attr.name === 'hidden')) return
+      if (node.tagName === 'base') display.base ??= node.attrs?.find(attr => attr.name === 'href')?.value
+    }
     for (const attr of node.attrs || []) {
       if (!(['img', 'source'].includes(node.tagName) && ['src', 'srcset'].includes(attr.name)) &&
           !(node.tagName === 'a' && attr.name === 'href') && !(node.tagName === 'video' && attr.name === 'poster')) continue
@@ -121,14 +125,16 @@ function richChanges(node, resolve, add) {
 function markdownChanges(source, resolve, add, richFormats = true) {
   const { tree, prefix } = parseDocumentMarkdown(source)
   const imageDefinitions = new Set()
+  const definitions = new Map()
   function collectImageDefinitions(node) {
     if (node.type === 'imageReference') imageDefinitions.add(node.identifier)
+    if (node.type === 'definition' && !definitions.has(node.identifier)) definitions.set(node.identifier, node)
     node.children?.forEach(collectImageDefinitions)
   }
   collectImageDefinitions(tree)
   function visit(node) {
     if (node.destination) {
-      const kind = node.type === 'image' || (node.type === 'definition' && imageDefinitions.has(node.identifier))
+      const kind = node.type === 'image' || (node.type === 'definition' && definitions.get(node.identifier) === node && imageDefinitions.has(node.identifier))
         ? 'image' : node.type
       const url = resolve(node.url, kind)
       if (url) {
@@ -155,6 +161,16 @@ function markdownChanges(source, resolve, add, richFormats = true) {
     }
   }
   visit(tree)
+}
+
+export function documentImages(source, isHtml) {
+  const display = { images: new Set(), base: null }
+  const collect = (url, kind) => {
+    if (kind === 'image' && url.length <= 8192) display.images.add(url)
+  }
+  if (isHtml) htmlChanges(source, collect, () => {}, display)
+  else markdownChanges(source, collect, () => {})
+  return display
 }
 
 export function rewriteCopiedAttachments(source, isHtml, resolve) {
