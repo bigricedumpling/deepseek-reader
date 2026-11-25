@@ -111,12 +111,20 @@ async function go(i){
   }
   active.value=i
 }
+// Input capability can change while the viewport stays the same size. Only a
+// visible marker list needs a document scroll listener and heading measurements.
+const markerSize = new ResizeObserver(bind)
+watch(stops, (list, previous) => {
+  if (previous) markerSize.unobserve(previous)
+  if (list) markerSize.observe(list)
+}, { flush: 'post' })
 watch(active, () => nextTick(followActive))
 watch(()=>[store.currentPath,store.currentRaw,store.currentLoaded,store.pdfPage,reader.tocOpen],()=>{clearHint();bind()},{flush:'post'})
 onMounted(() => { bind(); window.addEventListener('resize', bind) })
 onBeforeUnmount(() => {
   clearHint()
   window.removeEventListener('resize', bind)
+  markerSize.disconnect()
   scroller?.removeEventListener('scroll', onScroll)
   outline.bind(null)
   cancelAnimationFrame(frame)

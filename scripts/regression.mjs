@@ -158,6 +158,9 @@ try {
   const appUrl = `http://127.0.0.1:${server.address().port}/`
   chrome = spawn(chromeBinary, [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    // CI has no physical mouse. Start with the desktop input device exercised below;
+    // the phone checks explicitly enable touch emulation on the same browser.
+    '--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2',
     '--window-size=1440,900', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'
   ], { stdio: 'ignore' })
   await once(chrome, 'spawn')
@@ -567,7 +570,8 @@ try {
     }
     throw new Error('页面状态未就绪：' + expression)
   }
-  const tabSelector = file => '.doc-tab-main[title="' + file + '"]'
+  // Hover and keyboard focus move the native title into the accessible tooltip.
+  const tabSelector = file => '.doc-tab-main:is([title="' + file + '"],[data-tooltip="' + file + '"])'
   async function clickTab(file, close = false) {
     const selector = JSON.stringify(tabSelector(file))
     await ev('const button=document.querySelector(' + selector + ');' +
@@ -599,29 +603,49 @@ try {
   check('总览沿用文档名称，卡片前盖保留连续描边', await ev(`const lip = getComputedStyle(document.querySelector('.drawer-card-main .pocket-lip'))
     return document.querySelector('.drawer-toolbar h1')?.textContent === '文档' &&
       lip.maskImage === 'none' && lip.borderTopStyle === 'solid' && parseFloat(lip.borderTopWidth) >= 1`))
+  const shelfCard = '.drawer-card-main[data-path="参考"]'
   const cardGeometry = () => ev(`
-    const card = document.querySelector('.drawer-card-main[data-path="参考"]')
-    await new Promise(requestAnimationFrame)
-    // Opening the gallery moves its viewport and expands the library rail.
-    // Measure the hover in isolation once both layout transitions have settled.
-    const gallery = card.closest('#workspace-gallery-slot')
-    const rail = document.querySelector('.lib-panel')
-    const animations = [...gallery.getAnimations(), ...rail.getAnimations(), ...card.getAnimations({ subtree: true })]
-    await Promise.all(animations.map(animation => animation.finished))
+    const card = document.querySelector(${JSON.stringify(shelfCard)})
+    await document.fonts.ready
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    const ancestors = []
+    for (let el = card.parentElement; el; el = el.parentElement) ancestors.push(el)
+    const animations = [
+      ...card.getAnimations({subtree:true}),
+      ...ancestors.flatMap(el => el.getAnimations()),
+      ...document.querySelector('.lib-panel').getAnimations()
+    ]
+    await Promise.allSettled(animations.map(animation => animation.finished))
     const rect = el => { const r=el.getBoundingClientRect(); return [r.x,r.y,r.width,r.height] }
     return { card:rect(card), label:rect(card.querySelector('.drawer-card-label')),
       lip:rect(card.querySelector('.pocket-lip')), paper:rect(card.querySelector('.leaf-first')) }`)
+  const steady = (a,b) => a.every((v,i) => Math.abs(v-b[i]) < .5)
+  const movePointer = (x,y) => send('Input.dispatchMouseEvent', {type:'mouseMoved',x,y})
+  await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'no-preference'}]})
   await ev('document.activeElement?.blur()')
-  await send('Input.dispatchMouseEvent', { type:'mouseMoved', x:1, y:1 })
+  await movePointer(1,1)
   const closedPocket = await cardGeometry()
   const [cardX,cardY,cardWidth,cardHeight] = closedPocket.card
-  await send('Input.dispatchMouseEvent', { type:'mouseMoved', x:cardX+cardWidth/2, y:cardY+cardHeight/2 })
-  const openPocket = await cardGeometry()
-  check('悬停时文件夹前盖张开、纸张上移，名称和点击区域保持原位',
-    openPocket.lip[2] > closedPocket.lip[2]+1 && openPocket.paper[1] < closedPocket.paper[1]-3 &&
-    openPocket.card.every((v,i) => v === closedPocket.card[i]) &&
-    openPocket.label.every((v,i) => v === closedPocket.label[i]))
-  await send('Input.dispatchMouseEvent', { type:'mouseMoved', x:1, y:1 })
+  const hasMouse = await ev("return matchMedia('(hover:hover) and (pointer:fine)').matches")
+  await movePointer(cardX+cardWidth/2, cardY+cardHeight/2)
+  if (hasMouse) await waitForPage(`document.querySelector(${JSON.stringify(shelfCard)}).matches(':hover')`)
+  const hoveredPocket = await cardGeometry()
+  function opened(pose) {
+    return pose.lip[2] > closedPocket.lip[2]+1 && pose.paper[1] < closedPocket.paper[1]-3 &&
+      steady(pose.card,closedPocket.card) && steady(pose.label,closedPocket.label)
+  }
+  check('文件夹悬停反馈遵循设备指针能力，名称和按钮保持原位', hasMouse ? opened(hoveredPocket) :
+    steady(hoveredPocket.lip, closedPocket.lip) && steady(hoveredPocket.paper, closedPocket.paper),
+    JSON.stringify({hasMouse,closed:closedPocket,hovered:hoveredPocket}))
+  await movePointer(1,1)
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9})
+  await ev(`document.querySelector(${JSON.stringify(shelfCard)}).focus({preventScroll:true})`)
+  await waitForPage(`document.querySelector(${JSON.stringify(shelfCard)}).matches(':focus-visible')`)
+  const focusedPocket = await cardGeometry()
+  check('键盘聚焦也张开文件夹前盖并抬起纸张', opened(focusedPocket), JSON.stringify(focusedPocket))
+  await ev('document.activeElement?.blur()')
+  await send('Emulation.setEmulatedMedia', {features:[]})
 
   check('四格入口在主区域显示真实文稿，桌面保留快捷知识库栏', await ev(`return document.querySelector('#workspace-gallery-slot .drawer-browser')?.checkVisibility() &&
     document.querySelector('.workspace-reader').inert && document.querySelector('.lib-panel').checkVisibility() &&
@@ -666,7 +690,10 @@ try {
   await clickShelf(folder)
   await clickShelf(article)
   await waitForPage("window.__reader.currentPath === '内容/分类甲/临时拖放样本.md' && window.__reader.currentLoaded && !document.querySelector('.drawer-browser')")
-  check('打开知识库中的嵌套文档后同步正文、标签和地址', await ev("return new URL(location.href).searchParams.get('lib') === '内容' && window.__reader.tabs.includes(window.__reader.currentPath) && document.querySelector('.doc-tab.is-active .doc-tab-main').title === window.__reader.currentPath"))
+  check('打开知识库中的嵌套文档后同步正文、标签和地址', await ev(`
+    const activeTab = document.querySelector('.doc-tab.is-active .doc-tab-main')
+    return new URL(location.href).searchParams.get('lib') === '内容' &&
+      window.__reader.tabs.includes(window.__reader.currentPath) && activeTab?.matches(${JSON.stringify(tabSelector(movedSample))})`))
   await clickTab('内容/分类甲/临时拖放样本.md', true)
   await clickTab(secondFile)
   await waitForPage("window.__reader.currentPath === '参考/文档一.md' && window.__reader.currentLoaded")
@@ -725,7 +752,7 @@ try {
   ` })
   await send('Page.reload', { ignoreCache: true })
   await waitForPage("window.__reader?.currentLoaded && window.finishTabRestore && document.querySelectorAll('.doc-tab-main').length === 1")
-  check('恢复旧标签期间当前文档可先读写', await ev("return document.querySelector('.doc-tab-main').title === '内容/文档一.md'"))
+  check('恢复旧标签期间当前文档可先读写', await ev(`return document.querySelector('.doc-tab-main')?.matches(${JSON.stringify(tabSelector(firstFile))})`))
   await ev("window.finishTabRestore()")
   await send('Page.removeScriptToEvaluateOnNewDocument', {identifier: delayRestore.identifier})
   await waitForPage("document.querySelectorAll('.doc-tab-main').length === 2")
@@ -776,7 +803,7 @@ try {
     localStorage.setItem('typocket.recent-docs:/other:guest',JSON.stringify([{file:'内容/表格文档.md',at:Date.now()}]))`)
   await send('Page.navigate', {url: new URL('onlyread/内容/文档一?lib=内容', appUrl).href})
   await waitForPage('window.__reader?.isGuest && window.__reader.currentLoaded && !window.__reader.tabs.includes("参考/文档一.md")')
-  check('访客刷新只恢复仍可见的文档', await ev("return [...document.querySelectorAll('.doc-tab-main')].every(button => button.title.startsWith('内容/'))"))
+  check('访客刷新只恢复仍可见的文档', await ev("return [...document.querySelectorAll('.doc-tab-main')].every(button => (button.title || button.dataset.tooltip || '').startsWith('内容/'))"))
 
   const guestLibraries = await ev("return (await fetch('/api/libs?preview=1').then(res => res.json())).data.libs")
   check('公开视角不会收到知识库内容预览', guestLibraries.length > 0 && guestLibraries.every(lib => !('previewName' in lib)))

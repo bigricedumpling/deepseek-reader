@@ -17,9 +17,9 @@ async function followRow(rowSelector, markerSelector, clickSelector) {
   return { distance:Math.abs(row.getBoundingClientRect().top-oldTop), error }
 }
 
-async function measureOutline(rail) {
+async function measureOutline(rail, index = 104) {
   const scroller = document.getElementById('main-scroll-container')
-  const target = document.querySelectorAll('.ProseMirror h2')[104]
+  const target = document.querySelectorAll('.ProseMirror h2')[index]
   const dest = scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 90
   const original = Element.prototype.getBoundingClientRect
   let reads = 0
@@ -32,7 +32,8 @@ async function measureOutline(rail) {
     for (let i = 0; i < 5; i++) await new Promise(requestAnimationFrame)
     const active = rail ? document.querySelector('.rail-toc-stop.active')?.getAttribute('aria-label')
       : document.querySelector('.toc-item.is-active')?.textContent.trim()
-    return { reads, active, target:target.textContent.trim() }
+    const markersVisible = !!document.querySelector('.rail-toc-stops')?.clientHeight
+    return { reads, active, markersVisible, target:target.textContent.trim() }
   } finally { Element.prototype.getBoundingClientRect = original }
 }
 
@@ -84,8 +85,30 @@ export async function verifyNavigationMotion({send, ev, root, appUrl, sleep}) {
       await ev("document.getElementById('main-scroll-container').scrollTo({top:0,behavior:'instant'})")
       await sleep(500)
       const result = await ev('return ('+measureOutline.toString()+')('+rail+')')
-      assert.equal(result.active,result.target, '长文当前位置应匹配实际标题')
-      assert(result.reads<=22, '每次滚动只需测量少量正文标题 '+JSON.stringify(result))
+      if (rail && !result.markersVisible) {
+        assert.equal(result.reads, 0, '隐藏的目录标记应停止测量正文')
+        await click('.rail-toc-handle')
+        await ready("document.querySelector('.toc-item.is-active')?.textContent.trim()==='章节 104'")
+        await click('.toc-collapse-chip')
+      } else {
+        assert.equal(result.active, result.target, '长文当前位置应匹配实际标题 '+JSON.stringify(result))
+        assert(result.reads <= 22, '每次滚动只需测量少量正文标题 '+JSON.stringify(result))
+      }
+    }
+
+    // A touch-only tablet has a single outline button. Opening it must pick up
+    // the current chapter; attaching a mouse should also wake the compact rail.
+    await send('Emulation.setTouchEmulationEnabled', {enabled:true, maxTouchPoints:1})
+    await ready("document.querySelector('.rail-toc-handle')?.checkVisibility() && document.querySelector('.rail-toc-stops')?.clientHeight===0")
+    const touch = await ev('return ('+measureOutline.toString()+')(true, 67)')
+    assert.equal(touch.reads, 0, '触屏上的隐藏目录标记应停止测量正文')
+    await click('.rail-toc-handle')
+    await ready("document.querySelector('.toc-item.is-active')?.textContent.trim()==='章节 67'")
+    await click('.toc-collapse-chip')
+    await ready("document.querySelector('.rail-toc-stops')?.clientHeight===0")
+    await send('Emulation.setTouchEmulationEnabled', {enabled:false})
+    if (await ev("return !matchMedia('(hover:none), (pointer:coarse)').matches")) {
+      await ready("document.querySelector('.rail-toc-stop.active')?.getAttribute('aria-label')==='章节 67'")
     }
     await click('.sidebar-toggle')
     await sleep(380)
@@ -124,6 +147,7 @@ export async function verifyNavigationMotion({send, ev, root, appUrl, sleep}) {
       return Math.abs(t-document.getElementById('main-scroll-container').getBoundingClientRect().top-90)<2 })()`)
     await ready("document.querySelector('.toc-item.is-active')?.textContent.trim()==='章节 104'")
   } finally {
+    await send('Emulation.setTouchEmulationEnabled', {enabled:false})
     await media('no-preference')
     await send('Emulation.clearDeviceMetricsOverride')
   }
