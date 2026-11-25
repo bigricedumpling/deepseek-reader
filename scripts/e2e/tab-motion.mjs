@@ -279,6 +279,33 @@ export async function verifyTabMotion({send, ev, root, appUrl, sleep}) {
     const reduced = await capture([{to:5}])
     for (const f of reduced) aligned(f,f.active)
     aligned(reduced.at(-1),5)
+
+    const longLibrary = '排版研究（文献、摘录与写作示例）'
+    const duplicate = longLibrary + '/00-索引.md'
+    fs.mkdirSync(path.join(root, longLibrary))
+    fs.writeFileSync(path.join(root, duplicate), '# 同名文档\n')
+    await ev(`document.querySelector('.doc-tabs').style.removeProperty('max-width')
+      await window.__reader.select(${JSON.stringify(duplicate)})`)
+    for (const icon of ['', 'icon:draft']) {
+      if (icon) await ev('await window.__reader.savePageMeta({icon:' + JSON.stringify(icon) + '})')
+      for (const width of [1440, 390, 320]) {
+        await send('Emulation.setDeviceMetricsOverride', { width, height:800, deviceScaleFactor:1, mobile:width < 500 })
+        await settle()
+        const layout = await ev(`const tab = document.querySelector('.doc-tab.is-active.has-context')
+          const main = tab.querySelector('.doc-tab-main')
+          const icon = main.querySelector('.content-icon')
+          const context = main.querySelector('.doc-tab-context')
+          const contextBox = context.getBoundingClientRect()
+          const dot = main.querySelector('.doc-tab-dot').getBoundingClientRect()
+          const close = tab.querySelector('.doc-tab-x').getBoundingClientRect()
+          return { iconWidth:icon?.getBoundingClientRect().width || 0, label:main.getAttribute('aria-label'), clipped:context.scrollWidth > context.clientWidth,
+            gap:close.left - contextBox.right, dotGap:dot.left - contextBox.right, closeGap:close.left - dot.right }`)
+        assert.equal(layout.iconWidth, icon ? 16 : 0, '自定义图标保持原尺寸，纯文字标签无图标')
+        assert(layout.clipped && layout.label.includes(longLibrary), '同名文件的长库名应缩略，并保留完整可访问名称')
+        assert(layout.gap >= 0 && layout.gap <= 16, '同名标签的库名和关闭按钮间不应有多余空白 ' + width + 'px ' + JSON.stringify(layout))
+        assert(layout.dotGap >= 1 && layout.closeGap >= 1, '保存状态点应有自己的位置，避免遮住库名或关闭按钮 ' + width + 'px ' + JSON.stringify(layout))
+      }
+    }
   } finally {
     await send('Emulation.clearDeviceMetricsOverride')
     await media('no-preference')

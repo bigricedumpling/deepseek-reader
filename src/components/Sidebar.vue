@@ -242,12 +242,15 @@
         <div class="kb-header-row">
           <div class="side-header" :class="{ 'is-topbar': chromeCollapsed, 'is-compact': chromeCompact, 'is-collapsing': collapsed && !chromeCompact, 'is-expanding': chromeExpanding, 'is-merged': !collapsed }" @click.self="onCompactHeaderClick">
             <div class="kb-identity" :class="{ 'is-compact': collapsed }">
-              <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick"><CollectedDrawerIcon :value="currentLibIcon" :file="store.currentPath" :doc-id="store.currentNode?.id" :loaded="store.currentLoaded" /></button>
-              <div class="kb-title-wrap min-w-0">
+              <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick">
+                <span ref="glyphEl" class="kb-glyph-swap"><CollectedDrawerIcon :value="shownLibIcon" :file="store.currentPath" :doc-id="store.currentNode?.id" :loaded="store.currentLoaded" /></span>
+              </button>
+              <div ref="titleWrap" class="kb-title-wrap min-w-0">
                 <!-- 同一个名称随侧栏改变可用宽度。只有聚焦改名时才由输入框绘制文字。 -->
                 <button type="button" class="brand-line kb-title-label" :tabindex="collapsed ? undefined : -1" :title="currentLib || '知识库'" :aria-label="'展开侧栏，' + (currentLib || '知识库')" :aria-hidden="!collapsed" @click.stop="onCompactTitleClick">
                   <span class="kb-title-stack">
-                    <span :key="currentLib || '知识库'" class="kb-title-text">{{ currentLib || '知识库' }}</span>
+                    <span aria-hidden="true" class="kb-title-size">{{ currentLib || '知识库' }}</span>
+                    <span ref="titleEl" aria-hidden="true" class="kb-title-text">{{ shownLib || '知识库' }}</span>
                   </span>
                 </button>
                 <input v-model="brandTitle" class="brand-line brand-input is-title kb-title" :disabled="collapsed" spellcheck="false" :readonly="isGuest || !currentLibEditable" :title="currentLib || '知识库'" :aria-label="isGuest || !currentLibEditable ? '当前知识库' : '编辑知识库名称'" :aria-hidden="collapsed" @keydown="onTitleKey" @change="onBrandEdited($event.target.value)" />
@@ -1575,6 +1578,73 @@ watch(logo, setFavicon, {immediate:true})
 /** 文档区左上角的库图标跟当前知识库走；产品 favicon 仍保持独立。 */
 const currentLibIcon = computed(() => libPanel.libs.find(l => l.name === currentLib.value)?.icon || 'icon:folder')
 
+const titleEl = ref(null), glyphEl = ref(null), titleWrap = ref(null)
+const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
+const reducedIdentityMotion = ref(motionPreference.matches)
+function syncIdentityMotion() { reducedIdentityMotion.value = motionPreference.matches }
+onMounted(() => motionPreference.addEventListener('change', syncIdentityMotion))
+onBeforeUnmount(() => motionPreference.removeEventListener('change', syncIdentityMotion))
+const identityCanMove = computed(() => !reducedIdentityMotion.value &&
+  props.collapsed === props.chromeCompact && !props.chromeExpanding)
+
+// Each mark has one readable layer. An interrupted fade continues from the
+// opacity on screen and only the latest destination can replace its content.
+function useIdentitySwap(source, element) {
+  const shown = ref(source.value)
+  let motion
+  function stop() { motion?.cancel(); motion = null }
+  watch([source, identityCanMove], async ([next, enabled], [previous, wasEnabled]) => {
+    const el = element.value
+    let opacity = motion && el ? Number(getComputedStyle(el).opacity) : 1
+    stop()
+    if (!el?.animate || !enabled || !wasEnabled || !previous || !next) {
+      shown.value = next
+      return
+    }
+    if (next !== shown.value) {
+      const fade = el.animate([{ opacity }, { opacity: .12 }], {
+        duration: 75 * opacity, easing: 'ease-in', fill: 'forwards'
+      })
+      motion = fade
+      await fade.finished.catch(() => {})
+      if (motion !== fade) return
+      shown.value = next
+      await nextTick()
+      if (motion !== fade) return
+      stop()
+      opacity = .12
+    }
+    if (opacity < 1) motion = el.animate([{ opacity }, { opacity: 1 }], {
+      duration: 135, easing: 'ease-out'
+    })
+  })
+  onBeforeUnmount(stop)
+  return shown
+}
+const shownLib = useIdentitySwap(currentLib, titleEl)
+const shownLibIcon = useIdentitySwap(currentLibIcon, glyphEl)
+
+// Only the compact button follows the text width. Its reserve and the tab
+// strip stay still, including when an in-flight size change reverses.
+let widthMotion
+watch([currentLib, identityCanMove], async ([next, enabled], [previous, wasEnabled], onCleanup) => {
+  const el = titleWrap.value
+  const start = el?.getBoundingClientRect().width
+  widthMotion?.cancel()
+  widthMotion = null
+  if (!start || !el.animate || !enabled || !wasEnabled || !props.chromeCompact || !previous || !next) return
+  let current = true
+  onCleanup(() => { current = false })
+  await nextTick()
+  if (!current) return
+  const end = el.getBoundingClientRect().width
+  if (end && Math.abs(end - start) > 1) widthMotion = el.animate(
+    [{ width: start + 'px' }, { width: end + 'px' }],
+    { duration: 210, easing: 'cubic-bezier(.24,.76,.26,1)' }
+  )
+})
+onBeforeUnmount(() => widthMotion?.cancel())
+
 /** 顶层目录：收起态那一列图标用 */
 const topFolders = computed(() => props.nodes.filter((n) => n.type === 'folder'))
 
@@ -2847,11 +2917,9 @@ onMounted(loadActivityUnread)
 .side-header:is(.is-compact,.is-collapsing) .kb-title-wrap { flex:0 1 auto; max-width:var(--kb-title-limit); }
 .side-header.is-compact .kb-title-label:hover { color:var(--nav-cover-ink, var(--c-accent)); }
 .kb-title-stack { position:relative; display:grid; grid-template-columns:minmax(0,1fr); min-width:0; max-width:100%; vertical-align:top; }
-.kb-title-text { grid-area:1 / 1; justify-self:stretch; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-@media (prefers-reduced-motion:no-preference) {
-  .kb-title-text { animation:kb-title-in 115ms ease-out; }
-  @keyframes kb-title-in { from { opacity:.65; } to { opacity:1; } }
-}
+.kb-title-size { visibility:hidden; white-space:nowrap; overflow:hidden; }
+.kb-title-text { position:absolute; inset:0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.kb-glyph-swap { display:grid; place-items:center; }
 .side-header .brand-logo:hover { box-shadow:none; background:transparent; }
 .side-header :is(.brand-logo,.kb-title-label,.icon-btn):focus-visible { outline:2px solid var(--c-focus); outline-offset:-2px; }
 .sidebar-actions.is-compact {

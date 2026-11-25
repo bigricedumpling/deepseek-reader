@@ -9,6 +9,11 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     fs.mkdirSync(path.dirname(path.join(root, file)), {recursive:true})
     fs.writeFileSync(path.join(root, file), '# ' + path.basename(file, '.md') + '\n\n## 第一节\n\n正文。\n')
   }
+  const meta = await fetch(new URL('api/lib/meta', appUrl), {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ name:libraries[1], icon:'📚' })
+  }).then(response => response.json())
+  assert(meta.ok, '测试知识库图标未就绪')
   const viewport = (width, mobile = false) => send('Emulation.setDeviceMetricsOverride', {width,height:800,deviceScaleFactor:1,mobile})
   const ready = async file => {
     for (let i = 0; i < 100; i++) {
@@ -32,9 +37,16 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     return new Promise((resolve, reject) => {
       function tick(time) {
         const box = el => el.getBoundingClientRect()
+        const header = document.querySelector('.side-header')
+        const title = header.querySelector('.kb-title-text')
+        const glyph = header.querySelector('.kb-glyph-swap')
+        const opacity = el => el ? Number(getComputedStyle(el).opacity) : 1
         const titles = [...document.querySelectorAll('.kb-title-text')].filter(n => Number(getComputedStyle(n).opacity) > .15 && n.checkVisibility())
         frames.push({
           viewport:innerWidth, strip:box(strip).left, more:box(more).left,
+          compact:header.classList.contains('is-compact'), width:box(header).width,
+          library:title.textContent, titleOpacity:opacity(title),
+          icon:glyph?.querySelector('.content-icon')?.textContent || '', iconOpacity:opacity(glyph),
           labels:tabs.map(tab => box(tab).left + strip.scrollLeft - box(strip).left),
           selected:tabPath(strip.querySelector('.doc-tab.is-active .doc-tab-main')),
           titles:titles.length, overlap:document.querySelector('.kb-title-label').getBoundingClientRect().right - document.querySelector('.sidebar-actions').getBoundingClientRect().left,
@@ -49,7 +61,7 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
       requestAnimationFrame(tick)
     })
   }
-  async function capture(file) {
+  async function capture(file, reduced = false) {
     const frames = await ev('return await (' + track.toString() + ')(' + JSON.stringify(file) + ')')
     const range = key => Math.max(...frames.map(f => f[key])) - Math.min(...frames.map(f => f[key]))
     const scenario = `${frames[0].viewport}px 切换到 ${file}`
@@ -62,6 +74,22 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     }
     assert(frames.every(frame => frame.titles <= 1), '两个知识库名称在同一位置重影')
     assert(!frames.some(f => f.outside || f.overlap > 1), '顶栏溢出或标题压住操作按钮')
+    const first = frames[0], last = frames.at(-1)
+    const target = file.split('/')[0]
+    assert(last.library === target && last.icon === (target === libraries[1] ? '📚' : ''), '按钮未显示目标库名和图标')
+    const low = Math.min(first.width, last.width), high = Math.max(first.width, last.width)
+    const between = frames.filter(f => f.width > low + 1 && f.width < high - 1)
+    if (reduced) {
+      assert(!between.length && frames.every(f => f.titleOpacity > .99 && f.iconOpacity > .99 &&
+        (f.selected !== file || f.library === target)), '减少动态时知识库按钮应随标签立即就位')
+    } else {
+      if (first.compact && high - low > 8) assert(between.length, '短库名与长库名切换时按钮宽度瞬变')
+      for (const [label, value] of [['library', 'titleOpacity'], ['icon', 'iconOpacity']]) {
+        const fading = f => f[value] > .02 && f[value] < .96
+        assert(frames.some(f => f[label] === first[label] && fading(f)), scenario + ' 旧' + label + '应有退场')
+        assert(frames.some(f => f[label] === last[label] && fading(f)), scenario + ' 新' + label + '应有入场')
+      }
+    }
   }
   async function setFilesOpen(open) {
     await ev(`const toggle = document.querySelector('.sidebar-toggle')
@@ -156,7 +184,10 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
     await capture(files[1])
     await capture(files[0])
     await checkCompactTitleGap(390)
+    await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion', value:'reduce'}]})
+    await capture(files[1], true)
   } finally {
+    await send('Emulation.setEmulatedMedia', {features:[]})
     await send('Emulation.setTouchEmulationEnabled', {enabled:false})
     await send('Emulation.clearDeviceMetricsOverride')
   }

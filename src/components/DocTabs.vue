@@ -682,17 +682,24 @@ function onAux(e, file) {
   text-overflow: clip;
   white-space: nowrap;
 }
+/* Size both labels from their visible text. Percent caps here made the
+   button reserve space for the full path before the source was ellipsized. */
+.has-context .doc-tab-main {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, max-content);
+  justify-content: start;
+}
+.has-context .doc-tab-main:has(> .content-icon) { grid-template-columns: 16px; }
 .doc-tab-context {
   min-width: 0;
-  flex-shrink: 0;
-  max-width: min(7em, 45%);
+  max-width: 9em;
   font-size: 10.5px;
   color: var(--c-sub);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.has-context .doc-tab-name { min-width: min(4em, 45%); }
 .doc-tab-dot {
   position: absolute;
   inset-inline-end: 3px;
@@ -715,7 +722,7 @@ function onAux(e, file) {
 }
 .doc-tab-main { border-radius: inherit; }
 @media (max-width:480px) {
-  .doc-tabs.is-topbar-tabs .doc-tab-main { padding-inline:6px; }
+  .doc-tabs.is-topbar-tabs .doc-tab-main { padding-inline:6px 10px; }
   .doc-tabs.is-topbar-tabs .doc-tab-x { margin-inline-end:4px; }
 }
 
