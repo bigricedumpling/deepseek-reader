@@ -132,6 +132,23 @@ export async function verifyNavigationMotion({send, ev, root, appUrl, sleep}) {
     assert(pinned.error<1, '置顶时底色离开了选中行 '+JSON.stringify(pinned))
     const folder = '.cat-row[data-path="' + lib + '/00-资料"] .folder-toggle'
     const current = '.cat-row[data-path="' + lib + '/99-阅读"] .folder-toggle'
+    const folderButton = 'document.querySelector(' + JSON.stringify(folder) + ')'
+    const rows = 'document.querySelectorAll(' + JSON.stringify('.doc-tree-nav .doc-row[data-file^="' + lib + '/00-资料/"]') + ')'
+    if (await ev('return ' + folderButton + '.ariaExpanded === "true"')) await click(folder)
+    await ready(rows + '.length === 0')
+    await click(folder)
+    await ready(rows + '.length === 5 && ' + folderButton + '.ariaExpanded === "true"')
+    await click(folder)
+    await ready(rows + '.length === 0')
+
+    await click('.tree-search-trigger')
+    await ready('document.activeElement.matches(\'input[aria-label="搜索文档名或路径"]\')')
+    await send('Input.insertText', { text: '4.md' })
+    await ready(rows + '.length === 1 && ' + rows + '[0].dataset.file === ' + JSON.stringify(lib + '/00-资料/4.md'))
+    assert.equal(await ev('return ' + folderButton + '.ariaExpanded'), 'true', '文件名搜索应展开匹配路径')
+    for (const type of ['keyDown','keyUp']) await send('Input.dispatchKeyEvent', { type, key:'Escape', code:'Escape' })
+    await ready(folderButton + '.ariaExpanded === "false" && ' + rows + '.length === 0')
+
     for (const selector of [folder, current]) {
       if (await ev('return document.querySelector(' + JSON.stringify(selector) + ').getAttribute("aria-expanded")==="false"')) await click(selector)
     }

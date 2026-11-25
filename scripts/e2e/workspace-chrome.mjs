@@ -34,7 +34,8 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
         const box = el => el.getBoundingClientRect()
         const titles = [...document.querySelectorAll('.kb-title-text')].filter(n => Number(getComputedStyle(n).opacity) > .15 && n.checkVisibility())
         frames.push({
-          strip:box(strip).left, more:box(more).left, first:box(tabs[0]).left + strip.scrollLeft,
+          viewport:innerWidth, strip:box(strip).left, more:box(more).left,
+          labels:tabs.map(tab => box(tab).left + strip.scrollLeft - box(strip).left),
           selected:tabPath(strip.querySelector('.doc-tab.is-active .doc-tab-main')),
           titles:titles.length, overlap:document.querySelector('.kb-title-label').getBoundingClientRect().right - document.querySelector('.sidebar-actions').getBoundingClientRect().left,
           outside:document.documentElement.scrollWidth > innerWidth
@@ -51,9 +52,15 @@ export async function verifyWorkspaceChrome({send, ev, root, appUrl, sleep}) {
   async function capture(file) {
     const frames = await ev('return await (' + track.toString() + ')(' + JSON.stringify(file) + ')')
     const range = key => Math.max(...frames.map(f => f[key])) - Math.min(...frames.map(f => f[key]))
-    const metrics = {strip:range('strip'),more:range('more'),first:range('first'),titles:Math.max(...frames.map(f=>f.titles))}
-    assert(metrics.strip <= 1 && metrics.more <= 1 && metrics.first <= 1, '切换知识库时左右控件挤动了标签栏')
-    assert(metrics.titles <= 1, '两个知识库名称在同一位置重影')
+    const scenario = `${frames[0].viewport}px 切换到 ${file}`
+    const stripDrift = range('strip'), moreDrift = range('more')
+    assert(stripDrift <= 1 && moreDrift <= 1,
+      `${scenario} 时顶栏控件移位，标签栏 ${stripDrift}px，更多菜单 ${moreDrift}px`)
+    for (const [index, origin] of frames[0].labels.entries()) {
+      const drift = Math.max(...frames.map(frame => Math.abs(frame.labels[index] - origin)))
+      assert(drift <= 1, `${scenario} 时第 ${index + 1} 个标签在滚动之外又移动了 ${drift}px`)
+    }
+    assert(frames.every(frame => frame.titles <= 1), '两个知识库名称在同一位置重影')
     assert(!frames.some(f => f.outside || f.overlap > 1), '顶栏溢出或标题压住操作按钮')
   }
   async function setFilesOpen(open) {

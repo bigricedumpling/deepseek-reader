@@ -88,7 +88,7 @@
         </div>
 
         <div class="tree-children" :inert="isCollapsed(node.path) && !query" :class="{ 'is-collapsed': isCollapsed(node.path) && !query }">
-          <div class="tree-children-inner">
+          <FolderContents :open="!isCollapsed(node.path) || !!query">
             <div v-if="tree.create && tree.create.parent === node.path" class="tree-create-row" :style="{ paddingLeft: `calc(28px + min(${depth * 11}px, 18%))` }">
               <component :is="tree.create.kind === 'doc' ? PhFilePlus : PhFolderSimplePlus" :size="14" />
               <input v-model="tree.create.value" class="tree-create-input" :placeholder="tree.create.kind === 'doc' ? '文档名称' : '文件夹名称'" @keydown="tree.createKey($event)" @blur="tree.createCommit()" />
@@ -113,7 +113,7 @@
             >
               空目录
             </p>
-          </div>
+          </FolderContents>
         </div>
       </div>
 
@@ -184,7 +184,7 @@
 function contextRow(e,kind,node){if(store.isGuest||e.target.closest('input,textarea,[contenteditable=true]'))return;e.preventDefault();e.stopPropagation();if(!batch.mode)tree.openMenu(kind,node,e)}
 
 import ContentIcon from './ContentIcon.vue'
-import { ref, computed, inject, nextTick, watch } from 'vue'
+import { ref, computed, defineComponent, h, inject, nextTick, watch } from 'vue'
 import { PhFolderSimple, PhCaretRight, PhFilePdf, PhFileHtml, PhDotsThree, PhCheck, PhPlus, PhFolderSimplePlus, PhFilePlus } from '../icons/remix'
 import { useDocsStore } from '../stores/docs'
 import { useFileManager } from '../composables/useFileManager'
@@ -213,6 +213,31 @@ function guestEditable(node) { return node.type === 'doc' && store.canEdit(node)
 /** 拖拽状态住在 Sidebar，递归层里直接用 */
 const tree = inject('tree')
 
+// Keep the grid and its current height while closing. Render document rows only
+// while the folder is open or its real CSS transition is still in progress.
+const FolderContents = defineComponent({
+  props: { open: Boolean },
+  setup(folder, { slots }) {
+    const inner = ref(null)
+    const mounted = ref(folder.open)
+    watch(() => folder.open, async (open, _, onCleanup) => {
+      if (open) {
+        mounted.value = true
+        return
+      }
+      let closing = true
+      onCleanup(() => { closing = false })
+      await nextTick()
+      if (!closing) return
+      const grid = inner.value?.parentElement
+      const transitions = grid?.getAnimations?.() || []
+      await Promise.allSettled(transitions.map(animation => animation.finished))
+      if (closing) mounted.value = false
+    })
+    return () => h('div', { ref: inner, class: 'tree-children-inner' }, mounted.value ? slots.default() : null)
+  }
+})
+
 /* ---------- 过滤与排序 ---------- */
 
 /**
@@ -224,9 +249,12 @@ function arrange(nodes, q) {
   for (const n of nodes || []) {
     // 目录是唯一的容器，其它（md、pdf）都是文件
     if (n.type === 'folder') {
+      if (!q) {
+        out.push(n)
+        continue
+      }
       const kids = arrange(n.children, q)
-      // 空目录也留着（磁盘上有就显示），搜索时才把没命中的目录收掉
-      if (kids.length || !q) out.push({ ...n, children: kids })
+      if (kids.length) out.push({ ...n, children: kids })
     } else if (!q || n.name.toLowerCase().includes(q) || String(n.file || '').toLowerCase().includes(q)) {
       out.push(n)
     }

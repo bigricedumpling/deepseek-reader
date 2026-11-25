@@ -37,7 +37,8 @@
           'is-last-tab': items[items.length - 1]?.file === t.file
         }"
       >
-        <span v-if="items.length > 1 && t.file === active" class="doc-tab-indicator" aria-hidden="true" />
+        <span v-if="items.length > 1 && (t.file === active || t.file === departingFile)"
+          class="doc-tab-indicator" :class="{ 'is-departing': t.file === departingFile && t.file !== active }" aria-hidden="true" />
         <span
           class="doc-drop-line"
           :class="{ 'is-visible': dropTarget?.file === t.file, 'is-after': dropTarget?.file === t.file && dropTarget.after }"
@@ -198,33 +199,80 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 let previousPill = null
 let sourceTab = null
 let indicatorAnimation = null
+const departingFile = ref(null)
+let departureAnimation = null
 function activePill() {
   return strip.value?.querySelector('.doc-tab.is-active:not(.tab-leave-active) .doc-tab-indicator')
 }
+function clearDeparture() {
+  departureAnimation?.cancel()
+  departureAnimation = null
+  departingFile.value = null
+}
 function stopIndicator() {
+  indicatorAnimation?.effect.target.classList.remove('is-stretching')
   indicatorAnimation?.cancel()
   indicatorAnimation = null
+  clearDeparture()
   sourceTab = null
 }
 function onMotionPreference() {
   if (reducedMotion.matches) stopIndicator()
 }
 
-watch(() => props.active, () => {
-  const pill = activePill()
-  // Read the actual rendered rectangle, including a still-running transition,
-  // before Vue moves the selection to a different tab.
-  previousPill = pill && {
+function readPill(pill) {
+  if (!pill) return null
+  const style = getComputedStyle(pill)
+  return {
     rect: pill.getBoundingClientRect(),
-    waist: parseFloat(getComputedStyle(pill).getPropertyValue('--tab-waist')) || 0
+    waist: parseFloat(style.getPropertyValue('--tab-waist')) || 0,
+    opacity: Number(style.opacity)
+  }
+}
+
+watch(() => props.active, (next, previous) => {
+  const pill = activePill()
+  previousPill = readPill(pill)
+  // Capture both visible ends before Vue changes their roles on a quick return.
+  if (previousPill && departingFile.value === next) {
+    previousPill.returning = readPill(strip.value.querySelector('.doc-tab-indicator.is-departing'))
   }
   stopIndicator()
   sourceTab = pill?.parentElement
+  if (pill && !reducedMotion.matches) departingFile.value = previous
 }, { flush: 'pre' })
 
 function fadeIndicator(pill) {
   stopIndicator()
   indicatorAnimation = pill.animate([{ opacity: 0 }, {}], { duration: 130, easing: 'ease-out' })
+}
+
+// A distant selection changes at its two endpoints. Keep each fill attached
+// to its own tab so neither scrolling nor closing moves a ghost across labels.
+function fadeAtEndpoints(pill, source, sourceVisible, direction) {
+  const old = sourceTab?.querySelector('.doc-tab-indicator.is-departing')
+  if (old && sourceVisible) {
+    const start = presentedFrame(old, source)
+    departureAnimation = old.animate([start, { ...start, opacity: 0 }],
+      { duration: 135, easing: 'ease-out', fill: 'forwards' })
+    const exit = departureAnimation
+    exit.onfinish = () => { if (departureAnimation === exit) clearDeparture() }
+  } else {
+    clearDeparture()
+  }
+  const start = source.returning ? presentedFrame(pill, source.returning)
+    : { opacity: 0, transform: `translateX(${-direction * 4}px) scale(.98, .96)` }
+  indicatorAnimation = pill.animate([start, { transform: 'none' }], { duration: 180, easing: 'ease-out' })
+}
+
+function presentedFrame(pill, pose) {
+  const base = pill.getBoundingClientRect()
+  if (!base.width || !base.height) return { opacity: pose.opacity }
+  const rect = pose.rect
+  return {
+    opacity: pose.opacity, transformOrigin: '0 0',
+    transform: `translate(${rect.left - base.left}px, ${rect.top - base.top}px) scale(${rect.width / base.width}, ${rect.height / base.height})`
+  }
 }
 
 // Closing a tab can select its successor in the same frame. Its slot is already
@@ -241,25 +289,28 @@ function followClosingSlot() {
 }
 
 function moveIndicator() {
-  const from = previousPill?.rect
-  const startWaist = previousPill?.waist || 0
+  const source = previousPill
   previousPill = null
+  const from = source?.rect
+  const startWaist = source?.waist || 0
   const host = strip.value
   const pill = activePill()
-  if (!from?.width || !pill || reducedMotion.matches || !pill.animate) return
+  if (!from?.width || !pill || reducedMotion.matches || !pill.animate) return clearDeparture()
   const to = pill.getBoundingClientRect()
-  if (!to.width || !to.height) return
+  if (!to.width || !to.height) return clearDeparture()
   if (followClosingSlot()) return
   const viewport = host.getBoundingClientRect()
   const inView = rect => rect.right > viewport.left + 1 && rect.left < viewport.right - 1
-  if (!inView(from) || !inView(to)) {
-    fadeIndicator(pill)
-    return
-  }
   const leftTravel = to.left - from.left
   const rightTravel = to.right - from.right
   const centerY = (from.top + from.bottom - to.top - to.bottom) / 2
   const travel = Math.max(Math.abs(leftTravel), Math.abs(rightTravel))
+  const nearLimit = Math.min(228, host.clientWidth * .7)
+  if (source.returning || !inView(from) || !inView(to) || travel > nearLimit || !tabReveal(host, pill.parentElement).near) {
+    fadeAtEndpoints(pill, source, inView(from), Math.sign(leftTravel + rightTravel))
+    return
+  }
+  clearDeparture()
   if (travel + Math.abs(centerY) + Math.abs(from.height - to.height) < 0.5 && !startWaist) return
 
   // The front extends early; the rear holds on longer. Bound each by the
@@ -284,14 +335,13 @@ function moveIndicator() {
       '--tab-waist': (startWaist * remaining + tension * 0.11) + 'px'
     }
   })
+  frames[0].opacity = source.opacity
   pill.classList.add('is-stretching')
   indicatorAnimation = pill.animate(frames, {
     duration: Math.min(350, 220 + travel * 0.35),
     easing: getComputedStyle(host).getPropertyValue('--tab-motion-ease').trim()
   })
-  const releaseContour = () => pill.classList.remove('is-stretching')
-  indicatorAnimation.onfinish = releaseContour
-  indicatorAnimation.oncancel = releaseContour
+  indicatorAnimation.onfinish = () => pill.classList.remove('is-stretching')
 }
 
 onMounted(() => reducedMotion.addEventListener('change', onMotionPreference))
@@ -330,26 +380,68 @@ function updateFade() {
   fadeRight.value = scrollable && el.scrollLeft + el.clientWidth < contentRight - 2
 }
 
-/** 把当前这篇滚进可视区：标签开多了之后，切过去要能看见自己在哪 */
-function scrollActiveIntoView(smooth = true) {
-  const el = strip.value
-  if (!el) return
-  const tab = el.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
-  if (!tab) return
+// Track only a reveal we started, so changing selection can stop it while
+// ordinary wheel and touch scrolling remain under the user's control.
+let revealWatch = null
+onBeforeUnmount(() => revealWatch?.abort())
+
+function tabReveal(el, tab) {
   const left = tab.offsetLeft
   const right = left + tab.offsetWidth
   const pad = Math.max(0, Math.min(10, (el.clientWidth - tab.offsetWidth) / 2))
   let target = el.scrollLeft
   if (left - pad < target) target = Math.max(0, left - pad)
   else if (right + pad > target + el.clientWidth) target = right + pad - el.clientWidth
-  if (target !== el.scrollLeft) {
-    el.scrollTo({ left: target, behavior: scrollBehavior(smooth && Math.abs(target - el.scrollLeft) <= el.clientWidth) })
+  target = Math.min(target, Math.max(0, el.scrollWidth - el.clientWidth))
+  const distance = Math.abs(target - el.scrollLeft)
+  return { target, distance, near: distance <= Math.min(96, el.clientWidth / 3) }
+}
+function scrollActiveIntoView(smooth = true) {
+  const el = strip.value
+  const tab = el?.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
+  if (!tab) return
+  const { target, distance, near } = tabReveal(el, tab)
+  if (distance < .5 && !(smooth && revealWatch)) return
+
+  revealWatch?.abort()
+  revealWatch = null
+  const behavior = scrollBehavior(smooth && distance >= .5 && near)
+  if (behavior === 'smooth') {
+    const controller = new AbortController()
+    revealWatch = controller
+    const release = () => {
+      controller.abort()
+      if (revealWatch === controller) revealWatch = null
+    }
+    const options = { signal: controller.signal, passive: true }
+    el.addEventListener('scrollend', () => {
+      if (Math.abs(target - el.scrollLeft) < 1) release()
+    }, options)
+    el.addEventListener('wheel', release, options)
+    el.addEventListener('touchmove', release, options)
+    reducedMotion.addEventListener('change', () => {
+      if (reducedMotion.matches) {
+        el.scrollTo({ left: target, behavior: 'instant' })
+        release()
+      }
+    }, options)
   }
+  // An instant request at the current position also interrupts an old native
+  // smooth scroll when the newly selected tab is already in view.
+  el.scrollTo({ left: target, behavior })
 }
 
+// Let TransitionGroup finish measuring tab positions before moving its scrollport.
+// Otherwise a scroll can look like a reorder and animate every label a second time.
+function revealAfterLayout(smooth) {
+  const file = props.active
+  nextTick(() => {
+    if (file === props.active) scrollActiveIntoView(smooth)
+  })
+}
 watch(() => props.active, () => {
   moveIndicator()
-  scrollActiveIntoView()
+  revealAfterLayout(true)
 }, { flush: 'post' })
 
 let observer
@@ -367,7 +459,7 @@ watch(() => props.items, (items, previous) => {
   if (sameLayout) return
   observeLayout()
   measure()
-  if (items.length > previous.length && previous.some(tab => tab.file === props.active)) scrollActiveIntoView(false)
+  if (items.length > previous.length && previous.some(tab => tab.file === props.active)) revealAfterLayout(false)
 }, { flush: 'post' })
 
 let previousStripWidth = 0

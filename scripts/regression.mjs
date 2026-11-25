@@ -352,6 +352,9 @@ try {
    * 但它原本保护的东西还在：改完名不能把未保存的改动弄丢。
    * 这条直接验证那个不变量——store.renameDoc 会把缓存键搬到新路径，dirty 应当保持。
    */
+  const renameFolder = 'document.querySelector(\'.cat-row[data-path="内容/分类甲"] .folder-toggle\')'
+  if (await ev('return ' + renameFolder + '.ariaExpanded === "false"')) await ev(renameFolder + '.click()')
+  await waitForPage("document.querySelector('.doc-row[data-file=\"内容/分类甲/文档二.md\"]')")
   r = await ev(`const s=window.__reader; s.updateContent('# x\\n\\n又改了\\n')
     await new Promise(x=>setTimeout(x,300))
     const row = [...document.querySelectorAll('.doc-row')].find(x=>x.textContent.includes('文档二'))
