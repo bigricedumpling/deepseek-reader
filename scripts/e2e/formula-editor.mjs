@@ -17,9 +17,18 @@ export async function runFormulaEditor({ send, ev, root, appUrl, sleep }) {
     for (let n = 0; n < 70; n++) { if (await read()) return; await sleep(100) }
     throw Error('等待公式状态超时：' + read.toString())
   }
-  async function open() {
-    await send('Page.navigate', { url: new URL('doc/内容/公式编辑?lib=内容', appUrl).href })
-    await until(() => ev('return window.__baseline?.includes("尾段") && !!window.__fold.view()'))
+  async function open(name = '公式编辑') {
+    // Disk writes finish before the client receives its save acknowledgement.
+    // Wait for both sides before exercising a real browser navigation.
+    await until(() => ev('return !window.__reader?.isDirty && !window.__reader?.saving'))
+    const previousPage = await ev('return performance.timeOrigin')
+    await send('Page.navigate', { url: new URL('doc/内容/' + name + '?lib=内容', appUrl).href })
+    const target = JSON.stringify('内容/' + name + '.md')
+    const heading = JSON.stringify(name === '分栏公式' ? '# 分栏' : '# 测试公式')
+    await until(() => ev(`return performance.timeOrigin !== ${previousPage}
+      && window.__reader?.currentPath === ${target}
+      && window.__baseline?.trimStart().startsWith(${heading})
+      && window.__baseline.includes('尾段') && !!window.__fold?.view()`))
   }
   async function clickFormula(value, keyboard = false) {
     const found = await ev(`const node = [...document.querySelectorAll('.ProseMirror [data-math-display]')].find(node => node.dataset.value === ${JSON.stringify(value)})
@@ -121,18 +130,14 @@ export async function runFormulaEditor({ send, ev, root, appUrl, sleep }) {
     '{"version":1, "columns":["左 $a_i$","右 \\\\[b_j\\\\]"],"custom":"保留"}', '~~~~', '', '尾段', ''
   ].join('\n')
   fs.writeFileSync(columnsFile, columnsSource)
-  const openColumns = async () => {
-    await send('Page.navigate',{url:new URL('doc/内容/分栏公式?lib=内容',appUrl).href})
-    await until(() => ev("return window.__baseline?.startsWith('# 分栏') && !!window.__fold?.view()"))
-  }
-  await openColumns()
+  await open('分栏公式')
   assert(await ev("return document.querySelector('.crepe-host').getBoundingClientRect().width>0"))
   assert.deepEqual(await ev("return [...document.querySelectorAll('.reader-columns [data-math-display]')].map(n=>n.dataset.value)"),['a_i','b_j'])
   await clickFormula('a_i')
   await typeFormula('a_j'); await apply()
   await until(() => fs.readFileSync(columnsFile,'utf8').includes('$a_j$'))
   assert.equal(fs.readFileSync(columnsFile,'utf8'), columnsSource.replace('$a_i$', '$a_j$'))
-  await openColumns()
+  await open('分栏公式')
   assert.deepEqual(await ev("return [...document.querySelectorAll('.reader-columns [data-math-display]')].map(n=>n.dataset.value)"),['a_j','b_j'])
   console.log('PASS: editor formula source, display, labels, invalid input, cancel, undo, toolbar/slash/typed input, disk save and reopen')
 }
