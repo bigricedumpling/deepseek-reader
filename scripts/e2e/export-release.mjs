@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { unzipSync, strFromU8 } from 'fflate'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -60,12 +61,29 @@ try {
     '| Column | Value |\n| --- | --- |\n| TableCell | 42 |\n' + Array.from({length: 70}, (_, i) => '| Cell' + (i + 1) + ' | Data |').join('\n'),
     '~~~js\nconst codeMarker = 42\n' + Array.from({length: 130}, (_, i) => '// CodeLine' + (i + 1)).join('\n') + '\n~~~', 'Formula $x^2+y^2=z^2$.', ...paragraphs, 'LAST-PAGE',
   ].join('\n\n') + '\n'
+  const mathematics = [
+    'Before $x^2$ after and `$literal$`.',
+    '$$a=b$$ (7)',
+    String.raw`$$x=y\tag{8}$$ (8)`,
+    String.raw`$$\frac{1}{\sqrt{x^2+1}}=\int_0^1 t^2\,dt$$`,
+    String.raw`$$\begin{pmatrix}1&2\\3&4\end{pmatrix}$$`,
+    '$$\\text{FIRSTTERM}+' + '123456+'.repeat(17) + '\\text{LASTTERM}$$',
+    '~~~reader-columns\n' + JSON.stringify({ version: 1, columns: [
+      '~~~reader-block\n' + JSON.stringify({ version: 1, type: 'callout', content: 'Nested $a_1$' }) + '\n~~~',
+      'Other column',
+    ] }) + '\n~~~',
+  ].join('\n\n')
   const source = path.join(temp, 'source.md')
   fs.writeFileSync(source, markdown)
   const { file } = await api('POST', 'import-workspace-doc', {
     name: 'Report', dir: 'Samples', reference: source, workspace: temp, content: markdown,
     assets: [{ reference: './figure.png', mime: 'image/png', base64: png.toString('base64') }],
   })
+  const meta = await api('GET', 'metadata?path=' + encodeURIComponent(file))
+  const cover = { type: 'gradient', preset: 'pixel', height: 'small', animated: true,
+    colors: ['#18364a', '#77aaaa', '#e6cc9a'], seed: 17 }
+  const updated = await api('PUT', 'metadata', { path: file, revision: meta.revision, meta: { cover } })
+  assert.equal(updated.meta.cover.preset, cover.preset)
   const report = path.join(docs, file)
   const browser = process.env.CHROME_BIN || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome')
   chrome = spawn(browser, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-background-networking',
@@ -121,9 +139,28 @@ try {
   await waitFor('save to isolated workspace', () => fs.readFileSync(report, 'utf8').includes('SAVED-EDIT'))
   await send('Page.reload', { ignoreCache: true })
   await waitFor('reopened edit', () => evaluate("document.querySelector('.ProseMirror')?.textContent.includes('SAVED-EDIT')"))
+  // Exercise export independently of editor normalization, from the saved Markdown snapshot.
+  const beforeMath = await api('GET', 'doc?path=' + encodeURIComponent(file))
+  await api('PUT', 'doc', { path: file, revision: beforeMath.revision,
+    content: beforeMath.content.replace('SAVED-EDIT', () => 'SAVED-EDIT\n\n' + mathematics) })
+  await send('Page.reload', { ignoreCache: true })
+  await waitFor('math document snapshot', () => evaluate("document.querySelector('.editor-shell')?.textContent.includes('LASTTERM')"))
   await clickExport('Markdown')
   await waitFor('Markdown download', () => fs.existsSync(path.join(downloads, 'Report.md')))
   assert.equal(fs.readFileSync(path.join(downloads, 'Report.md'), 'utf8'), fs.readFileSync(report, 'utf8'))
+  await clickExport('Markdown 和附件')
+  const bundle = path.join(downloads, 'Report.zip')
+  await waitFor('editable Markdown bundle', async () => {
+    const error = await evaluate("document.querySelector('.doc-notice')?.innerText")
+    if (error) throw Error(error)
+    return fs.existsSync(bundle)
+  })
+  const entries = unzipSync(fs.readFileSync(bundle))
+  const portable = strFromU8(entries['Report.md'])
+  assert(portable.includes('![Local figure](attachments/001.png)') && portable.includes('![Remote figure](attachments/002.png)'))
+  assert.deepEqual(Buffer.from(entries['attachments/001.png']), png)
+  assert.deepEqual(Buffer.from(entries['attachments/002.png']), png)
+  assert(portable.includes('SAVED-EDIT') && portable.includes('LASTTERM'))
   await clickExport('网页')
   const html = path.join(downloads, 'Report.html')
   await waitFor('HTML download', async () => {
@@ -149,7 +186,20 @@ try {
   assert.deepEqual(Array.from(paper.matchAll(/CodeLine(\d+)/g), m => Number(m[1])), Array.from({length: 130}, (_, i) => i + 1))
   assert.deepEqual(Array.from(paper.matchAll(/Cell(\d+)\s+Data/g), m => Number(m[1])), Array.from({length: 70}, (_, i) => i + 1))
   assert.equal(new Set([...sheets.join(' ').matchAll(/Print section\s+(\d+)/g)].map(m => Number(m[1]))).size, paragraphs.length)
+  assert.match(paper, /FIRSTTERM/)
+  assert.match(paper, /LASTTERM/)
+  const bbox = execFileSync(process.env.PDFTOTEXT_BIN || 'pdftotext', ['-bbox', pdfPath, '-'], { encoding: 'utf8' })
+  const formulaPage = bbox.split('<page ').find(page => page.includes('LASTTERM'))
+  const pageWidth = Number(formulaPage.match(/width="([\d.]+)"/)?.[1])
+  const words = Array.from(formulaPage.matchAll(/<word xMin="([\d.-]+)"[^>]* xMax="([\d.-]+)"[^>]*>([^<]*)<\/word>/g))
+  const ends = words.filter(word => /(?:FIRST|LAST)TERM/.test(word[3]))
+  assert.equal(ends.length, 2, 'both extreme ends of the long formula reach the print surface')
+  assert(ends.every(word => Number(word[1]) > 0 && Number(word[2]) < pageWidth), 'no formula ink extends beyond the page edges')
   cors = false
+  await clickExport('Markdown 和附件')
+  await waitFor('incomplete Markdown bundle rejected', () => evaluate("document.querySelector('.doc-notice')?.innerText.includes('无法打包附件')"))
+  assert.equal(fs.readdirSync(downloads).filter(file => file.endsWith('.zip')).length, 1)
+  await evaluate("document.querySelector('.doc-notice-close').click()")
   await clickExport('网页')
   await waitFor('named cross-origin failure', () => evaluate("document.querySelector('.doc-notice')?.innerText.includes('Remote figure')"))
   assert.equal(fs.readdirSync(downloads).filter(file => file.endsWith('.html')).length, 1)
@@ -164,10 +214,44 @@ try {
   await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 })
   await send('Page.navigate', { url: pathToFileURL(html).href })
   await waitFor('offline file', () => evaluate("location.protocol==='file:' && document.body?.textContent.includes('LAST-PAGE')"))
-  assert.equal(await evaluate("document.querySelectorAll('img').length"), 2)
+  assert.equal(await evaluate("document.querySelectorAll('img').length"), 3)
+  assert(await evaluate("document.querySelector('.page-cover.small img')?.naturalWidth > 100"))
+  assert(await evaluate("!document.querySelector('.page-cover canvas, .page-cover button')"))
+  const distinctColors = await evaluate(`(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 48
+    canvas.height = 16
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(document.querySelector('.page-cover img'), 0, 0, 48, 16)
+    return new Set(new Uint32Array(ctx.getImageData(0, 0, 48, 16).data.buffer)).size
+  })()`)
+  assert(distinctColors > 2, 'the offline cover retains its rendered artwork')
   assert(await evaluate("Array.from(document.images).every(i=>i.src.startsWith('data:image/') && i.complete && i.naturalWidth>0)"))
   assert(await evaluate("!!document.querySelector('math') && document.querySelector('table').textContent.includes('TableCell') && document.querySelector('pre code').textContent.includes('codeMarker')"))
-  console.log('PASS: isolated workflow, saved edit, byte-identical Markdown, offline HTML, two embedded images, CORS failure, ' + sheets.length + ' nonempty PDF pages, trash restore; browser ready ' + ready + ' ms at ' + slowdown + 'x CPU slowdown')
+  const math = await evaluate(`(() => {
+    const equations = [...document.querySelectorAll('math')]
+    const long = equations.find(eq => eq.textContent.includes('LASTTERM'))
+    const matrix = equations.find(eq => eq.querySelector('annotation')?.textContent.includes('begin{pmatrix}'))
+    return {
+      semantics: equations.every(eq => eq.querySelector('semantics > annotation[encoding="application/x-tex"]')),
+      fraction: !!document.querySelector('math mfrac msqrt'),
+      matrix: [...matrix.querySelectorAll('mtable mtr')].map(row => [...row.querySelectorAll('mtd')].map(cell => cell.textContent)),
+      number: document.querySelector('.math-block > .math-number')?.textContent,
+      nested: !!document.querySelector('.reader-column .reader-rich-callout math msub'),
+      taggedOnce: [...document.querySelectorAll('math mtext,.math-number')].filter(el => el.textContent === '(8)').length === 1,
+      literal: [...document.querySelectorAll('code')].some(c => c.textContent === '$literal$'),
+      inline: !!document.querySelector('p .export-math-inline math:not([display="block"])'),
+      longFit: !!long?.parentElement.style.getPropertyValue('--export-math-fit'),
+    }
+  })()`)
+  assert.deepEqual(math, { semantics: true, fraction: true, matrix: [['1','2'],['3','4']], number: '(7)', nested: true, taggedOnce: true, literal: true, inline: true, longFit: true })
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 800, deviceScaleFactor: 1, mobile: false })
+  assert(await evaluate(`(() => {
+    const block = [...document.querySelectorAll('.export-math-block')].find(el => el.textContent.includes('LASTTERM'))
+    return block.scrollWidth > block.clientWidth && block.getBoundingClientRect().right <= innerWidth
+      && getComputedStyle(block).overflowX === 'auto' && document.documentElement.scrollWidth <= innerWidth
+  })()`), 'long block math scrolls within its column in the offline file')
+  console.log('PASS: isolated workflow, saved edit, byte-identical Markdown, editable ZIP with attachments, offline HTML, embedded cover and two figures, CORS failure, ' + sheets.length + ' nonempty PDF pages, trash restore; browser ready ' + ready + ' ms at ' + slowdown + 'x CPU slowdown')
 } finally {
   socket?.close()
   await stop(chrome)

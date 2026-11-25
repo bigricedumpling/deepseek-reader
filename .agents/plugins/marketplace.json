@@ -1,0 +1,13 @@
+{
+  "name": "typocket",
+  "plugins": [
+    {
+      "name": "reader-workspace",
+      "source": {
+        "source": "local",
+        "path": "./plugins/reader-workspace"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -3,13 +3,13 @@
     <header class="kb-head">
       <img class="kb-logo" :src="logo" alt="" />
       <h1 class="kb-title">{{ title }}</h1>
-      <div class="kb-theme">
+      <div class="kb-theme" role="group" aria-label="外观">
         <button
           v-for="t in THEMES"
           :key="t.id"
           class="kb-theme-btn"
           :class="{ 'is-on': theme === t.id }"
-          :title="t.label"
+          :aria-pressed="theme === t.id"
           @click="pick(t.id)"
         >
           {{ t.label }}
@@ -17,9 +17,7 @@
       </div>
     </header>
 
-    <p class="kb-lead">点进去直接看，只读，不用登录。</p>
-
-    <div class="kb-list">
+    <div class="kb-list" :aria-busy="loading">
       <a v-for="lib in libs" :key="lib.href" class="kb-card" :href="lib.href">
         <div class="kb-card-top">
           <span class="kb-card-name">{{ lib.name }}</span>
@@ -52,21 +50,22 @@ const FALLBACK = [
   {
     name: `打开 ${BRAND_NAME}`,
     desc: '阅读、编辑和整理文档。',
-    href: '/',
+    href: API_BASE + '/',
     meta: ''
   }
 ]
 
 const THEMES = [
   { id: 'light', label: '浅色' },
-  { id: 'sepia', label: '护眼' },
+  { id: 'sepia', label: '柔和' },
   { id: 'dark', label: '深色' }
 ]
 
 const title = ref(BRAND_NAME)
-const libs = ref(FALLBACK)
+const libs = ref([])
+const loading = ref(true)
 const theme = ref(storageGet('reader.theme') || 'light')
-const logo = computed(() => storageGet('reader.brandLogo') || '__SITE_ICON__')
+const logo = computed(() => storageGet('reader.brandLogo') || document.querySelector('link[rel="icon"]')?.href || API_BASE + '/favicon.svg')
 
 function pick(id) {
   theme.value = id
@@ -80,15 +79,25 @@ onMounted(async () => {
     const res = await fetch(API_BASE + '/kb.json', { cache: 'no-store' })
     const data = await res.json()
     if (data && typeof data.title === 'string' && data.title) title.value = data.title
-    if (Array.isArray(data?.libs) && data.libs.length) libs.value = data.libs
+    if (Array.isArray(data?.libs)) libs.value = data.libs
   } catch {
-    /* 读不到就用内置的那一条，不白屏 */
+    // The plugin distribution omits the optional standalone catalog.
+  } finally {
+    if (!libs.value.length) libs.value = FALLBACK
+    loading.value = false
   }
 })
 </script>
 
 <style scoped>
+:global(body) {
+  margin: 0;
+  color: var(--c-text);
+  background: var(--c-surface);
+  font-family: var(--font-sans);
+}
 .kb {
+  box-sizing: border-box;
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
@@ -98,7 +107,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 34px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
 }
 .kb-logo {
   width: 30px;
@@ -106,7 +116,10 @@ onMounted(async () => {
   border-radius: var(--radius-control);
 }
 .kb-title {
-  font-family: var(--stack-serif, serif);
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: "Noto Serif SC", serif;
   font-size: 17px;
   font-weight: 600;
   margin: 0;
@@ -118,10 +131,15 @@ onMounted(async () => {
   gap: 4px;
 }
 .kb-theme-btn {
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 32px;
   padding: 3px 9px;
   border-radius: var(--radius-control);
-  font-size: 11.5px;
-  color: var(--c-faint);
+  font-size: 12px;
+  color: var(--c-sub);
   transition: background 0.15s ease, color 0.15s ease;
 }
 .kb-theme-btn:hover {
@@ -132,14 +150,14 @@ onMounted(async () => {
   background: var(--c-chip);
   color: var(--c-ink);
 }
-.kb-lead {
-  margin: 0 0 22px;
-  font-size: 13px;
-  line-height: 1.95;
-  color: var(--c-sub);
+.kb-card:focus-visible,
+.kb-theme-btn:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
 }
 .kb-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 .kb-card {
@@ -152,10 +170,18 @@ onMounted(async () => {
   color: inherit;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
-.kb-card:hover {
-  border-color: var(--c-line);
-  box-shadow: var(--c-pop-shadow);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .kb-card:hover {
+    box-shadow: var(--c-pop-shadow);
+    transform: translateY(-1px);
+  }
+}
+@media (pointer: coarse) {
+  .kb-theme-btn { min-width: 44px; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-card, .kb-theme-btn { transition: none; }
+  .kb-card:hover { transform: none; }
 }
 .kb-card-top {
   display: flex;
@@ -163,12 +189,15 @@ onMounted(async () => {
   gap: 8px;
   margin-bottom: 6px;
 }
+.kb-card-name, .kb-card-desc, .kb-card-meta { min-width: 0; overflow-wrap: anywhere; }
 .kb-card-name {
   font-size: 14.5px;
   font-weight: 600;
   color: var(--c-ink);
 }
 .kb-card-meta {
+  flex: none;
+  max-width: 40%;
   margin-left: auto;
   font-size: 11px;
   color: var(--c-faint);

@@ -1,17 +1,29 @@
-/* Elevation follows interaction, not individual components.
-   Attached controls: hairline + small shadow. Modal tasks: scrim + deeper shadow.
-   Hints: dark fill, no border or shadow. Inline cards: no elevation. */
-:root{--surface-menu-border:color-mix(in srgb,var(--c-ink) 9%,transparent);--surface-menu-shadow:0 2px 6px #00000008,0 8px 24px #0000000d;--surface-dialog-shadow:0 10px 30px #00000010,0 2px 8px #00000008}
-:is(.pop-menu,.side-menu,.select-menu-panel,.tree-menu,.identity-menu,.doc-search-panel,.bt-menu,.text-style-menu,.milkdown-toolbar,.milkdown-slash-menu){background:var(--c-pop)!important;border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-menu-shadow)!important}
-:is(.reader-dialog,.app-dialog,.access-dialog,.pick,.lib-manager,.transfer-dialog,.picker,.public-sharing-panel){background:var(--c-pop)!important;border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-dialog-shadow)!important}
+/* Solid menus and modal tasks use the same upper rim at different elevations. */
+:is(.pop-menu,.side-menu,.select-menu-panel,.tree-menu,.identity-menu,.doc-search-panel,.bt-menu,.text-style-menu,.milkdown-slash-menu){background:var(--c-pop)!important;border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-menu-shadow)!important}
+:is(.reader-dialog,.app-dialog,.access-dialog,.pick,.lib-manager,.transfer-dialog,.picker,.public-sharing-panel){background:var(--c-pop)!important;border:0!important;box-shadow:var(--surface-dialog-shadow)!important}
 :is(.app-backdrop,.reader-modal-shade,.access-backdrop,.transfer-backdrop,.public-sharing-backdrop){background:var(--c-overlay)!important;backdrop-filter:none}
 :is(.rail-toc-hint,.reader-tooltip){border:0!important;box-shadow:none!important;color:white!important}
 /* The tooltip owns one opaque fill in style.css: a translucent body over a solid tail
    would composite twice where they overlap and read as two different bubbles. */
 .rail-toc-hint{background:rgba(30,33,42,.82)!important}
 @media(max-width:820px){.lib-panel{background:var(--c-pop)!important;border:0!important;box-shadow:var(--surface-dialog-shadow)!important}.lib-modal-backdrop{background:var(--c-overlay)!important}}
-/* Anchored icon pickers do not dim the page, so they use the menu level. */
-.icon-picker.reader-dialog,.cover-picker.reader-dialog{border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-dialog-shadow)!important;border-radius:var(--radius-dialog)!important}
+/* The reading panel sits over both white paper and document covers. */
+.pop-menu.reading-panel {
+  --surface-menu-border: color-mix(in srgb, var(--c-ink) 8%, transparent);
+  --surface-menu-shadow: inset 0 1px 1px rgb(255 255 255 / .30), 0 1px 3px rgb(0 0 0 / .08), 0 6px 16px rgb(0 0 0 / .085);
+  --reading-choice-track: var(--c-field);
+  --reading-choice-face: var(--c-pop);
+  --reading-choice-shadow: 0 1px 2px rgb(0 0 0 / .065);
+}
+body[data-theme="dark"] .pop-menu.reading-panel {
+  --surface-menu-border: color-mix(in srgb, var(--c-ink) 16%, transparent);
+  --surface-menu-shadow: inset 0 1px 1px rgb(255 255 255 / .07), 0 2px 4px rgb(0 0 0 / .23), 0 7px 19px rgb(0 0 0 / .25);
+  --reading-choice-track: color-mix(in srgb, var(--c-pop) 83%, black);
+  --reading-choice-face: color-mix(in srgb, var(--c-pop) 91%, var(--c-ink));
+  --reading-choice-shadow: inset 0 1px 1px rgb(255 255 255 / .09), 0 1px 2px rgb(0 0 0 / .20);
+}
+/* Anchored pickers share menu elevation and have room for a wider radius. */
+.icon-picker.reader-dialog,.cover-picker.reader-dialog{border:1px solid var(--surface-menu-border)!important;box-shadow:var(--surface-menu-shadow)!important}
 .crepe-host{--crepe-shadow-1:var(--surface-menu-shadow);--crepe-shadow-2:var(--surface-menu-shadow)}
 /* 应用菜单按间距分组。 */
 :is(.type-section-break,.share-sep,.side-menu-sep,.side-menu hr,.tree-menu hr,.lib-manager hr,.reader-dialog hr){height:0!important;border:0!important;background:none!important;margin:10px 0!important}
@@ -36,7 +48,7 @@
   display: grid;
   place-items: center;
   padding: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-item);
 }
 :is(.reader-dialog,.public-sharing-panel) > header > .btn-icon:last-child { margin-left: auto; }
 /* Collapsed navigation must never paint over a floating control. */
@@ -47,7 +59,6 @@
 :is(.reader-tooltip,.rail-toc-hint){z-index:var(--layer-hint)!important}
 
 /* Compact utility surfaces share row rhythm and quiet, aligned action icons. */
-:is(.side-menu,.tree-menu,.select-menu-panel,.bt-menu,.text-style-menu,.document-actions,.milkdown-slash-menu){border-radius:12px!important}
 :is(.side-menu,.tree-menu,.document-actions) button{min-height:32px}
 :is(.side-menu,.tree-menu,.document-actions,.bt-menu) button>svg{width:16px;height:16px;flex-shrink:0;color:var(--c-sub)}
 :is(.tree-menu-item,.pop-item,.side-menu button,.select-menu-panel button):focus-visible{outline:none!important;background:var(--c-hover)!important;color:var(--c-ink)!important}
@@ -62,3 +73,20 @@
 }
 
 .select-menu-panel.in-dialog,.tree-menu,.picker-dismiss,.cover-dismiss{z-index:var(--layer-dialog-menu)!important}
+
+/* Task dialogs keep a usable close target and page margins on touch screens. */
+@media (max-width:480px) {
+  .reader-modal-shade:has(> :is(.activity-panel,.recovery-panel,.version-history,.document-info,.conflict-dialog)) { padding:12px; }
+}
+@media (pointer:coarse) {
+  :is(.activity-panel,.recovery-panel,.version-history,.document-info) > header > .btn-icon { width:44px; height:44px; }
+}
+
+@media (forced-colors:active) {
+  :is(.reader-dialog,.app-dialog,.pick,.transfer-dialog,.picker,.public-sharing-panel)[role=dialog],
+  :is(.pop-menu,.side-menu,.tree-menu,.rail-peek,.reader-image-tools,.cover-actions,.milkdown-toolbar,.milkdown-slash-menu) { outline: 1px solid CanvasText; }
+  :is(.tree-menu-item,.pop-item,.side-menu button,.select-menu-panel button):focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: -2px;
+  }
+}

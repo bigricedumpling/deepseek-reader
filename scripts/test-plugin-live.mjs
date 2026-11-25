@@ -50,7 +50,10 @@ try {
   const libraries = await callTool('reader_libraries')
   assert.deepEqual(libraries.data.libs.map(x => x.name), ['Course', 'Notes'])
   assert.equal((await callTool('reader_tree', { lib: 'Private' })).ok, false)
-  assert.equal((await callTool('reader_create', { dir: 'Notes', name: 'Second workspace', content: '# Note\n', requestId: 'second-note' })).ok, true)
+  const formulaNote = ['# Note', '', 'Inline $x_i^2$.', '', '$$', String.raw`\begin{pmatrix}1&2\\3&4\end{pmatrix}`, '$$', ''].join('\n')
+  const note = await callTool('reader_create', { dir: 'Notes', name: 'Second workspace', content: formulaNote, requestId: 'second-note' })
+  assert.equal(note.ok, true)
+  assert.equal((await callTool('reader_read', { id: note.data.id })).data.content, formulaNote)
 
   const created = await callTool('reader_create', {
     dir: 'Course', name: 'Lesson', content: '# Lesson\n', requestId: 'create-lesson',

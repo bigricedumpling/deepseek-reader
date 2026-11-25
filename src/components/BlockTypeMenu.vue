@@ -1,78 +1,85 @@
 <template>
-  <Teleport to="body">
-    <div
-      ref="el"
-      class="bt-menu ui-font"
-      @keydown="onKey"
-      :style="{ left: x + 'px', top: y + dy + 'px' }"
-      @mousedown.prevent
-      @contextmenu.prevent
-    >
-      <template v-for="g in groups" :key="g.label">
-        <p class="bt-group">{{ g.label }}</p>
-        <template v-if="g.label === '转为'">
+  <div
+    ref="el"
+    class="bt-menu ui-font"
+    @keydown="onKey"
+    :style="position"
+    @mousedown.prevent
+    @contextmenu.prevent
+  >
+    <template v-for="g in groups" :key="g.label">
+      <p class="bt-group">{{ g.label }}</p>
+      <template v-if="g.label === '转为'">
+        <button
+          v-if="paragraphOf(g)"
+          class="bt-item"
+          :class="{ 'is-on': paragraphOf(g).active }"
+          :aria-pressed="paragraphOf(g).active ? 'true' : undefined"
+          @click="emit('pick', paragraphOf(g).key)"
+        >
+          <span class="bt-icon">{{ paragraphOf(g).icon }}</span>
+          <span class="bt-label">{{ paragraphOf(g).label }}</span>
+          <PhCheck v-if="paragraphOf(g).active" :size="12" class="bt-check" />
+        </button>
+        <div class="bt-headings">
           <button
-            v-if="paragraphOf(g)"
-            class="bt-item"
-            :class="{ 'is-on': paragraphOf(g).active }"
-            :aria-pressed="paragraphOf(g).active ? 'true' : undefined"
-            @click="emit('pick', paragraphOf(g).key)"
-          >
-            <span class="bt-icon">{{ paragraphOf(g).icon }}</span>
-            <span class="bt-label">{{ paragraphOf(g).label }}</span>
-            <PhCheck v-if="paragraphOf(g).active" :size="12" class="bt-check" />
-          </button>
-          <div class="bt-headings">
-            <button
-              v-for="it in headingsOf(g)"
-              :key="it.key"
-              class="bt-item bt-heading-item"
-              :class="{ 'is-on': it.active }"
-              :aria-pressed="it.active ? 'true' : undefined"
-              @click="emit('pick', it.key)"
-            >
-              <span class="bt-icon">{{ it.icon }}</span>
-              <span class="bt-label">{{ shortLabel(it) }}</span>
-              <PhCheck v-if="it.active" :size="11" class="bt-check" />
-            </button>
-          </div>
-        </template>
-        <template v-else>
-          <button
-            v-for="it in g.items"
+            v-for="it in headingsOf(g)"
             :key="it.key"
-            class="bt-item"
+            class="bt-item bt-heading-item"
             :class="{ 'is-on': it.active }"
             :aria-pressed="it.active ? 'true' : undefined"
             @click="emit('pick', it.key)"
           >
             <span class="bt-icon">{{ it.icon }}</span>
-            <span class="bt-label">{{ it.label }}</span>
-            <PhCheck v-if="it.active" :size="12" class="bt-check" />
+            <span class="bt-label">{{ shortLabel(it) }}</span>
+            <PhCheck v-if="it.active" :size="11" class="bt-check" />
           </button>
-        </template>
+        </div>
       </template>
-    </div>
-  </Teleport>
+      <template v-else>
+        <button
+          v-for="it in g.items"
+          :key="it.key"
+          class="bt-item"
+          :class="{ 'is-on': it.active }"
+          :aria-pressed="it.active ? 'true' : undefined"
+          @click="emit('pick', it.key)"
+        >
+          <span class="bt-icon">{{ it.icon }}</span>
+          <span class="bt-label">{{ it.label }}</span>
+          <PhCheck v-if="it.active" :size="12" class="bt-check" />
+        </button>
+      </template>
+    </template>
+  </div>
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { PhCheck } from '../icons/remix'
 
 const el = ref(null)
-/* 菜单实际有多高，量出来再决定往上顶多少（比拍一个固定高度稳） */
-const dy = ref(0)
+const position = ref({ visibility: 'hidden' })
+function place() {
+  if (!el.value) return
+  position.value = {
+    left: Math.max(8, Math.min(props.x, innerWidth - el.value.offsetWidth - 8)) + 'px',
+    top: Math.max(8, Math.min(props.y, innerHeight - el.value.offsetHeight - 8)) + 'px'
+  }
+}
 onMounted(async () => {
-  const r = el.value?.getBoundingClientRect()
-  if (!r) return
-  const over = r.bottom - (window.innerHeight - 8)
-  if (over > 0) dy.value = -Math.min(over, Math.max(0, r.top - 8))
+  place()
+  window.addEventListener('resize', place)
   await nextTick()
   // Open on the current block, then let arrows walk the list.
   const target = el.value?.querySelector('.bt-item.is-on') || el.value?.querySelector('.bt-item')
-  target?.focus()
+  // Milkdown restores the editor selection on pointerup in the next frame.
+  requestAnimationFrame(() => {
+    if (target?.isConnected) target.focus({ preventScroll: true })
+  })
 })
+
+onBeforeUnmount(() => window.removeEventListener('resize', place))
 
 function onKey(event) {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
@@ -88,7 +95,7 @@ function onKey(event) {
   next.focus()
 }
 
-defineProps({
+const props = defineProps({
   x: { type: Number, required: true },
   y: { type: Number, required: true },
   /* [{ label, items: [{ key, label, icon, active }] }] */
@@ -119,7 +126,7 @@ function shortLabel(item) {
   scrollbar-color: var(--c-line) transparent;
   background: var(--c-pop, #fff);
   border: 1px solid var(--c-line-soft, #ececec);
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-tool);
   box-shadow: var(--c-pop-shadow);
 }
 .bt-group {
@@ -142,7 +149,7 @@ function shortLabel(item) {
   min-height: 27px;
   padding: 4px 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--c-text, #333);
   font-size: 12px;

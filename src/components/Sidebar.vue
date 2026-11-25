@@ -1,14 +1,14 @@
 <template>
   <!--
-    桌面端横向排抽屉栏与文档树；手机端抽屉列表改为弹窗。
+    桌面端横向排知识库栏与文档树；手机端知识库列表改为弹窗。
   -->
-  <div class="app-sidebar flex h-full flex-shrink-0">
+  <div class="app-sidebar flex h-full flex-shrink-0" :class="{ 'is-browsing-files': !collapsed }">
     <!-- 手机端切换列表才用遮罩；桌面保留并排的知识库列表。 -->
     <transition name="lib-backdrop">
       <button
-        v-if="libPanel.open && isMobileLibView()"
+        v-if="libPanel.open && !managerOpen && isMobileLibView()"
         class="lib-modal-backdrop"
-        aria-label="关闭抽屉弹窗"
+        aria-label="关闭知识库列表"
         @click="closeLibPanel"
       />
     </transition>
@@ -18,21 +18,21 @@
       <aside
         v-if="libPanel.open"
         class="lib-panel"
-        :class="{ 'is-tree-collapsed': collapsed }"
+        :class="{ 'is-tree-collapsed': collapsed, 'is-gallery-nav': managerOpen }"
         :style="{ '--lib-w': libWidth + 'px' }"
-        aria-label="抽屉列表"
+        aria-label="知识库列表"
         @click.stop="onLibPanelClick"
       >
         <div class="lib-panel-head">
-          <span class="lib-panel-title">抽屉</span>
-          <span class="lib-panel-head-acts">
-            <button class="icon-btn" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="排序抽屉" aria-label="排序抽屉" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu">
+          <span class="lib-panel-title">知识库</span>
+          <span v-if="!managerOpen" class="lib-panel-head-acts">
+            <button class="icon-btn" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="知识库排序" aria-label="知识库排序" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu">
               <PhSortAscending :size="15" />
             </button>
-            <button v-if="!isGuest" class="icon-btn lib-create-toggle" :class="{ 'is-open': libCreate.active }" title="新建抽屉" aria-label="新建抽屉" @mousedown.prevent @click.stop="createLib">
+            <button v-if="!isGuest" class="icon-btn lib-create-toggle" :class="{ 'is-open': libCreate.active }" title="新建知识库" aria-label="新建知识库" @mousedown.prevent @click.stop="createLib">
               <PhPlus :size="14" />
             </button>
-            <button class="icon-btn" title="关闭抽屉" aria-label="关闭抽屉" @click="closeLibPanel">
+            <button class="icon-btn" title="收起知识库列表" aria-label="收起知识库列表" @click="closeLibPanel">
               <PhCaretDoubleLeft :size="15" class="lib-close-desktop" />
               <PhX :size="15" class="lib-close-mobile" />
             </button>
@@ -41,39 +41,37 @@
 
         <input ref="libIconInput" type="file" accept="image/*" class="hidden" @change="onPickLibIcon" />
 
-        <div class="lib-panel-resize" title="拖动调整抽屉栏宽度" @pointerdown.stop="startLibResize" />
+        <div class="lib-panel-resize" aria-label="调整知识库栏宽度" @pointerdown.stop="startLibResize" />
 
-        <div ref="libListEl" class="lib-panel-list">
-          <span class="lib-row-blob" :class="{ 'is-moving': libBlobMoving, 'is-draft': currentLib === '草稿' }" :style="libBlobStyle" aria-hidden="true" />
-          <span class="lib-row-marker" :style="libMarkerStyle" aria-hidden="true" />
+        <div class="lib-panel-list">
           <TransitionGroup name="lib-row" tag="div" class="lib-row-stack">
-          <div v-if="libCreate.active" key="__create" class="lib-row lib-create-row">
+          <div v-if="libCreate.active && !managerOpen" key="__create" class="lib-row lib-create-row">
             <PhFolderSimplePlus :size="16" class="lib-create-icon" />
             <input
               ref="libCreateInput"
               v-model="libCreate.value"
               data-esc-local
               class="lib-row-input"
-              placeholder="新抽屉名称"
+              placeholder="知识库名称"
               spellcheck="false"
-              @keydown.enter.prevent.stop="commitCreateLib"
-              @keydown.esc.stop.prevent="cancelCreateLib"
+              @keydown="nameFieldKey($event, commitCreateLib, cancelCreateLib)"
               @blur="commitCreateLib"
             />
           </div>
           <div
             v-for="lib in panelLibs"
             :key="lib.path"
+            :data-path="lib.path"
             class="lib-row"
-            :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿', 'is-dragging': libDrag.name === lib.name, 'is-drop-target': libDrag.over === lib.name && libDrag.name !== lib.name }"
+            :class="{ 'is-current': isRailCurrent(lib), 'is-draft': lib.name === '草稿', 'is-dragging': libDrag.name === lib.name, 'is-drop-target': libDrag.over === lib.name && libDrag.name !== lib.name }"
             role="button"
             tabindex="0"
             :draggable="libSort === 'manual' && !isGuest && !libDrag.hoverActions"
-            :aria-current="isCurrentLib(lib) ? 'true' : undefined"
+            :aria-current="isRailCurrent(lib) ? 'true' : undefined"
             :title="isGuest ? lib.name + '（' + (store.canEdit(lib) ? '可编辑' : '只读') + '）' : lib.name"
-            @click="goLib(lib)"
-            @keydown.enter.self.prevent="goLib(lib)"
-            @keydown.space.self.prevent="goLib(lib)"
+            @click="selectRailLibrary(lib)"
+            @keydown.enter.self.prevent="selectRailLibrary(lib)"
+            @keydown.space.self.prevent="selectRailLibrary(lib)"
             @contextmenu="libContext($event,lib)"
             @pointerdown="onLibRowPointerDown"
             @dragstart.stop="startLibDrag(lib, $event)"
@@ -81,10 +79,13 @@
             @drop.prevent="dropLib(lib)"
             @dragend="endLibDrag"
           >
-            <button class="lib-icon-btn" :disabled="isGuest" title="更换图标" aria-label="更换抽屉图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" class="lib-row-icon" :value="lib.icon" /><PhFolderSimple v-else class="lib-row-icon lib-icon-placeholder" :size="16" /></button>
+            <Transition name="row-selection">
+              <span v-if="isRailCurrent(lib)" class="lib-row-blob" :class="{ 'is-draft': lib.name === '草稿' }" aria-hidden="true"><span class="lib-row-marker" /></span>
+            </Transition>
+            <button class="lib-icon-btn" :disabled="isGuest" :title="isGuest ? undefined : '更换图标'" :aria-label="isGuest ? undefined : '更换知识库图标'" :aria-hidden="isGuest || undefined" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" class="lib-row-icon" :value="lib.icon" /><PhFolderSimple v-else class="lib-row-icon lib-icon-placeholder" :size="16" /></button>
             <div class="lib-row-body">
               <input
-                v-if="!isGuest && renaming === lib.name"
+                v-if="!managerOpen && !isGuest && renaming === lib.name"
                 ref="renameInput"
                 data-esc-local
                 class="lib-row-input"
@@ -92,8 +93,7 @@
                 spellcheck="false"
                 @click.stop
                 @input="renameText = $event.target.value"
-                @keydown.enter.prevent.stop="commitRename(lib)"
-                @keydown.esc.stop.prevent="cancelRename"
+                @keydown="nameFieldKey($event, () => commitRename(lib), cancelRename)"
                 @blur="commitRename(lib)"
               />
               <template v-else>
@@ -103,102 +103,127 @@
             </div>
             <div v-if="!isGuest" class="lib-row-actions" @pointerenter="libDrag.hoverActions = true" @pointerleave="libDrag.hoverActions = false">
               <button class="icon-btn xs lib-more" :class="{ 'is-active': tree.menu.kind === 'lib' && tree.menu.node?.name === lib.name }" :aria-expanded="tree.menu.kind === 'lib' && tree.menu.node?.name === lib.name" title="更多操作" aria-label="更多操作" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="16" weight="bold" /></button>
-              <button class="icon-btn xs lib-expand" :class="{ 'is-hidden': !collapsed }" :tabindex="collapsed ? undefined : -1" :aria-hidden="!collapsed" title="展开目录" aria-label="展开目录" @click.stop="openLibTree(lib)"><PhCaretRight :size="13" /></button>
+              <button v-if="!managerOpen" class="icon-btn xs lib-expand" :class="{ 'is-hidden': !collapsed }" :tabindex="collapsed ? undefined : -1" :aria-hidden="!collapsed" title="展开目录" aria-label="展开目录" @click.stop="openLibTree(lib)"><PhCaretRight :size="13" /></button>
             </div>
           </div>
           </TransitionGroup>
         </div>
         <div class="lib-panel-footer">
-          <button v-if="!isGuest" class="icon-btn xs" title="管理抽屉" aria-label="管理抽屉" @click.stop="openManager"><PhSquaresFour :size="16" weight="regular" /></button>
+          <button v-if="!isGuest" type="button" class="icon-btn" ref="shelfTrigger" :data-tooltip="shelfTriggerLabel" :aria-label="shelfTriggerLabel" :aria-current="managerOpen && !shelfLevel.path ? 'page' : undefined" aria-controls="drawer-gallery-page" @click.stop="toggleManager"><PhSquaresFour :size="16" weight="regular" /></button>
         </div>
       </aside>
     </transition>
     </Teleport>
 
 
-    <Teleport to="body">
-      <transition name="lib-backdrop"><button v-if="managerOpen" class="lib-manager-backdrop" aria-label="关闭抽屉管理" @click="managerOpen=false" /></transition>
-      <transition name="lib-manager">
-        <section ref="managerDialog" tabindex="-1" v-if="managerOpen" class="lib-manager" role="dialog" aria-modal="true" :aria-label="isGuest ? '浏览抽屉' : '管理抽屉'">
-          <header class="lib-manager-head"><span class="lib-manager-head-actions"><button v-if="!isGuest" class="icon-btn lib-create-toggle" :class="{ 'is-open': libCreate.active }" aria-label="新建抽屉" @mousedown.prevent @click="createLib"><PhPlus :size="17" /></button><button class="icon-btn" aria-label="关闭抽屉管理" @click="managerOpen=false"><PhX :size="17" /></button></span></header>
-          <p v-if="!isGuest && libPanel.libs.every(lib => !lib.docs)" class="library-welcome">把值得保留的工作资料收进抽屉，也可以直接新建文档。</p>
-          <div class="lib-manager-tools">
-            <input v-model.trim="libQuery" class="lib-manager-search" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus />
-            <button class="icon-btn lib-manager-sort" :class="{ 'is-active': tree.menu.kind === 'lib-sort' }" title="排序抽屉" aria-label="排序抽屉" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu"><PhSortAscending :size="16" /></button>
+    <Teleport to="#workspace-gallery-slot">
+        <section v-if="managerOpen || galleryPresent" id="drawer-gallery-page" ref="managerDialog" class="drawer-browser" :data-level="shelfLevel.path ? 'contents' : 'drawers'" aria-labelledby="drawer-browser-title" tabindex="-1">
+          <header class="drawer-page-inner drawer-toolbar">
+            <div class="drawer-location">
+              <button type="button" class="drawer-close" aria-label="返回文档" title="返回文档" :disabled="shelfOpening" @click="closeManager"><PhArrowLeft :size="18" aria-hidden="true" /></button>
+              <nav v-if="shelfLevel.path" class="drawer-breadcrumbs" aria-label="当前位置">
+                <template v-for="(level, index) in shelfLevels.slice(0, -1)" :key="level.path">
+                  <button type="button" :title="level.name" :disabled="shelfOpening" @click="shelfBack(index)">{{ level.name }}</button>
+                  <PhCaretRight :size="12" aria-hidden="true" />
+                </template>
+                <h1 id="drawer-browser-title" ref="shelfHeading" class="drawer-heading" tabindex="-1" :title="shelfLevel.name">{{ shelfLevel.name }}</h1>
+              </nav>
+              <h1 v-else id="drawer-browser-title" ref="shelfHeading" class="drawer-heading" tabindex="-1">文档</h1>
+            </div>
+            <label class="drawer-search">
+              <PhMagnifyingGlass :size="16" aria-hidden="true" />
+              <input v-model="libQuery" type="search" :placeholder="shelfSearchLabel" :aria-label="shelfSearchLabel" />
+            </label>
+            <div v-if="!shelfLevel.path" class="drawer-head-actions">
+              <button type="button" class="icon-btn drawer-sort" aria-label="知识库排序" title="排序" :aria-expanded="tree.menu.kind === 'lib-sort'" @click.stop="openLibSortMenu"><PhSortAscending :size="17" /></button>
+              <button v-if="!isGuest" type="button" class="drawer-new" aria-label="新建知识库" @mousedown.prevent @click="createLib"><PhPlus :size="17" aria-hidden="true" /><span>新建知识库</span></button>
+            </div>
+          </header>
+          <div ref="shelfScroll" class="drawer-scroll" :aria-busy="shelfLoading || !!pendingShelf">
+            <div :key="shelfLevel.path" class="drawer-page-inner" :data-step="shelfStep">
+              <div v-if="shelfError" class="drawer-status" role="alert">
+                <p>{{ shelfError }}</p><button v-if="shelfLoadError" type="button" class="drawer-retry" @click="retryShelf">重试</button>
+              </div>
+              <p v-if="shelfLoading" class="drawer-status" role="status">正在读取…</p>
+              <div v-else-if="!shelfLevel.path && !shelfLoadError" class="drawer-grid">
+                <div v-if="libCreate.active" class="drawer-card is-creating">
+                  <DrawerPocket :count="0" />
+                  <input ref="libCreateInput" v-model="libCreate.value" data-esc-local class="drawer-name-input" placeholder="知识库名称" aria-label="知识库名称" spellcheck="false"
+                    @keydown="nameFieldKey($event, commitCreateLib, cancelCreateLib)" @blur="commitCreateLib" />
+                </div>
+                <article v-for="lib in managerLibs" :key="lib.path" class="drawer-card" @contextmenu="libContext($event, lib)">
+                  <button type="button" class="drawer-card-main" :data-path="lib.path" :aria-label="lib.name" :aria-description="[lib.docs + ' 篇', shelfPreviews[lib.path]?.title].filter(Boolean).join('，')" :aria-current="isCurrentLib(lib) ? 'true' : undefined" :disabled="renaming === lib.name" @click="browseDrawer(lib)">
+                    <DrawerPocket :count="lib.docs" :preview="shelfPreviews[lib.path]" />
+                    <span class="drawer-card-label">
+                      <strong v-if="renaming !== lib.name" class="drawer-card-name"><ContentIcon v-if="lib.icon" :value="lib.icon" :size="16" /><span>{{ lib.name }}</span></strong>
+                      <span class="drawer-card-meta">{{ lib.docs }} 篇</span>
+                    </span>
+                  </button>
+                  <input v-if="renaming === lib.name" ref="renameInput" data-esc-local class="drawer-name-input" :value="renameText" :aria-label="'重命名' + lib.name" spellcheck="false"
+                    @input="renameText = $event.target.value" @keydown="nameFieldKey($event, () => commitRename(lib), cancelRename)" @blur="commitRename(lib)" />
+                  <button v-else-if="!isGuest" type="button" class="icon-btn drawer-card-more" :aria-label="lib.name + '的更多操作'" :aria-expanded="tree.menu.kind === 'lib' && tree.menu.node?.name === lib.name" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="17" /></button>
+                </article>
+                <p v-if="!managerLibs.length && !libCreate.active" class="drawer-status" role="status">{{ libQuery.trim() ? '没有匹配的知识库' : '还没有知识库' }}</p>
+              </div>
+              <div v-else-if="shelfLevel.path && !shelfLoadError" class="drawer-entries">
+                <button v-for="entry in shelfEntries" :key="entry.file || entry.path" type="button" class="drawer-entry" :data-path="entry.file || entry.path"
+                  :aria-current="entry.file && entry.file === store.currentPath ? 'page' : undefined" :disabled="shelfOpening" @click="browseEntry(entry)">
+                  <span class="drawer-entry-icon" aria-hidden="true">
+                    <ContentIcon v-if="entry.meta?.icon" :value="entry.meta.icon" :size="19" />
+                    <PhFolderSimple v-else-if="entry.type === 'folder'" :size="19" /><PhFilePdf v-else-if="entry.type === 'pdf'" :size="18" />
+                    <PhFileHtml v-else-if="entry.type === 'h5'" :size="18" /><PhFileText v-else :size="18" />
+                  </span>
+                  <span class="drawer-entry-name">{{ entry.name }}</span>
+                  <span v-if="entry.type !== 'doc'" class="drawer-entry-meta">{{ entry.type === 'folder' ? entry.children.length + ' 项' : entry.type === 'pdf' ? 'PDF' : 'HTML' }}</span>
+                  <PhCaretRight v-if="entry.type === 'folder'" class="drawer-entry-chevron" :size="14" aria-hidden="true" />
+                </button>
+                <div v-if="!shelfEntries.length" class="drawer-status" role="status">
+                  <p>{{ libQuery.trim() ? '没有匹配的文件或文件夹' : shelfLevels.length === 2 ? '这个知识库是空的' : '这个文件夹是空的' }}</p>
+                  <button v-if="!libQuery.trim() && shelfLevels.length === 2 && !isGuest" type="button" class="drawer-retry" :disabled="shelfOpening" @click="openShelfDocument()">新建文档</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <TransitionGroup name="manager-card" tag="div" class="lib-manager-list">
-            <div v-if="libCreate.active" key="__create" class="lib-manager-card lib-manager-create">
-              <PhFolderSimplePlus :size="20" class="lib-manager-create-icon" />
-              <input
-                ref="libCreateInput"
-                v-model="libCreate.value"
-                data-esc-local
-                class="lib-manager-rename"
-                placeholder="新抽屉名称"
-                spellcheck="false"
-                @keydown.enter.prevent.stop="commitCreateLib"
-                @keydown.esc.stop.prevent="cancelCreateLib"
-                @blur="commitCreateLib"
-              />
-            </div>
-            <div
-              v-for="lib in managerLibs"
-              :key="lib.path"
-              class="lib-manager-card"
-              :class="{ 'is-current': isCurrentLib(lib), 'is-draft': lib.name === '草稿' }"
-              role="button"
-              tabindex="0"
-              :aria-current="isCurrentLib(lib) ? 'true' : undefined"
-              :title="lib.name"
-              @click="openManagerLib(lib)"
-              @keydown.enter.self.prevent="openManagerLib(lib)"
-              @keydown.space.self.prevent="openManagerLib(lib)"
-              @contextmenu="libContext($event,lib)"
-            >
-              <button class="lib-icon-btn lib-manager-icon-btn" :disabled="isGuest" title="更换图标" aria-label="更换抽屉图标" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" :value="lib.icon" class="lib-manager-icon" /><PhFolderSimple v-else :size="20" class="lib-manager-icon lib-icon-placeholder" /></button>
-              <input
-                v-if="!isGuest && renaming === lib.name"
-                ref="renameInput"
-                data-esc-local
-                class="lib-manager-rename"
-                :value="renameText"
-                spellcheck="false"
-                @click.stop
-                @input="renameText = $event.target.value"
-                @keydown.enter.prevent.stop="commitRename(lib)"
-                @keydown.esc.stop.prevent="cancelRename"
-                @blur="commitRename(lib)"
-              />
-              <strong v-else>{{ lib.name }}</strong>
-              <span v-if="isCurrentLib(lib)" class="lib-manager-current" aria-label="当前抽屉"><PhCheck :size="13" weight="bold" /></span>
-              <span class="lib-card-meta">{{ lib.docs }} 篇</span>
-              <button v-if="!isGuest" class="lib-manager-card-more icon-btn xs" :class="{ 'is-active': tree.menu.kind === 'lib' && tree.menu.node?.name === lib.name }" :aria-label="lib.name + '的更多操作'" @click.stop="openLibMenu(lib, $event)"><PhDotsThree :size="16" weight="bold" /></button>
-            </div>
-            <p v-if="!managerLibs.length" key="__empty" class="lib-empty">没有匹配的抽屉</p>
-          </TransitionGroup>
-          <footer v-if="!isGuest" class="lib-manager-footer">
-            <span class="lib-manager-count">{{ managerLibs.length }} 个抽屉</span>
-          </footer>
         </section>
-      </transition>
     </Teleport>
 
+
     <Teleport to="body">
-      <Transition name="overlay" appear><div v-if="transfer.open" class="transfer-backdrop" @click.self="transfer.open=false">
-        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" :aria-label="transfer.mode === 'copy' ? '复制到抽屉' : '移动到抽屉'">
-          <p class="transfer-source">{{ transfer.path }}</p>
-          <div class="transfer-library-head"><span>目标抽屉</span><input v-model.trim="transferSearch" type="search" placeholder="搜索抽屉" aria-label="搜索目标抽屉" /></div>
-          <div class="transfer-library-grid" role="group" aria-label="选择目标抽屉">
-            <button v-for="lib in transferLibs" :key="lib.name" type="button" :class="{ 'is-on': transfer.lib === lib.name, 'is-draft': lib.name === '草稿' }" :aria-pressed="transfer.lib === lib.name" @click="onTransferLibSelect(lib.name)"><ContentIcon v-if="lib.icon" :value="lib.icon" :size="20" /><PhFolderSimple v-else :size="20" class="lib-icon-placeholder" /><span>{{ lib.name }}</span><small>{{ lib.docs }} 篇</small></button>
-            <p v-if="!transferLibs.length" class="lib-empty">没有匹配的抽屉</p>
+      <Transition name="overlay" appear><div v-if="transfer.open" class="transfer-backdrop" @click.self="closeTransfer">
+        <section ref="transferDialog" tabindex="-1" class="transfer-dialog" role="dialog" aria-modal="true" aria-labelledby="transfer-heading" aria-describedby="transfer-source">
+          <header>
+            <h2 id="transfer-heading">{{ transferAction }}{{ transfer.kind === 'folder' ? '文件夹' : '文档' }}</h2>
+            <p id="transfer-source" class="transfer-source" :title="transfer.path">
+              <span>{{ transfer.path.split('/').at(-1) }}</span>
+              <small>{{ transferSourceParent.split('/').join(' / ') }}</small>
+            </p>
+          </header>
+          <label class="transfer-library-head">
+            <PhMagnifyingGlass :size="16" aria-hidden="true" />
+            <input v-model.trim="transferSearch" type="search" placeholder="搜索知识库" aria-label="搜索目标知识库" :disabled="transfer.busy" />
+          </label>
+          <LibraryDestinationList v-if="transferLibs.length" class="transfer-library-grid" :libraries="transferLibs" :model-value="transfer.lib" :disabled="transfer.busy" @update:model-value="onTransferLibSelect" />
+          <p v-else class="transfer-empty" role="status">没有匹配的知识库</p>
+          <div v-if="transfer.lib && transfer.folders.length > 1" class="transfer-field">
+            <span>文件夹</span>
+            <SelectMenu v-model="transfer.dir" :options="transfer.folders" label="目标文件夹" :disabled="transfer.busy" />
           </div>
-          <div v-if="transfer.lib && transfer.folders.length > 1" class="transfer-field"><span>目标位置</span><SelectMenu v-model="transfer.dir" :options="transfer.folders.map(folder => ({ value: folder.path, label: folder.label }))" label="目标位置" /></div>
           <p v-if="transfer.error" class="transfer-error" role="alert">{{ transfer.error }}</p>
-          <div class="transfer-actions"><button @click="transfer.open=false">取消</button><button :disabled="transfer.busy || !transfer.dir" @click="confirmTransfer">{{ transfer.busy ? '处理中…' : '确定' }}</button></div>
+          <div class="transfer-actions">
+            <button type="button" :disabled="transfer.busy" @click="closeTransfer">取消</button>
+            <button type="button" :disabled="!canTransfer" @click="confirmTransfer">{{ transfer.busy ? '正在' + transferAction + '…' : transferAction }}</button>
+          </div>
         </section>
       </div></Transition>
     </Teleport>
-    <Teleport to="body"><Transition name="pop"><div v-if="transferToast.message" class="transfer-toast" role="status"><span>{{ transferToast.message }}</span><button v-if="transferToast.file" @click="viewTransferResult">查看</button><button aria-label="关闭提示" @click="transferToast.message=''">×</button></div></Transition></Teleport>
+    <Teleport to="body">
+      <Transition name="pop"><div v-if="transferToast.message" class="transfer-toast" @pointerenter="pauseTransferToast" @pointerleave="resumeTransferToast" @focusin="pauseTransferToast" @focusout="nextTick(resumeTransferToast)">
+        <span role="status">{{ transferToast.message }}</span>
+        <button v-if="transferToast.undo" :disabled="transferToast.busy" @click="undoTransfer">撤销移动</button>
+        <button v-else-if="transferToast.file" @click="viewTransferResult">查看</button>
+        <button aria-label="关闭提示" :disabled="transferToast.busy" @click="dismissTransferToast"><PhX :size="14" /></button>
+      </div></Transition>
+    </Teleport>
 
     <aside
     class="h-full flex flex-col flex-shrink-0 bg-[var(--c-panel)] select-none z-30 relative overflow-hidden transition-[width] duration-[220ms] ease-out"
@@ -212,21 +237,20 @@
     <Teleport to="#app-topbar-left" :disabled="!chromeCollapsed">
       <div class="side-header" :class="{ 'is-topbar': chromeCollapsed, 'is-compact': chromeCompact, 'is-collapsing': collapsed && !chromeCompact, 'is-expanding': chromeExpanding, 'is-merged': !collapsed }" @click.self="onCompactHeaderClick">
         <div class="kb-identity" :class="{ 'is-compact': collapsed }">
-          <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开抽屉列表'" :aria-label="collapsed ? '展开目录' : '打开抽屉列表'" @click.stop="onBrandLogoClick"><ContentIcon :value="currentLibIcon" :size="20" /></button>
+          <button class="brand-logo sm" :tabindex="collapsed ? -1 : undefined" :title="collapsed ? '展开目录' : '打开知识库列表'" :aria-label="collapsed ? '展开目录' : '打开知识库列表'" @click.stop="onBrandLogoClick"><CollectedDrawerIcon :value="currentLibIcon" :file="store.currentPath" :doc-id="store.currentNode?.id" :loaded="store.currentLoaded" /></button>
           <div class="kb-title-wrap min-w-0">
-            <!-- 两个标题叠在同一格交叉淡化：展开/收起时不会先消失再出现。 -->
-            <button type="button" class="brand-line kb-title-compact" :class="{ 'is-hidden': !collapsed }" :tabindex="collapsed ? undefined : -1" :title="collapsed ? '展开目录' : (currentLib || '抽屉')" @click.stop="onCompactTitleClick">
+            <!-- 同一个名称随侧栏改变可用宽度。只有聚焦改名时才由输入框绘制文字。 -->
+            <button type="button" class="brand-line kb-title-label" :tabindex="collapsed ? undefined : -1" :title="currentLib || '知识库'" :aria-label="'展开侧栏，' + (currentLib || '知识库')" :aria-hidden="!collapsed" @click.stop="onCompactTitleClick">
               <span class="kb-title-stack">
-                <Transition name="lib-title">
-                  <span :key="currentLib || '抽屉'" class="kb-title-text">{{ currentLib || '抽屉' }}</span>
-                </Transition>
+                <span aria-hidden="true" class="kb-title-measure">{{ libraryNamesForWidth }}</span>
+                <span :key="currentLib || '知识库'" class="kb-title-text">{{ currentLib || '知识库' }}</span>
               </span>
             </button>
-            <input v-model="brandTitle" class="brand-line brand-input is-title kb-title" :class="{ 'is-hidden': collapsed }" :tabindex="collapsed ? -1 : undefined" spellcheck="false" :readonly="isGuest || !currentLibEditable" :title="isGuest ? '' : '编辑抽屉名称'" @keydown.enter.prevent="$event.target.blur()" @change="onBrandEdited($event.target.value)" />
+            <input v-model="brandTitle" class="brand-line brand-input is-title kb-title" :disabled="collapsed" spellcheck="false" :readonly="isGuest || !currentLibEditable" :title="currentLib || '知识库'" :aria-label="isGuest || !currentLibEditable ? '当前知识库' : '编辑知识库名称'" :aria-hidden="collapsed" @keydown="onTitleKey" @change="onBrandEdited($event.target.value)" />
           </div>
         </div>
         <div class="sidebar-actions" :class="{ 'is-compact': collapsed, 'is-revealed': compactActionsHover }" @pointerenter="onCompactActionsEnter" @pointerleave="onCompactActionsLeave">
-          <button class="icon-btn kb-list-btn" :tabindex="collapsed ? -1 : undefined" :class="{ 'is-active': libPanel.open }" :title="'抽屉：' + (currentLib || '未选择') + '（共 ' + libPanel.libs.length + ' 个）'" :aria-label="'抽屉列表'" :aria-expanded="libPanel.open" @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"><PhStack :size="16" /></button>
+          <button class="icon-btn kb-list-btn" :class="{ 'is-active': libPanel.open }" title="切换知识库" aria-label="知识库列表" :aria-expanded="libPanel.open" @click.stop="libPanel.open ? (libPanel.open = false) : openLibPanel()"><PhStack :size="16" /></button>
           <button class="icon-btn sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :aria-expanded="!collapsed" @click.stop="toggleSidebar"><MorphIcon :icon="collapsed ? caretRight : caretLeft" :size="16" class="sidebar-chevron" spring="smooth" reduced-motion="user" /></button>
         </div>
       </div>
@@ -253,29 +277,30 @@
       </template>
       <span class="ml-auto flex items-center gap-0.5">
         <button
-          class="icon-btn"
-          :class="{ 'is-active': searchOpen }"
-          title="搜索当前抽屉文档"
+          ref="treeSearchTrigger" class="icon-btn tree-search-trigger"
+          :aria-expanded="searchOpen" :class="{ 'is-active': searchOpen }"
+          title="在当前知识库中搜索"
           @click="toggleSearch"
         >
           <PhMagnifyingGlass :size="15" />
         </button>
-        <div class="relative">
+        <div class="relative tree-sort-control">
           <button
-            class="icon-btn"
+            ref="sortTrigger" class="icon-btn"
             :class="{ 'is-active': menuOpen }"
-            title="分组与排序"
-            @click="menuOpen = !menuOpen"
+            title="文档列表选项" aria-label="文档列表选项"
+            aria-haspopup="menu" :aria-expanded="menuOpen"
+            @click="toggleSortMenu"
           >
             <PhSlidersHorizontal :size="15" />
           </button>
           <transition name="pop">
-            <div v-if="menuOpen" class="side-menu" @click.stop>
+            <div v-if="menuOpen" ref="sortPanel" class="side-menu" role="menu" aria-label="文档列表选项" @click.stop @keydown="navigateMenu" @keydown.esc.stop.prevent="closeSortMenu" @keydown.tab="closeSortMenu">
               <p class="side-menu-title">分组方式</p>
               <button
                 v-for="g in GROUPS"
                 :key="g.id"
-                class="side-menu-item"
+                class="side-menu-item" role="menuitemradio" :aria-checked="groupMode === g.id"
                 :class="{ 'is-on': groupMode === g.id }"
                 @click="setGroup(g.id)"
               >
@@ -287,13 +312,17 @@
               <button
                 v-for="s in SORTS"
                 :key="s.id"
-                class="side-menu-item"
+                class="side-menu-item" role="menuitemradio" :aria-checked="sortMode === s.id"
                 :class="{ 'is-on': sortMode === s.id }"
                 @click="setSort(s.id)"
               >
                 <span class="menu-label"><component :is="s.icon" :size="13" class="menu-icon" />{{ s.label }}</span>
                 <PhCheck v-if="sortMode === s.id" :size="12" weight="bold" />
               </button>
+              <template v-if="!isGuest && currentLibEditable && !batch.mode && nodes.length">
+                <div class="side-menu-sep" />
+                <button class="side-menu-item batch-start" role="menuitem" @click="startBatch"><span class="menu-label"><PhCheckSquare :size="13" class="menu-icon" />选择多项</span></button>
+              </template>
             </div>
           </transition>
         </div>
@@ -307,22 +336,28 @@
           ref="searchEl"
           v-model="query"
           class="w-full h-7 px-2.5 ui-round-control bg-[var(--c-field)] border border-[var(--c-line)] text-[12.5px] outline-none focus:border-[var(--c-accent)]/50 transition-colors"
-          placeholder="搜索文档名或路径"
-          @keydown.esc="closeSearch"
+          :placeholder="searchBody ? '搜索全部知识库正文' : '搜索文档名或路径'"
+          :aria-label="searchBody ? '搜索全部知识库正文' : '搜索文档名或路径'"
+          maxlength="200"
+          @keydown.esc="nameFieldKey($event, undefined, closeSearch)"
         />
+        <div v-if="!isGuest && !batch.mode" class="search-scopes" role="group" aria-label="搜索范围">
+          <button :aria-pressed="!searchBody" @click="searchBody=false; searchEl?.focus()">本库文件名</button>
+          <button :aria-pressed="searchBody" @click="searchBody=true; searchEl?.focus()">跨库正文</button>
+        </div>
       </div>
     </transition>
 
     <div v-if="batch.mode" class="batch-bar px-3 pb-2" role="group" aria-label="批量删除">
-      <span>已选 {{ batch.selected.size }} 项</span>
-      <button @click="batch.cancel()">取消</button>
-      <button class="batch-delete" :disabled="!batch.selected.size" @click="requestBatchDelete">删除</button>
+      <span role="status">已选 {{ batch.selected.size }} 项</span>
+      <button ref="batchCancel" @click="endBatch">取消</button>
+      <button class="batch-delete" :disabled="!batch.selected.size" @click="requestBatchDelete">移入回收站</button>
     </div>
 
     <!-- 拖拽条：调整侧栏宽度 -->
     <div
       v-if="!collapsed"
-      class="absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize group"
+      class="file-nav-resize absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize group"
       title="拖动调整侧栏宽度"
       @pointerdown="startResize"
     >
@@ -331,19 +366,23 @@
 
     <!-- 文档树 -->
     <!-- 落在空白处 = 挪到根目录；行和目录各自接住自己的落点 -->
-    <nav
+    <LibrarySearchResults v-if="searchOpen && searchBody && !isGuest && !batch.mode" :query="query" @pick="emit('find-result', $event)" />
+    <nav v-else
       ref="docNavEl"
       class="doc-tree-nav flex-1 min-h-0 overflow-y-auto no-scrollbar px-2.5 pb-4 pt-0.5"
       @dragover="tree.overRoot($event)"
+      @dragleave="tree.leaveNav($event)"
       @drop.prevent="tree.drop()"
       @contextmenu="onBlankTreeContext"
       @keydown="navigateRows"
     >
-      <span class="doc-row-blob" :class="{ 'is-moving': docBlobMoving }" :style="docBlobStyle" aria-hidden="true" />
+      <Teleport v-if="selectedDocRow" :to="selectedDocRow">
+        <Transition name="row-selection"><span v-if="showDocSelection" ref="docIndicator" class="doc-row-blob" aria-hidden="true" /></Transition>
+      </Teleport>
       <!-- 根目录就地新建：分组和单列表下都能用 -->
       <div v-if="tree.create && (tree.create.parent || '') === (currentLib || '')" class="tree-create-row">
         <component :is="tree.create.kind === 'doc' ? PhFilePlus : PhFolderSimplePlus" :size="14" />
-        <input v-model="tree.create.value" class="tree-create-input" :placeholder="tree.create.kind === 'doc' ? '文档名称' : '文件夹名称'" @keydown.enter.prevent="tree.createCommit()" @keydown.esc.prevent="tree.createCancel()" @blur="tree.createCommit()" />
+        <input v-model="tree.create.value" class="tree-create-input" :placeholder="tree.create.kind === 'doc' ? '文档名称' : '文件夹名称'" @keydown="tree.createKey($event)" @blur="tree.createCommit()" />
       </div>
       <template v-if="groupMode === 'tree'">
         <DocTree
@@ -379,7 +418,8 @@
           @contextmenu="onFlatDocContext($event, doc)"
         >
           <button v-if="batch.mode" class="batch-check" role="checkbox" :aria-label="'选择' + doc.name" :aria-checked="batch.checked(doc)" :disabled="!batch.canToggle(doc)" @click.stop="batch.toggle(doc)"><PhCheck v-if="batch.checked(doc)" :size="11" weight="bold" /></button>
-          <button class="doc-title" :title="isGuest ? doc.name + '（' + (store.canEdit(doc) ? '可编辑' : '只读') + '）' : doc.file"><ContentIcon v-if="doc.meta?.icon" :value="doc.meta.icon" :size="14" />
+          <input v-if="tree.edit?.kind === 'doc' && tree.edit.node.file === doc.file" v-select-name v-model="tree.edit.value" class="doc-title doc-edit" :aria-label="'重命名' + doc.name" @click.stop @keydown="tree.editKey($event)" @blur="tree.editCommit()" />
+          <button v-else class="doc-title" :title="isGuest ? doc.name + '（' + (store.canEdit(doc) ? '可编辑' : '只读') + '）' : doc.file"><ContentIcon v-if="doc.meta?.icon" :value="doc.meta.icon" :size="14" />
             <span class="truncate">{{ doc.name }}</span>
             <span v-if="doc.dir" class="doc-dir">{{ doc.dir }}</span>
           </button>
@@ -393,7 +433,7 @@
       </nav>
       <div v-if="!isGuest" class="workspace-tools-footer">
         <InstanceBadge />
-        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><transition name="pop"><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu"><button @click="openActivity"><PhGitDiff :size="16"/>Agent 改动<span v-if="activityUnread" class="activity-count">{{ activityUnread }}</span></button><button @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></transition></div>
+        <div class="workspace-tools"><button class="btn-icon" ref="toolsTrigger" title="更多工具" aria-label="更多工具" aria-haspopup="menu" :aria-expanded="footerTools" @click.stop="toggleFooterTools"><PhDotsThree :size="18" /></button><transition name="pop"><div v-if="footerTools" ref="toolsPanel" class="side-menu workspace-tools-menu" role="menu" aria-label="更多工具" @keydown="navigateMenu" @keydown.tab="footerTools = false; toolsTrigger?.focus()"><button role="menuitem" @click="openActivity"><PhGitDiff :size="16"/>Agent 改动<span v-if="activityUnread" class="activity-count">{{ activityUnread }}</span></button><button role="menuitem" @click="openRecovery('trash')"><PhTrash :size="16"/>回收站</button><button role="menuitem" @click="openRecovery('backup')"><PhArchive :size="16"/>备份与恢复</button></div></transition></div>
       </div>
     </div>
     </aside>
@@ -401,13 +441,13 @@
     <!-- 树里那个…的菜单：teleport 出去，免得被侧栏的滚动裁掉 -->
     <Teleport to="body">
       <Transition name="pop">
-      <div v-if="tree.menu.open" class="tree-menu" :class="{ 'is-measuring': !tree.menu.ready }" role="menu" :aria-label="tree.menu.kind === 'root' ? '侧栏操作' : tree.menu.kind === 'lib-filter' ? '筛选抽屉' : '条目操作'" :style="tree.menu.style" @keydown.esc.stop.prevent="tree.closeMenu()" @keydown.tab="tree.closeMenu()">
+      <div v-if="tree.menu.open" class="tree-menu" :class="{ 'is-measuring': !tree.menu.ready }" role="menu" :aria-label="tree.menu.kind === 'root' ? '侧栏操作' : tree.menu.kind === 'lib-sort' ? '知识库排序' : '条目操作'" :style="tree.menu.style" @keydown="navigateMenu" @keydown.esc.stop.prevent="tree.closeMenu()" @keydown.tab="tree.closeMenu()">
         <button
           v-for="it in menuItems"
           :key="it.id"
           class="tree-menu-item" role="menuitem"
           :disabled="it.disabled"
-          :title="it.hint || it.label"
+          :title="it.hint || undefined"
           :class="{ danger: it.danger }"
           @click="onMenuPick(it)"
         >
@@ -423,18 +463,20 @@
     <ActivityPanel :open="activityOpen" @close="closeActivity" @select="onActivitySelect" />
     <IconPicker v-if="iconPicking" :save="saveLibIcon" :anchor="libIconAnchor" :current="libIconTarget?.icon || ''" @close="iconPicking=false" />
     <!-- 新建 / 删除知识库的确认框：用站内统一那套，不用浏览器原生弹窗 -->
-    <AppDialog
-      :open="libDialog.open"
-      :mode="libDialog.danger ? 'confirm' : 'prompt'"
-      :title="libDialog.title"
-      :message="libDialog.message"
-      :placeholder="libDialog.placeholder"
-      :initial="libDialog.initial"
-      :confirm-text="libDialog.confirmText"
-      :danger="libDialog.danger"
-      @confirm="libDialog.onConfirm && libDialog.onConfirm($event)"
-      @cancel="closeLibDialog"
-    />
+    <Teleport to="body">
+      <AppDialog
+        :open="libDialog.open"
+        :mode="libDialog.danger ? 'confirm' : 'prompt'"
+        :title="libDialog.title"
+        :message="libDialog.message"
+        :placeholder="libDialog.placeholder"
+        :initial="libDialog.initial"
+        :confirm-text="libDialog.confirmText"
+        :danger="libDialog.danger"
+        @confirm="libDialog.onConfirm && libDialog.onConfirm($event)"
+        @cancel="closeLibDialog"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -448,16 +490,19 @@ import RecoveryPanel from './RecoveryPanel.vue'
 import ActivityPanel from './ActivityPanel.vue'
 import InstanceBadge from './InstanceBadge.vue'
 import ContentIcon from './ContentIcon.vue'
+import LibraryDestinationList from './LibraryDestinationList.vue'
+import CollectedDrawerIcon from './CollectedDrawerIcon.vue'
+import DrawerPocket from './DrawerPocket.vue'
 import IconPicker from './IconPicker.vue'
 import { resizePanel } from '../utils/panel-resize'
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, provide } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive, provide } from 'vue'
 // 菜单里的图标：树的操作、分组与排序
 import {
-  PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple,
+  PhPlus, PhMagnifyingGlass, PhSlidersHorizontal, PhFolderSimple, PhFileText, PhFilePdf, PhFileHtml, PhSmiley,
   PhSquaresFour, PhCaretDoubleRight, PhCheck, PhFolderSimplePlus, PhArrowClockwise,
-  PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise, PhGitDiff,
+  PhArrowLeft, PhArchive, PhFilePlus, PhPencilSimple, PhTrash, PhListDashes, PhSortAscending, PhClockCounterClockwise, PhGitDiff,
   PhStack,
-  PhCaretDown, PhCaretRight, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight
+  PhCheckSquare, PhCaretDown, PhCaretRight, PhCaretDoubleLeft, PhX, PhHandGrabbing, PhDotsThree, PhPushPin, PhCopy, PhArrowRight
 } from '../icons/remix'
 import { MorphIcon } from 'morphicons/vue'
 
@@ -465,9 +510,12 @@ import { MorphIcon } from 'morphicons/vue'
 const caretLeft = [['path', { d: 'M10.8284 12.0007L15.7782 16.9504L14.364 18.3646L8 12.0007L14.364 5.63672L15.7782 7.05093L10.8284 12.0007Z', fill: 'currentColor', stroke: 'none' }]]
 const caretRight = [['path', { d: 'M13.1717 12.0007L8.22192 7.05093L9.63614 5.63672L16.0001 12.0007L9.63614 18.3646L8.22192 16.9504L13.1717 12.0007Z', fill: 'currentColor', stroke: 'none' }]]
 import {useDialogFocus} from '../composables/useDialogFocus'
+import { navigateMenu } from '../utils/navigate-menu'
+import { findRoutedDocument } from '../utils/routes.js'
 import { useDocsStore } from '../stores/docs'
 import DocTree from './DocTree.vue'
 import RailFiles from './RailFiles.vue'
+import LibrarySearchResults from './LibrarySearchResults.vue'
 import AppDialog from './AppDialog.vue'
 import { API_BASE } from '../utils/api'
 import { storageGet, storageJSON, storageSet } from '../utils/storage'
@@ -481,10 +529,11 @@ const props = defineProps({
   chromeCollapsed: { type: Boolean, default: false },
   /** 收起静止态：header 按内容宽度排，不占满侧栏宽度 */
   chromeCompact: { type: Boolean, default: false },
-  chromeExpanding: { type: Boolean, default: false }
+  chromeExpanding: { type: Boolean, default: false },
+  galleryPresent: { type: Boolean, default: false }
 })
 const emit = defineEmits([
-  'select', 'delete-doc', 'delete-category', 'toggle-collapse', 'update:width'
+  'select', 'find-result', 'delete-doc', 'delete-category', 'toggle-collapse', 'update:width', 'update:dragging', 'gallery-change', 'return-to-reading'
 ])
 
 /* ---------- 品牌：标题与图标 ---------- */
@@ -607,29 +656,82 @@ const libQuery = ref('')
 const transferSearch = ref('')
 const transfer = reactive({ open: false, mode: 'copy', kind: 'doc', path: '', lib: '', dir: '', folders: [], busy: false, error: '' })
 const managerDialog = ref(null), transferDialog = ref(null)
-useDialogFocus(managerOpen, managerDialog, () => { managerOpen.value=false })
-useDialogFocus(() => transfer.open, transferDialog, () => { if(!transfer.busy) transfer.open=false })
-const transferToast = reactive({ message: '', lib: '', file: '' })
+const transferAction = computed(() => transfer.mode === 'copy' ? '复制' : '移动')
+const transferSourceParent = computed(() => transfer.path.split('/').slice(0, -1).join('/'))
+const canTransfer = computed(() => Boolean(transfer.dir) && !transfer.busy && (transfer.mode === 'copy' || transfer.dir !== transferSourceParent.value))
+function closeTransfer() { if (!transfer.busy) transfer.open = false }
+useDialogFocus(() => transfer.open, transferDialog, closeTransfer)
+const transferToast = reactive({ message: '', lib: '', file: '', undo: null, busy: false })
+let transferToastTimer
+function pauseTransferToast() { clearTimeout(transferToastTimer) }
+function dismissTransferToast() {
+  pauseTransferToast()
+  Object.assign(transferToast, { message: '', lib: '', file: '', undo: null, busy: false })
+}
+function resumeTransferToast() {
+  pauseTransferToast()
+  const notice = document.querySelector('.transfer-toast')
+  if (transferToast.busy || notice?.matches(':hover, :focus-within')) return
+  transferToastTimer = setTimeout(dismissTransferToast, 12000)
+}
+function showTransferReceipt(kind, original, dir, result) {
+  const moved = kind === 'folder' ? result.path : result.file
+  if (!moved || original === moved) return
+  dismissTransferToast()
+  transferToast.message = '已移动到 ' + dir
+  if (result.id && !isGuest.value) transferToast.undo = { kind, original, moved, id: result.id }
+  resumeTransferToast()
+}
+async function undoTransfer() {
+  const undo = transferToast.undo
+  if (!undo || transferToast.busy) return
+  pauseTransferToast()
+  transferToast.busy = true
+  const dir = undo.original.slice(0, undo.original.lastIndexOf('/'))
+  try {
+    const receipt = { id: undo.id, original: undo.original }
+    if (undo.kind === 'folder') await store.moveCategory(undo.moved, dir, receipt)
+    else await store.moveDoc(undo.moved, dir, receipt)
+    if (transferToast.undo !== undo) return
+    transferToast.undo = null
+    transferToast.message = '已撤销移动'
+    await loadLibs()
+  } catch (error) {
+    if (transferToast.undo === undo) transferToast.message = error.message || '撤销失败'
+  } finally {
+    if (transferToast.undo === undo || !transferToast.undo) {
+      transferToast.busy = false
+      resumeTransferToast()
+    }
+  }
+}
+onBeforeUnmount(pauseTransferToast)
 async function viewTransferResult() {
   const lib = transferToast.lib, file = transferToast.file
-  transferToast.message = ''
-  await goLib({ name: lib, path: lib })
-  if (file) await store.select(file)
+  dismissTransferToast()
+  await goLib({ name: lib, path: lib }, file)
 }
 let transferRequest = 0
 function onTransferLibSelect(value) { transfer.lib = value; loadTransferFolders() }
 async function loadTransferFolders() {
   const request = ++transferRequest
   const lib = transfer.lib
-  transfer.folders = [{ path: lib, label: lib + '（根目录）' }]
+  transfer.folders = lib ? [{ value: lib, label: '根目录' }] : []
   transfer.dir = lib
+  transfer.error = ''
   if (!lib) return
   try {
     const response = await fetch(API_BASE + '/api/tree?lib=' + encodeURIComponent(lib), { cache: 'no-store' })
     const json = await response.json()
     if (!json.ok) throw Error(json.error || '目录读取失败')
     if (request !== transferRequest) return
-    const walk = nodes => { for (const node of nodes || []) if (node.type === 'folder') { transfer.folders.push({ path: node.path, label: node.path.replaceAll('/', ' / ') }); walk(node.children) } }
+    const walk = nodes => {
+      for (const node of nodes || []) {
+        if (node.type !== 'folder' || (transfer.kind === 'folder' && node.path === transfer.path)) continue
+        transfer.folders.push({ value: node.path, label: node.path.slice(lib.length + 1).split('/').join(' / ') })
+        walk(node.children)
+      }
+    }
     walk(json.data.nodes)
   } catch (error) { if (request === transferRequest) transfer.error = String(error.message || error) }
 }
@@ -641,7 +743,7 @@ async function openTransfer(mode, kind, source) {
   transfer.error = ''
   transferSearch.value = ''
   if (!libPanel.libs.length) await loadLibs()
-  if (!libPanel.libs.length) { store.setError('抽屉读取失败，请稍后重试'); return }
+  if (!libPanel.libs.length) { store.setError('知识库读取失败，请稍后重试'); return }
   transfer.lib = ''
   transfer.dir = ''
   transfer.folders = []
@@ -650,7 +752,7 @@ async function openTransfer(mode, kind, source) {
   transfer.open = true
 }
 async function confirmTransfer() {
-  if (transfer.busy || !transfer.dir) return
+  if (!canTransfer.value) return
   const { mode, kind, path: source, dir } = transfer
   if (mode === 'move' && (dir === source || dir.startsWith(source + '/'))) { transfer.error = '不能移动到自身目录内'; return }
   transfer.busy = true
@@ -663,22 +765,21 @@ async function confirmTransfer() {
     transfer.open = false
     await loadLibs()
     const targetLib = dir.split('/')[0]
-    if (mode === 'move' && targetLib !== currentLib.value) {
-      await goLib({ name: targetLib, path: targetLib })
-      await store.loadTree()
-      if (result?.file) await store.select(result.file)
-      if (isMobileLibView() && !props.collapsed) emit('toggle-collapse')
+    if (mode === 'move') {
+      showTransferReceipt(kind, source, dir, result)
     } else {
-      transferToast.message = mode === 'copy' ? '已复制到 ' + dir : '已移动到 ' + dir
+      dismissTransferToast()
+      transferToast.message = '已复制到 ' + dir
       transferToast.lib = targetLib
       transferToast.file = result?.file || ''
+      resumeTransferToast()
     }
   } catch (error) { transfer.error = String(error.message || error) }
   finally { transfer.busy = false }
 }
 const footerTools=ref(false),recoveryTab=ref('trash'),toolsTrigger=ref(null),toolsPanel=ref(null)
 
-async function toggleFooterTools(){footerTools.value=!footerTools.value;if(footerTools.value){await nextTick();toolsPanel.value?.querySelector('button')?.focus();loadActivityUnread()}}
+async function toggleFooterTools(){menuOpen.value=false;footerTools.value=!footerTools.value;if(footerTools.value){await nextTick();toolsPanel.value?.querySelector('button')?.focus();loadActivityUnread()}}
 async function closeRecovery(){recoveryOpen.value=false;await nextTick();toolsTrigger.value?.focus()}
 function openRecovery(tab){recoveryTab.value=tab;footerTools.value=false;recoveryOpen.value=true}
 const libSortOptions = [
@@ -742,54 +843,12 @@ function sortLibs(list) {
 const panelLibs = computed(() => sortLibs(libPanel.libs))
 const displayedLibs = computed(() => panelLibs.value)
 
-/*
- * 知识库切换时用一块共享的底块滑过去，而不是两行各自淡入淡出。
- * 它和标签条用的是同一套弹性：移动时先纵向拉长一点，再落回原尺寸。
- */
-const libListEl = ref(null)
-const libBlobStyle = ref({ opacity: 0 })
-const libMarkerStyle = ref({ opacity: 0 })
-const libBlobMoving = ref(false)
-let libBlobTimer = 0
-let libResizeObserver = null
-function observeLibList() {
-  libResizeObserver?.disconnect()
-  if (!libListEl.value) return
-  libResizeObserver = new ResizeObserver(() => measureLibBlob())
-  libResizeObserver.observe(libListEl.value)
-  const stack = libListEl.value.querySelector('.lib-row-stack')
-  if (stack) libResizeObserver.observe(stack)
-}
-watch(libListEl, observeLibList, { flush: 'post' })
-async function measureLibBlob() {
-  await nextTick()
-  const host = libListEl.value
-  if (!host) { libBlobStyle.value = { opacity: 0 }; libMarkerStyle.value = { opacity: 0 }; return }
-  const row = host.querySelector('.lib-row.is-current')
-  if (!row) { libBlobStyle.value = { opacity: 0 }; libMarkerStyle.value = { opacity: 0 }; return }
-  const next = {
-    left: row.offsetLeft + 'px',
-    top: row.offsetTop + 'px',
-    width: row.offsetWidth + 'px',
-    height: row.offsetHeight + 'px',
-    opacity: 1
-  }
-  const prev = libBlobStyle.value
-  if (prev.opacity === 1 && (prev.left !== next.left || prev.top !== next.top)) {
-    libBlobMoving.value = true
-    clearTimeout(libBlobTimer)
-    libBlobTimer = setTimeout(() => { libBlobMoving.value = false }, 300)
-  }
-  libBlobStyle.value = next
-  libMarkerStyle.value = {
-    left: row.offsetLeft + 4 + 'px',
-    top: row.offsetTop + Math.round((row.offsetHeight - 18) / 2) + 'px',
-    opacity: 1
-  }
-}
 const transferLibs = computed(() => {
   const q = transferSearch.value.trim().toLocaleLowerCase()
   return displayedLibs.value.filter(lib => !q || lib.name.toLocaleLowerCase().includes(q))
+})
+watch(transferSearch, () => {
+  if (transfer.lib && !transferLibs.value.some(lib => lib.name === transfer.lib)) onTransferLibSelect('')
 })
 const managerLibs = computed(() => {
   const q = libQuery.value.trim().toLocaleLowerCase()
@@ -799,37 +858,39 @@ const managerLibs = computed(() => {
 })
 
 /** 当前所在的知识库：文档根的名字（每个实例一个根，所以直接问服务端） */
-const currentLib = ref(
-  (() => {
-    try {
-      const lib = String(new URLSearchParams(location.search).get('lib') || '').trim()
-      return lib
-    } catch {
-      return ''
-    }
-  })()
-)
+const currentLib = computed(() => store.activeLibrary)
+// The compact slot fits the widest available library up to its responsive cap.
+// Switching and closing documents can then leave every tab's hit area in place.
+const libraryNamesForWidth = computed(() => libPanel.libs.map(lib => lib.name).join('\n'))
+watch(currentLib, name => {
+  if (name) rememberLib(name)
+  applyCurrentLib()
+})
 
-watch(
-  () => [currentLib.value, libPanel.libs.map(l => l.path + ':' + l.docs).join('|'), libWidth.value, libCreate.active],
-  () => measureLibBlob(),
-  { flush: 'post', immediate: true }
-)
-watch(() => libPanel.open, (isOpen) => {
-  if (isOpen) setTimeout(measureLibBlob, 260)
-  else libBlobStyle.value = { opacity: 0 }
-}, { flush: 'post' })
-
+let libRequest = 0
 async function loadLibs() {
+  const request = ++libRequest
+  const preview = managerOpen.value && !isGuest.value
+  if (preview && !shelfLevel.value.path) {
+    shelfLoading.value = !libPanel.libs.length || !!shelfLoadError.value
+    shelfLoadError.value = ''
+  }
   try {
-    const res = await fetch(API_BASE + '/api/libs', { cache: 'no-store' })
+    const res = await fetch(API_BASE + '/api/libs' + (preview ? '?preview=1' : ''), { cache: 'no-store' })
     const data = await res.json()
-    libPanel.libs = (data?.data?.libs || []).filter((l) => l && l.name)
-    if (typeof data?.data?.config?.panelWidth === 'number') libWidth.value = data.data.config.panelWidth
+    if (request !== libRequest) return
+    if (!data.ok) throw Error(data.error || '读取知识库失败')
+    libPanel.libs = data.data.libs.filter(l => l && l.name)
+    if (preview && managerOpen.value) {
+      shelfPreviews.value = Object.fromEntries(libPanel.libs.map(lib => [lib.path, lib.preview]))
+    }
+    if (typeof data.data.config?.panelWidth === 'number') libWidth.value = data.data.config.panelWidth
     applyCurrentLib()
     if (currentLib.value) rememberLib(currentLib.value)
-  } catch {
-    libPanel.libs = []
+  } catch (error) {
+    if (request === libRequest && preview && managerOpen.value && !shelfLevel.value.path) shelfLoadError.value = error.message || '读取知识库失败'
+  } finally {
+    if (request === libRequest && preview && managerOpen.value && !shelfLevel.value.path) shelfLoading.value = false
   }
 }
 
@@ -887,6 +948,7 @@ function askLibDialog(opts) {
 
 function createLib() {
   if (isGuest.value) return
+  if (managerOpen.value) shelfOpenError.value = ''
   if (libCreate.active) { cancelCreateLib(); return }
   libCreate.value = ''
   libCreate.active = true
@@ -914,6 +976,8 @@ async function doCreateLib(value) {
   const to = String(value || '').trim()
   if (!to || creatingLib.value) return
   creatingLib.value = true
+  const fromOverview = managerOpen.value
+  if (fromOverview) shelfOpenError.value = ''
   try {
     const res = await fetch(API_BASE + '/api/lib', {
       method: 'POST',
@@ -926,9 +990,15 @@ async function doCreateLib(value) {
     libOrder.value = [to, ...libOrder.value.filter(name => name !== to)]
     saveLibPrefs()
     const made = libPanel.libs.find((l) => l.name === to)
-    if (made) { await goLib(made); managerOpen.value=false }
+    if (made && fromOverview) {
+      if (managerOpen.value) {
+        await loadLibs()
+        if (managerOpen.value && !shelfLevel.value.path) browseDrawer(made)
+      }
+    } else if (made) await goLib(made)
   } catch (e) {
-    store.setError(e.message || e)
+    if (fromOverview && managerOpen.value) shelfOpenError.value = e.message || '新建知识库失败'
+    else store.setError(e.message || e)
   } finally {
     creatingLib.value = false
   }
@@ -960,20 +1030,205 @@ function openLibPanel() {
   libPanel.open = true
   loadLibs()
 }
+const shelfLevels = shallowRef([{ path: '', name: '文档' }])
+const shelfLevel = computed(() => shelfLevels.value.at(-1))
+const shelfPreviews = shallowRef({})
+const shelfHeading = ref(null)
+const shelfScroll = ref(null)
+const shelfTrigger = ref(null)
+const shelfTriggerLabel = computed(() => {
+  if (!managerOpen.value) return '文档总览'
+  return shelfLevel.value.path ? '返回文档总览' : '返回当前文档'
+})
+const shelfLoading = ref(false)
+const shelfLoadError = ref('')
+const shelfOpenError = ref('')
+const pendingShelf = ref('')
+const shelfStep = ref('')
+const shelfOpening = ref(false)
+let shelfRequest
+const shelfError = computed(() => shelfLoadError.value || shelfOpenError.value)
+const shelfSearchLabel = computed(() => !shelfLevel.value.path ? '搜索知识库' : '筛选当前目录')
+const shelfEntries = computed(() => {
+  const items = shelfLevel.value.nodes || []
+  const q = libQuery.value.trim().toLocaleLowerCase()
+  return q ? items.filter(node => (node.file?.split('/').pop() || node.name).toLocaleLowerCase().includes(q)) : items
+})
+
+let previousRailOpen = false
+
+function closeManager() {
+  if (shelfOpening.value) return
+  managerOpen.value = false
+  emit('return-to-reading')
+  nextTick(() => {
+    if (managerOpen.value) return
+    const trigger = libPanel.open && shelfTrigger.value?.getClientRects().length
+      ? shelfTrigger.value
+      : document.querySelector('.doc-tab.is-active .doc-tab-main') || document.querySelector('.sidebar-toggle')
+    trigger?.focus({ preventScroll: true })
+  })
+}
+
+function toggleManager() {
+  if (!managerOpen.value) return openManager()
+  if (shelfLevel.value.path) return shelfBack(0)
+  closeManager()
+}
+
 function openManager() {
+  previousRailOpen = libPanel.open
+  libPanel.open = true
   window.dispatchEvent(new Event('reader-overlay-open'))
   cancelCreateLib()
-  // 桌面端保留知识库栏：管理弹窗是盖在它上面，不是把它收起来。
-  if (isMobileLibView()) libPanel.open = false
   tree.closeMenu()
-  managerOpen.value = true
+  shelfLevels.value = [{ path: '', name: '文档' }]
+  shelfLoadError.value = ''
+  shelfOpenError.value = ''
   libQuery.value = ''
-  loadLibs()
+  shelfStep.value = ''
+  managerOpen.value = true
+  nextTick(() => shelfHeading.value?.focus({ preventScroll: true }))
+  return loadLibs()
 }
-function openManagerLib(lib) {
-  managerOpen.value = false
-  goLib(lib)
+
+function cancelShelfRequest() {
+  shelfRequest?.abort()
+  shelfRequest = undefined
+  pendingShelf.value = ''
 }
+watch(isGuest, guest => { if (guest) managerOpen.value = false })
+watch(managerOpen, open => {
+  emit('gallery-change', open)
+  if (open) return
+  libPanel.open = previousRailOpen && !isMobileLibView()
+  cancelShelfRequest()
+})
+watch(() => props.galleryPresent, present => {
+  if (present || managerOpen.value) return
+  cancelCreateLib()
+  cancelRename()
+  shelfPreviews.value = {}
+  shelfLevels.value = [{ path: '', name: '文档' }]
+})
+onBeforeUnmount(cancelShelfRequest)
+
+function isRailCurrent(lib) {
+  return managerOpen.value ? shelfLevels.value[1]?.path === lib.path : isCurrentLib(lib)
+}
+
+function selectRailLibrary(lib) {
+  if (!managerOpen.value) return goLib(lib)
+  if (shelfOpening.value) return
+  if (shelfLevels.value.length === 2 && shelfLevel.value.path === lib.path) {
+    cancelShelfRequest()
+    return
+  }
+  browseDrawer(lib, Boolean(shelfLevel.value.path))
+}
+
+function pushShelfLevel(level, replaceDrawer = false) {
+  shelfStep.value = 'forward'
+  if (replaceDrawer) {
+    // Rail navigation changes siblings. Preserve the grid's original filter and scroll position.
+    shelfLevels.value = [shelfLevels.value[0], level]
+  } else {
+    shelfLevel.value.query = libQuery.value
+    shelfLevel.value.scroll = shelfScroll.value?.scrollTop || 0
+    shelfLevels.value = [...shelfLevels.value, level]
+  }
+  shelfLoadError.value = ''
+  shelfOpenError.value = ''
+  libQuery.value = ''
+  if (shelfScroll.value) shelfScroll.value.scrollTop = 0
+  nextTick(() => {
+    shelfHeading.value?.focus({ preventScroll: true })
+    const crumbs = managerDialog.value?.querySelector('.drawer-breadcrumbs')
+    if (crumbs) crumbs.scrollLeft = crumbs.scrollWidth
+  })
+}
+
+async function browseDrawer(lib, replaceDrawer = false) {
+  if (pendingShelf.value === lib.path) return
+  cancelShelfRequest()
+  const controller = new AbortController()
+  shelfRequest = controller
+  pendingShelf.value = lib.path
+  const level = { path: lib.path, name: lib.name, nodes: [] }
+  let failure = ''
+  try {
+    const result = await fetch(API_BASE + '/api/tree?lib=' + encodeURIComponent(lib.path), {
+      cache: 'no-store', signal: controller.signal
+    }).then(response => response.json())
+    if (!result.ok || result.data?.lib !== lib.path || !Array.isArray(result.data.nodes)) throw Error(result.error || '读取知识库失败')
+    level.nodes = result.data.nodes
+  } catch (error) {
+    failure = error.message || '读取知识库失败'
+  }
+  if (controller.signal.aborted || !managerOpen.value) return
+  shelfRequest = undefined
+  pendingShelf.value = ''
+  shelfLoading.value = false
+  pushShelfLevel(level, replaceDrawer)
+  shelfLoadError.value = failure
+}
+
+async function shelfBack(index) {
+  if (shelfOpening.value) return
+  shelfStep.value = 'back'
+  const previousPath = shelfLevels.value[index + 1].path
+  cancelShelfRequest()
+  shelfLevels.value = shelfLevels.value.slice(0, index + 1)
+  shelfLoading.value = false
+  shelfLoadError.value = ''
+  shelfOpenError.value = ''
+  libQuery.value = shelfLevel.value.query || ''
+  await nextTick()
+  if (shelfScroll.value) shelfScroll.value.scrollTop = shelfLevel.value.scroll || 0
+  const row = Array.from(shelfScroll.value?.querySelectorAll('[data-path]') || []).find(button => button.dataset.path === previousPath)
+  const focusTarget = row || shelfHeading.value
+  focusTarget?.focus({ preventScroll: true })
+}
+
+function browseEntry(entry) {
+  cancelShelfRequest()
+  if (entry.type === 'folder') pushShelfLevel({ path: entry.path, name: entry.name, nodes: entry.children })
+  else openShelfDocument(entry.file)
+}
+
+async function openShelfDocument(file) {
+  if (shelfOpening.value) return
+  shelfOpenError.value = ''
+  shelfOpening.value = true
+  try {
+    if (!file && (store.isDirty || store.saving) && !(await store.save())) {
+      shelfOpenError.value = store.error || '未能保存当前文档'
+      return
+    }
+    if (!(await goLib(shelfLevels.value[1], file))) {
+      shelfOpenError.value = store.error || '未能打开文档，请重新选择'
+      return
+    }
+    managerOpen.value = false
+    await nextTick()
+    if (file) {
+      emit('return-to-reading')
+      await nextTick()
+      document.querySelector('.doc-tab.is-active .doc-tab-main')?.focus({ preventScroll: true })
+    }
+    else await startCreate('doc')
+  } catch (error) {
+    shelfOpenError.value = error.message || '未能打开文档'
+  } finally {
+    shelfOpening.value = false
+  }
+}
+
+function retryShelf() {
+  if (shelfLevel.value.path) browseDrawer(shelfLevels.value[1], true)
+  else loadLibs()
+}
+
 function startLibResize(e) {
   const startX = e.clientX, startWidth = libWidth.value
   resizePanel(e, ev => { libWidth.value = Math.max(180, Math.min(420, startWidth + ev.clientX - startX)) }, async () => {
@@ -996,79 +1251,14 @@ function isCurrentLib(lib) {
  * 选了它侧边栏就只显示它（服务端按 ?lib= 裁剪），路径仍然相对文档根，
  * 所以文档读取、保存那一整套不用改。
  */
-let titleWidthTimer = 0
-/** 展开/收起会接管宽度，先停掉切库动画，避免它的定时器稍后清掉展开/收起中的宽度。 */
-function resetCompactWidthAnimation(clearWrapWidth = false) {
-  clearTimeout(titleWidthTimer)
-  const header = document.querySelector('.side-header')
-  const wrap = document.querySelector('#app-topbar-left')
-  /* header 的内联宽度必须清掉，才能跟着外壳一起展开/收起。 */
-  if (header?.style.width) { header.style.transition = ''; header.style.width = '' }
-  /* 外壳宽度交给 App 的 chromeWidth；这里只还原本地过渡，别把动画起点清成 auto。 */
-  if (wrap?.style.transition) wrap.style.transition = ''
-  if (clearWrapWidth && wrap?.style.width) wrap.style.width = ''
-}
-watch(() => [props.collapsed, props.chromeCompact], ([collapsed, compact]) => {
-  if (!collapsed || !compact) resetCompactWidthAnimation()
-})
-function animateCompactTitleWidth(nextName) {
-  if (!props.collapsed || !props.chromeCompact || props.chromeExpanding) return
-  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-  const header = document.querySelector('.side-header')
-  const wrap = document.querySelector('#app-topbar-left')
-  if (!header || !wrap) return
-  const startHeader = header.getBoundingClientRect().width
-  const startWrap = wrap.getBoundingClientRect().width
-  const targetWrap = compactHeaderWidth(nextName)
-  if (!targetWrap) return
-  const targetHeader = Math.max(0, targetWrap - 10)
-  if (Math.abs(targetHeader - startHeader) < 1 && Math.abs(targetWrap - startWrap) < 1) return
-  header.style.transition = 'none'
-  wrap.style.transition = 'none'
-  header.style.width = startHeader + 'px'
-  wrap.style.width = startWrap + 'px'
-  void header.offsetWidth
-  const ease = 'width 220ms cubic-bezier(.22,1,.36,1)'
-  header.style.transition = ease
-  wrap.style.transition = ease
-  header.style.width = targetHeader + 'px'
-  wrap.style.width = targetWrap + 'px'
-  clearTimeout(titleWidthTimer)
-  titleWidthTimer = window.setTimeout(() => {
-    header.style.transition = ''
-    header.style.width = ''
-    wrap.style.transition = ''
-    wrap.style.width = ''
-  }, 250)
-}
-
-async function goLib(lib) {
-  if (!lib || store.libSwitch.active) return
+async function goLib(lib, file = '') {
+  if (!lib) return false
   const name = lib.path || lib.name
-  if (isCurrentLib(lib)) {
-    rememberLib(name)
-    if (isMobileLibView()) closeLibPanel()
-    return
-  }
-  // 切库会清空当前文档缓存，必须先等最新内容落盘。
-  if (store.currentPath && (store.isDirty || store.saving) && !(await store.save())) return
-  /*
-   * 桌面保持知识库栏，便于连续切换；手机在完成切换后关闭弹窗。
-   */
-  const url = new URL(location.href)
-  url.searchParams.set('lib', name)
-  /* 换库之后当前这篇多半不属于新库，交给 ensureCurrent 重新挑一篇 */
-  history.replaceState(null, '', url.toString())
-  animateCompactTitleWidth(name)
-  currentLib.value = name
-  rememberLib(name)
-  applyCurrentLib()
-  /*
-   * 用 switchLib 而不是 loadAll：它会先把"当前这篇"清掉再拉新库的树。
-   * 不清的话地址栏会出现"路径属于 A 库、?lib= 指向 B 库"的自相矛盾状态。
-   */
-  await store.switchLib()
-  if (isMobileLibView()) closeLibPanel()
+  let opened = true
+  if (file) opened = await store.select(file)
+  else if (name !== currentLib.value || store.switchingLibrary) opened = await store.switchLib(name)
+  if (opened && isMobileLibView()) closeLibPanel()
+  return opened
 }
 
 /*
@@ -1092,7 +1282,7 @@ function startLibDrag(lib, event) {
   libDrag.name = lib.name
   libDrag.over = ''
   event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/plain', lib.name)
+  event.dataTransfer.setData('application/x-typocket-drawer', '1')
 }
 function overLibDrag(lib) {
   if (libSort.value !== 'manual' || !libDrag.name || libDrag.name === lib.name) return
@@ -1133,7 +1323,9 @@ const renaming = ref('')
 const renameText = ref('')
 const renameInput = ref(null)
 
-function startRename(lib) {
+async function startRename(lib) {
+  if (managerOpen.value && shelfLevel.value.path) await shelfBack(0)
+  if (managerOpen.value && !managerLibs.value.some(item => item.path === lib.path)) libQuery.value = ''
   renaming.value = lib.name
   renameText.value = lib.name
   nextTick(() => {
@@ -1151,7 +1343,7 @@ function cancelRename() {
 /** 两个改名入口共用这一条流程；当前库改名会使所有文档路径失效。 */
 async function renameLib(from, to) {
   if (!from || !to || to === from) return
-  if (to.includes('/') || to.startsWith('.')) throw new Error('抽屉名不能带斜杠或以点开头')
+  if (to.includes('/') || to.startsWith('.')) throw new Error('知识库名称不能包含斜杠或以点开头')
   const active = from === currentLib.value
   if (active && (store.isDirty || store.saving) && !(await store.save())) {
     throw new Error(store.error || '重命名失败')
@@ -1160,9 +1352,9 @@ async function renameLib(from, to) {
   try {
     const data=await store.renameLibrary(from,to)
     libPanel.libs=data.libs||[]
+    if (managerOpen.value) await loadLibs()
     libOrder.value = libOrder.value.map(name => name === from ? to : name)
     saveLibPrefs()
-    if(active)currentLib.value=to
     applyCurrentLib()
   } finally {
     libPanel.busy = ''
@@ -1178,12 +1370,30 @@ async function commitRename(lib) {
   if (!to || to === from) return
   try {
     await renameLib(from, to)
+    if (managerOpen.value) shelfOpenError.value = ''
   } catch (e) {
-    store.setError(e.message || e)
+    if (managerOpen.value) shelfOpenError.value = e.message || '重命名失败'
+    else store.setError(e.message || e)
   }
 }
 
 /** 标题就是库名；改名会同步重命名目录。 */
+function nameFieldKey(event, confirm, cancel) {
+  if (event.isComposing || event.keyCode === 229) return
+  if (event.key !== 'Enter' && event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  if (event.key === 'Enter') confirm()
+  else cancel()
+}
+function onTitleKey(event) {
+  const input = event.currentTarget
+  nameFieldKey(event, () => input.blur(), () => {
+    brandTitle.value = currentLib.value
+    input.value = currentLib.value
+    input.blur()
+  })
+}
 async function onBrandEdited(value) {
   const v = String(value || '').trim()
   if (!v || v === currentLib.value) {
@@ -1212,7 +1422,10 @@ async function loadActivityUnread(){
 }
 function openActivity(){footerTools.value=false;activityOpen.value=true}
 async function closeActivity(){activityOpen.value=false;await nextTick();toolsTrigger.value?.focus();await loadActivityUnread()}
-async function onActivitySelect(path){await closeActivity();emit('select',path)}
+async function onActivitySelect(path) {
+  closeActivity()
+  if (await store.refreshActivityDocument(path)) emit('select', path)
+}
 const iconPicking=ref(false)
 const libIconTarget = ref(null), libIconAnchor=ref(null)
 function pickLibIcon(lib,event) { libIconAnchor.value=event?.currentTarget;libIconTarget.value=lib;iconPicking.value=true }
@@ -1259,8 +1472,8 @@ function readAsDataUrl(file) {
  */
 async function deleteLib(lib) {
   askLibDialog({
-    title: '删除抽屉《' + lib.name + '》',
-    message: '它的 ' + (lib.docs || 0) + ' 篇文档会被移到回收站，可以再捞回来。',
+    title: '将「' + lib.name + '」移到回收站？',
+    message: lib.docs ? '知识库中的 ' + lib.docs + ' 篇文档将一并移入回收站。' : '可在回收站恢复这个知识库。',
     confirmText: '移到回收站',
     danger: true,
     onConfirm: () => { closeLibDialog(); doDeleteLib(lib) }
@@ -1283,10 +1496,12 @@ async function doDeleteLib(lib) {
     libPanel.libs = data.data.libs || []
     libOrder.value = libOrder.value.filter(name => name !== lib.name)
     saveLibPrefs()
+    store.forgetLibrary(lib.name)
+    if (managerOpen.value && shelfLevels.value[1]?.path === lib.path) await shelfBack(0)
     /* 删的是当前库：换到第一个剩下的库 */
     if (lib.name === currentLib.value) {
       const first = libPanel.libs[0]
-      if (first) await goLib(first)
+      await store.switchLib(first?.name || '')
     }
   } catch (e) {
     store.setError(e.message || e)
@@ -1303,8 +1518,9 @@ async function doDeleteLib(lib) {
  * 于是拖侧边栏宽度、点一下正文，面板也跟着没了 —— 看着就像两者联动。
  */
 onMounted(() => {
+  let initialLibraries
   if (new URLSearchParams(location.search).has('choose') && !isGuest.value) {
-    openManager()
+    initialLibraries = openManager()
     const url = new URL(location.href)
     url.searchParams.delete('choose')
     history.replaceState(null, '', url)
@@ -1312,28 +1528,20 @@ onMounted(() => {
   /*
    * 没指定 ?lib= 时选默认库。
    *
-   * 先取抽屉列表，再从树里匹配旧书签所属的抽屉。
+   * 先取知识库列表，再从树里匹配旧书签所属的知识库。
    */
-  loadLibs().then(() => {
+  const readyLibraries = initialLibraries || loadLibs()
+  readyLibraries.then(() => {
     if (currentLib.value) return
     const pick = () => {
+      if (currentLib.value || store.switchingLibrary) return
+      const route = location.pathname.match(/\/(?:doc|edit|onlyread)\/(.+)$/)
+      let target = ''
+      try { target = decodeURIComponent(route?.[1] || '').replace(/\/+$/, '') } catch { /* skip malformed bookmark */ }
+      const routedFile = findRoutedDocument(store.allFiles, target)
       const byLegacy = store.legacyLib()
-      const hit = libPanel.libs.find((l) => l.name === byLegacy)
-      const lib = hit || libPanel.libs[0]
-      if (!lib) return
-      currentLib.value = lib.name
-      applyCurrentLib()
-      const url = new URL(location.href)
-      url.searchParams.set('lib', lib.name)
-      history.replaceState(null, '', url.toString())
-      /*
-       * 补上 lib 之后必须重新拉树。
-       *
-       * 最初那次 /api/tree 是不带 lib 拉的（进来时地址栏里还没有），拿到的是整棵树 ——
-       * 于是 /onlyread 这种不带 lib 的地址会显示出根下的几个知识库目录，
-       * 看着就像"知识库和它内部文件夹的关系乱了"。
-       */
-      store.switchLib({ animate: false })
+      const lib = libPanel.libs.find(l => l.name === (routedFile?.file.split('/')[0] || byLegacy)) || libPanel.libs[0]
+      if (lib) store.switchLib(lib.name, routedFile?.file || '')
     }
     if (store.allFiles.length) pick()
     else {
@@ -1382,6 +1590,9 @@ function folderHasCurrent(folder) {
  *   - 落在行的上下边 = 插到这个位置（同层排序；跨层就是先挪过去再排）
  * 文档和目录用同一套手势，文档用文件路径、目录用目录路径，靠 kind 区分。
  */
+let folderDwellTimer
+onBeforeUnmount(() => clearTimeout(folderDwellTimer))
+
 const tree = reactive({
   /** 正在拖的条目：{ kind: 'doc'|'folder', path, parent, key }，空表示没在拖 */
   drag: null,
@@ -1417,11 +1628,20 @@ const tree = reactive({
       parent: this.parentOfNode(node),
       key: this.entryOf(node)
     }
-    this.dropInto = null
-    this.dropAt = null
+    this.setDropFolder(null)
     e.dataTransfer.effectAllowed = 'move'
-    // Firefox 不设 data 就不触发拖拽
-    e.dataTransfer.setData('text/plain', this.drag.path)
+    // Nonempty data starts the native drag without offering editable fields text to insert.
+    e.dataTransfer.setData('application/x-typocket-tree-item', '1')
+  },
+  setDropFolder(path, expandable = false) {
+    this.dropAt = null
+    if (this.dropInto === path) return
+    clearTimeout(folderDwellTimer)
+    this.dropInto = path
+    // Accept the drop immediately. Only opening the folder requires a short dwell.
+    if (expandable && !query.value && isCollapsed(path)) {
+      folderDwellTimer = setTimeout(() => this.expand(path), 450)
+    }
   },
   /** 悬停在某一行上：中间带进目录，上下边插位置 */
   overRow(node, e) {
@@ -1430,15 +1650,18 @@ const tree = reactive({
     e.dataTransfer.dropEffect = 'move'
     const r = e.currentTarget.getBoundingClientRect()
     const y = (e.clientY - r.top) / r.height
-    if (node.type === 'folder' && y > 0.3 && y < 0.7) {
-      if (this.drag.path === node.path) return
-      this.dropInto = node.path
-      this.dropAt = null
+    const target = node.type === 'folder' ? node.path : node.file
+    if (target === this.drag.path || (this.drag.kind === 'folder' && target.startsWith(this.drag.path + '/'))) {
+      this.setDropFolder(null)
+      e.dataTransfer.dropEffect = 'none'
       return
     }
-    this.dropInto = null
+    if (node.type === 'folder' && y > 0.3 && y < 0.7) {
+      this.setDropFolder(node.path, Boolean(node.children?.length))
+      return
+    }
+    this.setDropFolder(null)
     const parent = this.parentOfNode(node)
-    if (parent !== this.drag.parent && node.type === 'folder' && node.path === this.drag.path) return
     // 插到这一行前面还是后面，看鼠标在行的上半还是下半
     const list = entriesOf(parent)
     const key = this.entryOf(node)
@@ -1451,8 +1674,10 @@ const tree = reactive({
     if (!this.drag || e.defaultPrevented) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    this.dropInto = currentLib.value || ''
-    this.dropAt = null
+    this.setDropFolder(currentLib.value || '')
+  },
+  leaveNav(e) {
+    if (this.drag && !e.currentTarget.contains(e.relatedTarget)) this.setDropFolder(null)
   },
   async drop() {
     if (!this.drag) return
@@ -1467,8 +1692,8 @@ const tree = reactive({
         if (into === d.parent) return
         // 拖过就切手动排序，否则列表会按按名称立刻重排，白拖
         sortMode.value = 'manual'
-        if (d.kind === 'doc') await store.moveDoc(d.path, into)
-        else await store.moveCategory(d.path, into)
+        const result = d.kind === 'doc' ? await store.moveDoc(d.path, into) : await store.moveCategory(d.path, into)
+        showTransferReceipt(d.kind, d.path, into, result)
         return
       }
       if (!at) return
@@ -1477,12 +1702,9 @@ const tree = reactive({
       let path = d.path
       // 跨层插入：先挪进那一层，再排序
       if (at.parent !== d.parent) {
-        if (d.kind === 'doc') {
-          if (into === null && at.parent === d.parent) return
-          path = (await store.moveDoc(d.path, at.parent)).file
-        } else {
-          path = (await store.moveCategory(d.path, at.parent)).path
-        }
+        const result = d.kind === 'doc' ? await store.moveDoc(d.path, at.parent) : await store.moveCategory(d.path, at.parent)
+        path = result.file || result.path
+        showTransferReceipt(d.kind, d.path, at.parent, result)
       }
       const key = path.slice(path.lastIndexOf('/') + 1)
       const names = entriesOf(at.parent, visibleMode)
@@ -1500,12 +1722,17 @@ const tree = reactive({
   },
   end() {
     this.drag = null
-    this.dropInto = null
-    this.dropAt = null
+    this.setDropFolder(null)
   },
 
   /* ---------- 原位改名 ---------- */
 
+  editKey(event) {
+    nameFieldKey(event, () => this.editCommit(), () => this.editCancel())
+  },
+  createKey(event) {
+    nameFieldKey(event, () => this.createCommit(), () => this.createCancel())
+  },
   editStart(kind, node) {
     if (!store.canEdit(node)) return
     this.edit = { kind, node, value: node.name }
@@ -1556,8 +1783,10 @@ const tree = reactive({
     if (!name) return
     try {
       if (store.isDirty && !(await store.save())) return
-      if (c.kind === 'doc') await store.createDoc(c.parent, name)
-      else await store.createCategory(c.parent, name)
+      if (c.kind === 'doc') {
+        await store.createDoc(c.parent, name)
+        emit('return-to-reading')
+      } else await store.createCategory(c.parent, name)
     } catch (error) {
       store.setError(error.message || error)
     }
@@ -1620,19 +1849,19 @@ const tree = reactive({
     this.onClick = (e) => {
       const el = document.querySelector('.tree-menu')
       if (el && el.contains(e.target)) return
-      close()
+      this.closeMenu(false)
     }
     document.addEventListener('keydown', this.onKey)
     setTimeout(() => document.addEventListener('click', this.onClick), 0)
   },
-  closeMenu() {
+  closeMenu(returnFocus = true) {
     if (!this.menu.open) return
     const trigger = this.menuTrigger
     this.menu.open = false
     this.menu.kind = ''
     this.menu.node = null
     this.menuTrigger = null
-    trigger?.focus?.()
+    if (returnFocus) trigger?.focus?.({ preventScroll:true })
     document.removeEventListener('keydown', this.onKey)
     if (this.onClick) {
       document.removeEventListener('click', this.onClick)
@@ -1665,6 +1894,22 @@ const batch = reactive({
 })
 provide('batch', batch)
 watch(currentLib, () => batch.cancel())
+const batchCancel = ref(null)
+async function startBatch() {
+  if (isGuest.value || !currentLibEditable.value || !props.nodes.length) return
+  menuOpen.value = false
+  batch.selected.clear()
+  batch.mode = true
+  await nextTick()
+  const first = [...docNavEl.value.querySelectorAll('.batch-check:not(:disabled)')].find(item => !item.closest('[inert]'))
+  const target = first || batchCancel.value
+  target?.focus()
+}
+async function endBatch() {
+  batch.cancel()
+  await nextTick()
+  sortTrigger.value?.focus({ preventScroll:true })
+}
 
 function requestBatchDelete() {
   if (!batch.selected.size) return
@@ -1674,14 +1919,14 @@ function requestBatchDelete() {
   const selected = [...batch.selected.values()].map(item => current.get(item.path))
   if (selected.some(node => !node || !store.canEdit(node))) {
     store.setError('文档列表已变化，请重新选择')
-    batch.cancel()
+    endBatch()
     return
   }
   const summary = selected.slice(0, 5).map(node => batch.path(node)).join('、')
   const rest = selected.length > 5 ? `，还有 ${selected.length - 5} 项` : ''
   askLibDialog({
-    title: `删除选中的 ${selected.length} 项？`,
-    message: `${summary}${rest}。将移入回收站${selected.some(node => node.type === 'folder') ? '，文件夹内的内容也会一并移入' : ''}。`,
+    title: `将选中的 ${selected.length} 项移入回收站？`,
+    message: summary + rest + (selected.some(node => node.type === 'folder') ? '\n\n包含文件夹内的内容。' : ''),
     confirmText: '移入回收站',
     danger: true,
     onConfirm: async () => {
@@ -1705,14 +1950,16 @@ function requestBatchDelete() {
           return
         }
       }
-      batch.cancel()
+      endBatch()
     }
   })
 }
 
 // Rows keep native button activation. Arrow keys follow only the visible hierarchy.
 function navigateRows(event) {
-  const selector = 'button.folder-toggle, button.doc-title, button.pdf-title'
+  const selector = event.target.matches('.batch-check')
+    ? '.batch-check:not(:disabled)'
+    : 'button.folder-toggle, button.doc-title, button.pdf-title'
   const current = event.target
   if (!current.matches(selector) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
   const rows = [...event.currentTarget.querySelectorAll(selector)].filter(button => !button.closest('[inert]'))
@@ -1783,14 +2030,15 @@ const menuItems = computed(() => {
   if (kind === 'lib') {
     if (!isGuest.value) items.push(
       ...(canRevealInFinder.value ? [{ id:'lib-reveal', label: fileManagerLabel(true), icon: PhFolderSimple }] : []),
-      { id:'lib-pin', label: libPinned(node) ? '取消置顶' : '置顶抽屉', icon: PhPushPin },
+      ...(managerOpen.value ? [{ id: 'lib-icon', label: '更换图标', icon: PhSmiley }] : []),
+      { id:'lib-pin', label: libPinned(node) ? '取消置顶' : '置顶', icon: PhPushPin },
       { id:'lib-rename',label:'重命名',icon:PhPencilSimple },
-      { id:'lib-delete',label:'删除抽屉',icon:PhTrash,danger:true }
+      { id:'lib-delete',label:'删除知识库',icon:PhTrash,danger:true }
     )
   } else {
     if (kind === 'folder') items.push({id:'new-doc',label:'新建文档',icon:PhFilePlus},{id:'new-folder',label:'新建文件夹',icon:PhFolderSimplePlus})
-    items.push({id:'copy-to',label:'复制到抽屉',icon:PhCopy},{id:'move-to',label:'移动到抽屉',icon:PhArrowRight})
-    items.push({id:'rename',label:'重命名',icon:PhPencilSimple},{id:'delete',label:kind==='folder'?'删除目录':'删除',icon:PhTrash,danger:true})
+    items.push({id:'copy-to',label:'复制到…',icon:PhCopy},{id:'move-to',label:'移动到…',icon:PhArrowRight})
+    items.push({id:'rename',label:'重命名',icon:PhPencilSimple},{id:'delete',label:'移入回收站',icon:PhTrash,danger:true})
   }
   return items
 })
@@ -1798,6 +2046,7 @@ const menuItems = computed(() => {
 function onMenuPick(item) {
   const kind = tree.menu.kind
   const node = tree.menu.node
+  const trigger = tree.menuTrigger
   tree.closeMenu()
   if (kind === 'lib-sort') {
     libSort.value = item.id.slice(5)
@@ -1807,7 +2056,7 @@ function onMenuPick(item) {
     if (item.id === 'new-doc' && currentLibEditable.value) tree.startCreate('doc', currentLib.value || '')
     else if (item.id === 'new-folder' && currentLibEditable.value) tree.startCreate('folder', currentLib.value || '')
     else if (item.id === 'rescan') rescan()
-    else if (item.id === 'batch-delete' && currentLibEditable.value) { batch.selected.clear(); batch.mode = true }
+    else if (item.id === 'batch-delete') startBatch()
     return
   }
   if (!node || item.disabled) return
@@ -1817,8 +2066,9 @@ function onMenuPick(item) {
   }
   /* 知识库那几个动作：名字就是文件夹名，所以改名 = 重命名文件夹 */
   if (kind === 'lib') {
-    const lib = { name: node.name, path: node.path, docs: node.docs }
-    if (item.id === 'lib-reveal') revealLibInFinder(lib)
+    const lib = libPanel.libs.find(item => item.name === node.name) || node
+    if (item.id === 'lib-icon') pickLibIcon(lib, { currentTarget: trigger })
+    else if (item.id === 'lib-reveal') revealLibInFinder(lib)
     else if (item.id === 'lib-pin') togglePin(lib.name)
     else if (item.id === 'lib-rename') startRename(lib)
     else if (item.id === 'lib-delete') deleteLib(lib)
@@ -1965,80 +2215,73 @@ function collapseAll(nodes) {
   catsInitialized = true
 }
 
+const vSelectName = { mounted(input) { input.focus(); input.select() } }
 const menuOpen = ref(false)
-const searchOpen = ref(false)
+const sortPanel = ref(null), sortTrigger = ref(null)
+async function toggleSortMenu() {
+  menuOpen.value = !menuOpen.value
+  if (!menuOpen.value) return
+  footerTools.value = false
+  await nextTick()
+  sortPanel.value?.querySelector('[aria-checked="true"]')?.focus()
+}
+function closeSortMenu() {
+  menuOpen.value = false
+  sortTrigger.value?.focus({ preventScroll:true })
+}
+const searchOpen = ref(false), searchBody = ref(false)
+watch(searchOpen, open => { if (!open) searchBody.value = false })
 const query = ref('')
 
-/*
- * 文档树也用同一块共享高亮。
- * 目录是递归组件，没法在每一层各放一块再拼起来；这里从外层 nav 直接量
- * 当前行的屏幕坐标，换算成滚动容器里的坐标，所以层级再深也只有一块。
- */
-const docNavEl = ref(null)
-const docBlobStyle = ref({ opacity: 0 })
-const docBlobMoving = ref(false)
-let docBlobTimer = 0
-let docResizeObserver = null
-function observeDocNav() {
-  docResizeObserver?.disconnect()
-  if (!docNavEl.value) return
-  docResizeObserver = new ResizeObserver(() => measureDocBlob())
-  docResizeObserver.observe(docNavEl.value)
+// Keep the fill inside the actual row. Sorting, folding neighboring folders and
+// resizing therefore carry it with the title throughout the layout transition.
+const docNavEl = ref(null), selectedDocRow = shallowRef(null), docIndicator = ref(null)
+const showDocSelection = ref(false)
+const rowMotionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
+let rowMotion = null
+let lastRow = null
+
+function stopRowMotion() {
+  rowMotion?.cancel()
+  rowMotion = null
 }
-watch(docNavEl, observeDocNav, { flush: 'post' })
-async function measureDocBlob(attempt = 0) {
-  await nextTick()
-  const host = docNavEl.value
-  if (!host) { docBlobStyle.value = { opacity: 0 }; return }
-  const row = host.querySelector('.doc-row.is-on')
-  // 当前文档被收起的目录藏起来时，行还在 DOM 里，但不能再留一块高亮浮在外面。
-  if (!row) {
-    docBlobStyle.value = { opacity: 0 }
-    // 首屏数据比组件晚一帧到时，等树渲染出来再量一次。
-    if (attempt < 3 && props.currentPath) setTimeout(() => measureDocBlob(attempt + 1), 100)
-    return
-  }
-  if (row.closest('.tree-children.is-collapsed')) { docBlobStyle.value = { opacity: 0 }; return }
-  const h = host.getBoundingClientRect(), r = row.getBoundingClientRect()
-  const next = {
-    left: r.left - h.left + host.scrollLeft + 'px',
-    top: r.top - h.top + host.scrollTop + 'px',
-    width: r.width + 'px',
-    height: r.height + 'px',
-    opacity: 1
-  }
-  const prev = docBlobStyle.value
-  if (prev.opacity === 1 && (prev.left !== next.left || prev.top !== next.top)) {
-    docBlobMoving.value = true
-    clearTimeout(docBlobTimer)
-    docBlobTimer = setTimeout(() => { docBlobMoving.value = false }, 300)
-  }
-  docBlobStyle.value = next
+function syncRowMotionPreference() {
+  if (rowMotionPreference.matches) stopRowMotion()
 }
+onMounted(() => rowMotionPreference.addEventListener('change', syncRowMotionPreference))
+onBeforeUnmount(() => {
+  stopRowMotion()
+  rowMotionPreference.removeEventListener('change', syncRowMotionPreference)
+})
+watch(() => props.currentPath, (next, previous) => {
+  const mark = docIndicator.value
+  const sameLibrary = next?.split('/')[0] === previous?.split('/')[0]
+  lastRow = sameLibrary && showDocSelection.value && mark?.isConnected
+    ? { top: mark.getBoundingClientRect().top, parent: selectedDocRow.value?.parentElement }
+    : null
+  stopRowMotion()
+}, { flush: 'pre' })
 watch(
-  () => [props.currentPath, props.nodes, groupMode.value, sortMode.value, query.value, props.collapsed, props.width],
-  () => measureDocBlob(),
+  [docNavEl, () => props.currentPath, () => props.nodes, groupMode, sortMode, query, collapsedCats, managerOpen, () => props.collapsed],
+  async () => {
+    const row = docNavEl.value?.querySelector('.doc-row.is-on') || null
+    const from = lastRow
+    lastRow = null
+    selectedDocRow.value = row
+    showDocSelection.value = !!row && !props.collapsed && !managerOpen.value && !row.closest('.tree-children.is-collapsed')
+    if (!showDocSelection.value || rowMotionPreference.matches || !from || row.parentElement !== from.parent) return
+    await nextTick()
+    if (selectedDocRow.value !== row || !docIndicator.value || rowMotionPreference.matches) return
+    const mark = docIndicator.value
+    const dy = from.top - row.getBoundingClientRect().top
+    if (Math.abs(dy) < 1 || Math.abs(dy) > 120) return
+    rowMotion = mark.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], {
+      duration: 180, easing: getComputedStyle(mark).getPropertyValue('--motion-snap').trim()
+    })
+  },
   { flush: 'post', immediate: true }
 )
-watch(collapsedCats, () => {
-  measureDocBlob()
-  setTimeout(measureDocBlob, 380)
-}, { flush: 'post' })
-// 侧栏展开是 220ms 的宽度动画：动画开始时量到的是 0 宽，结束后必须再量一次。
-watch(() => props.collapsed, () => {
-  measureDocBlob()
-  setTimeout(measureDocBlob, 280)
-}, { flush: 'post' })
-// 新建行插在选中文档上面时，选中底块要跟着下移，不能停在新建行的位置。
-watch(() => [tree.create?.kind, tree.create?.parent], () => {
-  measureDocBlob()
-  setTimeout(measureDocBlob, 120)
-}, { flush: 'post' })
-onBeforeUnmount(() => {
-  clearTimeout(docBlobTimer)
-  docResizeObserver?.disconnect()
-})
-const searchEl = ref(null)
+const searchEl = ref(null), treeSearchTrigger = ref(null)
 
 watch([groupMode, sortMode], () => {
   storageSet(LS.group, groupMode.value)
@@ -2089,18 +2332,20 @@ async function rescan() {
 /* ---------- 拖拽调宽 ---------- */
 
 function startResize(e) {
-
-  const startX=e.clientX, startW=props.width
-  resizePanel(e, ev => emit('update:width', Math.max(180,Math.min(420,startW + (ev.clientX-startX)))), () => {})
+  const startX = e.clientX, startWidth = props.width
+  const finish = resizePanel(e, ev => {
+    emit('update:width', Math.max(180, Math.min(420, startWidth + ev.clientX - startX)))
+  }, () => emit('update:dragging', false))
+  if (finish) emit('update:dragging', true)
 }
 
 function setGroup(id) {
   groupMode.value = id
-  menuOpen.value = false
+  closeSortMenu()
 }
 function setSort(id) {
   sortMode.value = id
-  menuOpen.value = false
+  closeSortMenu()
 }
 
 async function toggleSearch() {
@@ -2115,6 +2360,7 @@ async function toggleSearch() {
 function closeSearch() {
   searchOpen.value = false
   query.value = ''
+  treeSearchTrigger.value?.focus({ preventScroll:true })
 }
 async function expandAndSearch() {
   /* 侧栏收起时先展开；已经展开就不要再切一次，否则 Cmd+K 会把侧栏关掉 */
@@ -2183,14 +2429,18 @@ function relTime(ms) {
 function onDocClick(e) {
   const target = e.target instanceof Element ? e.target : null
   if (!target?.closest('.workspace-tools-footer')) footerTools.value = false
-  if (!target?.closest('.side-menu, .icon-btn')) menuOpen.value = false
+  if (!target?.closest('.tree-sort-control')) menuOpen.value = false
 }
 function onLibEscape(e) {
-  if (e.key !== 'Escape' || e.defaultPrevented) return
+  if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229) return
   if(footerTools.value){footerTools.value=false;toolsTrigger.value?.focus();return}
-  if (transfer.open) { transfer.open = false; return }
-  if (managerOpen.value) { managerOpen.value = false; return }
-  if (batch.mode) { batch.cancel(); return }
+  if (transfer.open) { closeTransfer(); return }
+  if (managerOpen.value) {
+    if (tree.menu.open || libDialog.open || iconPicking.value || e.target?.closest?.('[data-esc-local]')) return
+    closeManager()
+    return
+  }
+  if (batch.mode && !libDialog.open) { endBatch(); return }
   if (!libPanel.open || !isMobileLibView()) return
   if (tree.menu.open) {
     tree.closeMenu()
@@ -2207,7 +2457,8 @@ const compactActionsHover = ref(false)
 let compactPointerInside = false
 let compactRevealSuppressed = false
 
-function onCompactActionsEnter() {
+function onCompactActionsEnter(event) {
+  if (event.pointerType === 'touch') return
   compactPointerInside = true
   if (!compactRevealSuppressed) compactActionsHover.value = true
 }
@@ -2231,7 +2482,7 @@ watch(() => props.collapsed, (compact) => {
   compactRevealSuppressed = compact && compactPointerInside
 })
 
-function compactHeaderWidth(title) {
+function compactHeaderWidth() {
   const header = document.querySelector('.side-header')
   if (!header) return props.width
   /* 复制一份到屏幕外，套上 compact 样式量真实宽度：比按字体估算可靠，也不会闪 */
@@ -2239,29 +2490,15 @@ function compactHeaderWidth(title) {
   clone.classList.add('is-compact')
   clone.querySelector('.kb-identity')?.classList.add('is-compact')
   clone.querySelector('.sidebar-actions')?.classList.add('is-compact')
-  /* 克隆时 header 可能还是展开态，标题也要切回 compact 的那个按钮，否则量宽会偏大。 */
-  clone.querySelector('.kb-title')?.classList.add('is-hidden')
-  clone.querySelector('.kb-title-compact')?.classList.remove('is-hidden')
-  if (title !== undefined) {
-    const stack = clone.querySelector('.kb-title-stack')
-    if (stack) {
-      const span = stack.querySelector('.kb-title-text')
-      if (span) {
-        span.className = 'kb-title-text'
-        span.textContent = title || '抽屉'
-        for (const extra of [...stack.querySelectorAll('.kb-title-text')].slice(1)) extra.remove()
-      }
-    }
-  }
+  clone.classList.remove('is-collapsing', 'is-expanding', 'is-merged')
+  clone.setAttribute('aria-hidden', 'true')
+  clone.inert = true
   clone.style.position = 'fixed'
   clone.style.left = '-9999px'
   clone.style.top = '0'
   clone.style.width = 'max-content'
   clone.style.visibility = 'hidden'
   clone.style.pointerEvents = 'none'
-  const sourceTitle = header.querySelector('.kb-title')
-  const cloneTitle = clone.querySelector('.kb-title')
-  if (sourceTitle && cloneTitle) cloneTitle.value = sourceTitle.value
   document.body.appendChild(clone)
   let width = 0
   try {
@@ -2285,17 +2522,15 @@ defineExpose({ expandAndSearch, startCreate, compactHeaderWidth })
 onMounted(() => document.addEventListener('click', onDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 onMounted(() => document.addEventListener('keydown', onLibEscape))
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onLibEscape)
-  resetCompactWidthAnimation(true)
-})
+onBeforeUnmount(() => document.removeEventListener('keydown', onLibEscape))
 onMounted(() => window.addEventListener('reader-access-updated', loadLibs))
 onBeforeUnmount(() => window.removeEventListener('reader-access-updated', loadLibs))
 onMounted(loadActivityUnread)
 </script>
 
 <style scoped>
-.library-welcome{margin:0;padding:0 24px 18px;font-size:13px;line-height:1.65;color:var(--c-sub)}
+
+.search-scopes{display:flex;gap:3px;margin-top:5px}.search-scopes button{padding:3px 6px;border-radius:var(--radius-control);font-size:11px;color:var(--c-sub)}.search-scopes button[aria-pressed=true]{background:var(--c-field);color:var(--c-ink)}
 /* 侧边列表和管理弹窗各有明确职责。 */
 .lib-modal-backdrop { display: none; }
 .lib-backdrop-enter-active, .lib-backdrop-leave-active { transition: opacity 0.2s ease; }
@@ -2328,81 +2563,43 @@ onMounted(loadActivityUnread)
 .lib-create-row { max-height: 52px; min-height: 40px; overflow: hidden; transition: max-height 240ms var(--motion-pop), min-height 240ms var(--motion-pop), opacity 180ms ease, transform 240ms var(--motion-pop), padding 240ms var(--motion-pop); }
 .lib-create-row.lib-row-enter-from, .lib-create-row.lib-row-leave-to { max-height: 0; min-height: 0; opacity: 0; transform: translateY(-4px); padding-top: 0; padding-bottom: 0; }
 .lib-create-row.lib-row-enter-active, .lib-create-row.lib-row-leave-active { transition: max-height 240ms var(--motion-pop), min-height 240ms var(--motion-pop), opacity 180ms ease, transform 240ms var(--motion-pop), padding 240ms var(--motion-pop); }
-.doc-tree-nav { position: relative; }
+.doc-tree-nav { position: relative; container-type:inline-size; }
 :deep(.cat-row.is-rail-target), :deep(.doc-row.is-rail-target) {
   outline: 1.5px solid color-mix(in srgb, var(--c-accent) 36%, transparent);
   outline-offset: -1px;
   border-radius: var(--radius-row);
 }
-.doc-row-blob {
+.doc-row-blob, .lib-row-blob {
   position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 0;
+  inset: 0;
+  z-index: -1;
   border-radius: var(--radius-row);
-  background: color-mix(in srgb, var(--c-accent) 10%, var(--c-panel));
-  border-radius: var(--radius-row);
+  background: color-mix(in srgb, var(--c-accent) 10%, transparent);
   pointer-events: none;
-  transform-origin: center;
-  transition:
-    left 340ms var(--motion-pop),
-    top 340ms var(--motion-pop),
-    width 260ms var(--motion-pop),
-    height 260ms var(--motion-pop),
-    opacity 180ms ease,
-    scale 200ms var(--motion-snap);
 }
-.doc-row-blob.is-moving { scale: .98 1.12; }
-.lib-row-blob {
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 0;
-  border-radius: var(--radius-row);
-  background: color-mix(in srgb, var(--c-accent) 9%, var(--c-panel));
-  pointer-events: none;
-  transform-origin: center;
-  transition:
-    left 340ms var(--motion-pop),
-    top 340ms var(--motion-pop),
-    width 260ms var(--motion-pop),
-    height 260ms var(--motion-pop),
-    opacity 180ms ease,
-    scale 200ms var(--motion-snap);
-}
-.lib-row-blob.is-moving { scale: .98 1.12; }
+.lib-row-blob { background: color-mix(in srgb, var(--c-accent) 9%, transparent); }
 .lib-row-marker {
   position: absolute;
-  z-index: 2;
-  left: 0;
-  top: 0;
+  left: 4px;
+  top: calc(50% - 9px);
   width: 3px;
   height: 18px;
   border-radius: 999px;
   background: var(--c-accent);
-  opacity: .72;
-  pointer-events: none;
-  transition: left 200ms var(--motion-snap), top 340ms var(--motion-pop), opacity 160ms ease;
+}
+.row-selection-enter-active, .row-selection-leave-active { transition: opacity 90ms ease-out !important; }
+.row-selection-enter-from, .row-selection-leave-to { opacity: 0 !important; }
+@media (prefers-reduced-motion: reduce) {
+  .row-selection-enter-active, .row-selection-leave-active { transition: none !important; }
 }
 .lib-row-blob.is-draft { background: color-mix(in srgb, var(--c-accent) 10%, var(--c-panel)); }
 .lib-panel-footer { display:flex;flex-direction:column;margin:5px 8px 12px;gap:2px; }
-.lib-manager-entry { display: flex; align-items: center; gap: 9px; width:100%; padding: 10px 12px; border-radius: var(--radius-control); color: var(--c-sub); text-align: left; font-size: 12px; }.lib-manager-entry:hover { background: var(--c-hover); color: var(--c-ink); }
 .lib-empty { color: var(--c-faint); font-size: 12px; text-align: center; padding: 24px 0; }
-.lib-manager-backdrop { position: fixed; inset: 0; z-index: 59; width: 100%; height: 100%; background: var(--c-overlay); }
-.lib-manager { position: fixed; left: 50%; top: 50%; z-index: 60; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 32px)); max-height: min(680px, 84dvh); display: flex; flex-direction: column; background: var(--c-pop); border: 1px solid var(--c-line); border-radius: 40px; corner-shape: superellipse(2); box-shadow: var(--c-pop-shadow); overflow: hidden; }
-.lib-manager-head { display: flex; align-items: center; justify-content: flex-end; gap:16px; padding: 18px 24px 8px; }.lib-manager-head p { margin: 5px 0 0; color: var(--c-sub); font-size: 12px; }
-.lib-manager-tools { display: flex; gap: 8px; padding: 0 24px 17px; }.lib-manager-tools input, .lib-manager-tools select { min-width: 0; padding: 9px 11px; border: 1px solid var(--c-line); border-radius: var(--radius-control); background: var(--c-field); color: var(--c-ink); font: inherit; font-size: 12px; }.lib-manager-tools input { flex: 1; }.lib-manager-tools select { width: 108px; }
-.lib-manager-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 10px; padding: 0 24px 24px; overflow-y: auto; }.lib-manager-grid .lib-empty { grid-column: 1 / -1; }
-.lib-manager-card { position:relative; display: flex; min-height: 110px; padding: 15px; border-radius: 22px; corner-shape: superellipse(2); background: var(--c-field); text-align: left; }.lib-manager-card:hover, .lib-manager-card.is-current { background: var(--c-hover); }.lib-manager-card-main { display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;text-align:left; }.lib-manager-card strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-ink); font-size: 12px; font-weight: 500; }.lib-manager-card span { color: var(--c-faint); font-size: 11px; }.lib-manager-icon { width: 21px; height: 21px; }.lib-manager-card-more { position:absolute;right:8px;top:8px;opacity:0; }.lib-manager-card:hover .lib-manager-card-more,.lib-manager-card:focus-within .lib-manager-card-more { opacity:1; }
-.lib-preview-entry { display:flex;align-items:center;gap:13px;width:100%;min-height:44px;margin-bottom:5px;padding:8px 12px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left; }.lib-preview-entry:hover { background:var(--c-hover);color:var(--c-ink); }.lib-manager-head-actions { display:flex;align-items:center;gap:9px; }.lib-manager-head-actions>button:not(.icon-btn) { padding:7px 10px;border-radius:var(--radius-control);background:var(--c-field);color:var(--c-sub);font-size:12px; }.lib-manager-previews { min-height:0;overflow-y:auto; }.lib-manager-previews .lib-manager-grid { overflow:visible; }.lib-preview-detail { margin:0 24px 24px;padding:16px;background:var(--c-field);border-radius:22px;corner-shape:superellipse(2); }.lib-preview-detail-head { display:flex;justify-content:space-between;gap:12px;font-size:12px; }.lib-preview-detail-head span,.lib-preview-source { color:var(--c-faint);font-size:11px; }.lib-preview-source { overflow-wrap:anywhere;margin:8px 0; }.lib-preview-body { max-height:300px;overflow:auto;padding:12px 0;font-size:12px;line-height:1.7;overflow-wrap:anywhere; }.lib-preview-body img { max-width:100%; }.lib-preview-body pre { overflow:auto; }.lib-preview-actions { display:flex;justify-content:flex-end;gap:8px; }.lib-preview-actions button { padding:8px 12px;border-radius:var(--radius-control);background:var(--c-pop);font-size:12px; }.lib-preview-actions button:disabled { opacity:.45;cursor:default; }
+
+.lib-preview-entry { display:flex;align-items:center;gap:13px;width:100%;min-height:44px;margin-bottom:5px;padding:8px 12px;border-radius:var(--radius-control);color:var(--c-sub);font-size:12px;text-align:left; }.lib-preview-entry:hover { background:var(--c-hover);color:var(--c-ink); }.lib-preview-detail { margin:0 24px 24px;padding:16px;background:var(--c-field);border-radius:22px;corner-shape:var(--corner-ui); }.lib-preview-detail-head { display:flex;justify-content:space-between;gap:12px;font-size:12px; }.lib-preview-detail-head span,.lib-preview-source { color:var(--c-faint);font-size:11px; }.lib-preview-source { overflow-wrap:anywhere;margin:8px 0; }.lib-preview-body { max-height:300px;overflow:auto;padding:12px 0;font-size:12px;line-height:1.7;overflow-wrap:anywhere; }.lib-preview-body img { max-width:100%; }.lib-preview-body pre { overflow:auto; }.lib-preview-actions { display:flex;justify-content:flex-end;gap:8px; }.lib-preview-actions button { padding:8px 12px;border-radius:var(--radius-control);background:var(--c-pop);font-size:12px; }.lib-preview-actions button:disabled { opacity:.45;cursor:default; }
 .lib-preview-body :is(h1,h2,h3) { margin:1.3em 0 .55em;line-height:1.4;font-weight:600; }.lib-preview-body h1 { font-size:1.45em; }.lib-preview-body h2 { font-size:1.25em; }.lib-preview-body h3 { font-size:1.1em; }.lib-preview-body p,.lib-preview-body ul,.lib-preview-body ol { margin:0 0 1em; }.lib-preview-body :is(ul,ol) { padding-left:1.7em; }.lib-preview-body code { font-family:ui-monospace,monospace;font-size:.9em; }.lib-preview-body pre { padding:10px;background:var(--c-pop);border-radius:12px; }.lib-preview-body table { display:block;max-width:100%;overflow:auto;border-collapse:collapse; }.lib-preview-body :is(td,th) { border:1px solid var(--c-line);padding:4px 7px; }.lib-preview-body a { color:var(--c-accent); }.lib-preview-body a[href="#"] { cursor:help;text-decoration-style:dotted; }
-.transfer-backdrop { position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:18px;background:var(--c-overlay); }.transfer-dialog { width:min(410px,100%);max-height:85dvh;overflow:auto;padding:24px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:34px;corner-shape:superellipse(2);box-shadow:var(--c-pop-shadow);color:var(--c-ink); }.transfer-dialog h2 { margin:0;font-size:17px;font-weight:600; }.transfer-dialog p { margin:8px 0 16px;font-size:12px;color:var(--c-sub);overflow-wrap:anywhere; }.transfer-dialog label { display:block;margin:13px 0;font-size:12px;color:var(--c-sub); }.transfer-dialog select { display:block;width:100%;margin-top:7px;padding:9px 11px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);color:var(--c-ink);font:inherit; }.transfer-dialog .transfer-hint { margin-top:18px;line-height:1.6; }.transfer-dialog .transfer-error { color:#bd4545; }.transfer-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:20px; }.transfer-actions button { padding:8px 15px;border-radius:var(--radius-control);background:var(--c-field);font-size:12px; }.transfer-actions button:last-child { background:var(--c-hover); }.transfer-actions button:disabled { opacity:.45;cursor:default; }
-.transfer-dialog input { display:block;width:100%;margin-top:7px;padding:9px 11px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);color:var(--c-ink);font:inherit; }
-.transfer-toast { position:fixed;right:22px;bottom:24px;z-index:95;display:flex;align-items:center;gap:12px;max-width:min(430px,calc(100vw - 28px));padding:10px 14px;border:1px solid var(--c-line);border-radius:20px;corner-shape:superellipse(2);background:var(--c-pop);box-shadow:var(--c-pop-shadow);color:var(--c-ink);font-size:12px; }.transfer-toast span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.transfer-toast button { color:var(--c-accent);white-space:nowrap; }
-@media (max-width: 520px) { .lib-manager-head { padding:26px 25px 17px; }.lib-preview-detail { margin-inline:14px; } }
-.lib-manager-enter-active { transition: transform 320ms var(--motion-pop), opacity 200ms ease, filter 220ms ease; }
-.lib-manager-leave-active { transition: transform 200ms var(--motion-snap), opacity 170ms ease, filter 160ms ease; }
-.lib-manager-enter-from, .lib-manager-leave-to { transform: translate(-50%, -43%) scale(.94); opacity: 0; filter: blur(3px); }
+.transfer-toast { position:fixed;right:22px;bottom:24px;z-index:95;display:flex;align-items:center;gap:12px;max-width:min(430px,calc(100vw - 28px));padding:10px 14px;border:1px solid var(--c-line);border-radius:20px;corner-shape:var(--corner-ui);background:var(--c-pop);box-shadow:var(--c-pop-shadow);color:var(--c-ink);font-size:12px; }.transfer-toast span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.transfer-toast button { color:var(--c-accent);white-space:nowrap; }
+@media (max-width: 520px) {.lib-preview-detail { margin-inline:14px; } }
 /* 拖拽条：贴在面板右缘，与文档栏那条一个做法 */
 .lib-panel-resize {
   position: absolute;
@@ -2427,8 +2624,6 @@ onMounted(loadActivityUnread)
   .lib-panel-enter-active, .lib-panel-leave-active { transition: transform .2s ease, opacity .2s ease; }
   .lib-panel-resize { display: none; }
   .lib-panel-list { padding-bottom: 8px; }
-  .lib-manager-tools { flex-wrap: wrap; }.lib-manager-tools input { flex-basis: 100%; }.lib-manager-tools select { flex: 1; }
-  .lib-manager-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 821px) { .lib-close-mobile { display: none; } }
 
@@ -2449,8 +2644,7 @@ onMounted(loadActivityUnread)
 .lib-row.is-draft { background: color-mix(in srgb, var(--c-accent) 5%, var(--c-panel)); }
 .lib-row.is-draft:hover { background: color-mix(in srgb, var(--c-accent) 9%, var(--c-panel)); }
 .lib-row.is-draft.is-current { background: transparent !important; --row-fill: transparent; }
-.lib-row.is-draft .lib-row-icon, .lib-manager-card.is-draft .lib-manager-icon { color: var(--c-accent); }
-.lib-manager-card.is-draft { background: color-mix(in srgb, var(--c-accent) 5%, var(--c-pop)); }
+.lib-row.is-draft .lib-row-icon { color: var(--c-accent); }
 /* 图标：与侧边栏的文档图标同尺寸（13px），行内不再单独占位 */
 .lib-row-icon { width: 17px; height: 17px; flex-shrink: 0; object-fit: contain; }
 .lib-row-name {
@@ -2498,20 +2692,18 @@ onMounted(loadActivityUnread)
 .side-header .brand-logo { margin-top: 0; }
 .side-header .icon-btn { flex-shrink: 0; }
 .side-header .kb-identity,
-.side-header .sidebar-actions { position:relative; isolation:isolate; display:flex; align-items:center; min-width:0; height:32px; padding:2px 4px; border-radius:18px; corner-shape:superellipse(2); }
+.side-header .sidebar-actions { position:relative; isolation:isolate; display:flex; align-items:center; min-width:0; height:32px; padding:2px 4px; border-radius:18px; corner-shape:var(--corner-ui); }
 .side-header .kb-identity::before,
-.side-header .sidebar-actions::before { content:''; position:absolute; inset:0; z-index:0; border-radius:inherit; corner-shape:inherit; background-color:var(--topbar-chip-bg); -webkit-backdrop-filter:blur(12px) saturate(1.04); backdrop-filter:blur(12px) saturate(1.04); box-shadow:var(--topbar-glass-shadow); pointer-events:none; transition:background-color 160ms ease,box-shadow 160ms ease; }
+.side-header .sidebar-actions::before { content:''; position:absolute; inset:0; z-index:0; border-radius:inherit; corner-shape:inherit; background-color:var(--topbar-chip-bg); -webkit-backdrop-filter:var(--topbar-glass-filter); backdrop-filter:var(--topbar-glass-filter); box-shadow:var(--topbar-glass-shadow); pointer-events:none; transition:background-color 160ms ease,box-shadow 160ms ease; }
 .side-header .kb-identity > *,
 .side-header .sidebar-actions > * { position:relative; z-index:1; }
-.side-header .kb-identity { gap:2px; flex:0 1 auto; }
+.side-header .kb-identity { gap:2px; flex:1 1 0; }
+.side-header.is-compact .kb-identity { flex:0 1 auto; }
 .side-header .sidebar-actions { gap:0; flex:none; margin-left:auto; width:32px; padding:2px 4px; display:flex; align-items:center; justify-content:flex-end; }
-.side-header:not(.is-compact):not(.is-collapsing):not(.is-expanding) .sidebar-actions { width:56px; padding:2px 4px; display:flex; }
-.side-header.is-topbar.is-collapsing,
-.side-header.is-topbar.is-expanding { gap:0; }
-.side-header.is-collapsing .sidebar-actions,
-.side-header.is-expanding .sidebar-actions { width:32px !important; padding:2px 4px !important; }
-/* 收起时立即换成紧凑内容，避免隐藏的编辑框把 header 撑在整栏宽度。 */
-.side-header.is-collapsing .kb-title { display:none; }
+.side-header.is-merged .sidebar-actions { width:56px; }
+.side-header { transition:gap 220ms cubic-bezier(0,0,.2,1); }
+.side-header .sidebar-actions { transition:width 220ms cubic-bezier(0,0,.2,1); }
+.side-header.is-collapsing { gap:0; }
 .side-header.is-collapsing .sidebar-actions .kb-list-btn,
 .side-header.is-expanding .sidebar-actions .kb-list-btn { width:0!important; padding:0!important; margin:0!important; opacity:0!important; visibility:hidden; overflow:hidden; pointer-events:none; transition:none!important; animation:none!important; }
 .side-header .sidebar-actions .icon-btn:hover { background:transparent; color:var(--c-ink); }
@@ -2526,17 +2718,34 @@ onMounted(loadActivityUnread)
  * 避免合成层在起止瞬间重新栅格化，外框看起来像抖了一下。
  */
 .side-header.is-merged .kb-identity::before,
-.side-header.is-merged .sidebar-actions::before { background-color:transparent; box-shadow:0 2px 8px rgb(0 0 0 / 0),0 1px 2px rgb(0 0 0 / 0),inset 0 1px 0 rgb(255 255 255 / 0),inset 0 -1px 0 rgb(0 0 0 / 0); -webkit-backdrop-filter:blur(0) saturate(1); backdrop-filter:blur(0) saturate(1); transition:background-color 180ms cubic-bezier(.4,0,.2,1) 40ms,box-shadow 180ms cubic-bezier(.4,0,.2,1) 40ms; }
-.side-header .kb-title-wrap { flex:0 0 auto; display:grid; align-items:center; min-width:0; }
-.side-header .kb-title-wrap > * { grid-area:1 / 1; min-width:0; }
-.side-header .kb-title { field-sizing:content; width:auto; min-width:3ch; max-width:180px; margin-left:-1px; padding-left:3px; font-size:15px; line-height:1.3; font-weight:500; }
-.side-header .kb-title:hover:not(:focus) { background:transparent; border-color:transparent; }
-.side-header .kb-title-compact { font-size:15px; font-weight:500; line-height:1.3; letter-spacing:-0.01em; padding:1px 3px; text-align:left; }
-.side-header .kb-title.is-hidden,
-.side-header .kb-title-compact.is-hidden { opacity:0; pointer-events:none; }
+.side-header.is-merged .sidebar-actions::before { background-color:transparent; box-shadow:none; -webkit-backdrop-filter:blur(0) saturate(1); backdrop-filter:blur(0) saturate(1); transition:background-color 180ms cubic-bezier(.4,0,.2,1) 40ms,box-shadow 180ms cubic-bezier(.4,0,.2,1) 40ms; }
+.side-header .kb-title-wrap { position:relative; flex:1 1 auto; min-width:0; }
+.side-header .kb-title-label,
+.side-header .kb-title {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  margin:0;
+  padding:1px 3px;
+  border:0;
+  font-size:15px;
+  font-weight:500;
+  line-height:1.3;
+  letter-spacing:-0.01em;
+  text-align:left;
+}
+.side-header .kb-title-label { overflow:hidden; }
+.side-header .kb-title {
+  position:absolute;
+  inset:0;
+  height:100%;
+  opacity:0;
+}
+.side-header .kb-title:disabled { display:none; }
+.side-header .kb-title:focus { opacity:1; outline:1px solid var(--c-focus); }
+.side-header .kb-title-wrap:has(> .kb-title:focus) .kb-title-label { visibility:hidden; }
 .side-header.is-topbar { width:100%; }
-.side-header .kb-title-compact { transition:opacity 140ms ease; }
-.side-header .kb-title { transition:opacity 140ms ease; }
 /* 展开时知识库图标从紧凑态的滑出位置收进 header，给一小段出现动效。 */
 .side-header:not(.is-expanding):not(.is-compact) .kb-list-btn { animation:kb-icon-in 300ms var(--motion-pop); }
 @keyframes kb-icon-in {
@@ -2554,6 +2763,17 @@ onMounted(loadActivityUnread)
   background:transparent;
   box-shadow:none;
 }
+/* The library and document controls occupy sibling slots over the same cover. */
+.app-topbar:has(.doc-topbar.over-cover) .side-header.is-topbar:not(.is-merged) {
+  --c-ink: var(--nav-cover-ink);
+  --c-faint: color-mix(in srgb, var(--c-ink) 81%, transparent);
+  --topbar-chip-bg: color-mix(in srgb, var(--nav-cover-paper) var(--topbar-chip-opacity), transparent);
+  --topbar-chip-bg-hover: color-mix(in srgb, var(--nav-cover-paper) var(--topbar-chip-opacity-hover), transparent);
+  color: var(--c-ink);
+}
+@media (prefers-contrast: more) {
+  .app-topbar:has(.doc-topbar.over-cover) .side-header.is-topbar:not(.is-merged) { --c-faint: var(--c-ink); }
+}
 /* 视觉上是一整块，实际仍是标题按钮 + 箭头按钮两个目标。 */
 .side-header::before {
   content:'';
@@ -2564,14 +2784,13 @@ onMounted(loadActivityUnread)
   bottom:4px;
   z-index:0;
   border-radius:18px;
-  corner-shape:superellipse(2);
+  corner-shape:var(--corner-ui);
   background-color:transparent;
   box-shadow:none;
   pointer-events:none;
-  /* 与 Aa/… 的 220ms 延迟淡出对齐。 */
   transition:background-color 200ms cubic-bezier(.4,0,.2,1),box-shadow 200ms cubic-bezier(.4,0,.2,1);
 }
-/* 模糊单独一层：和 Aa/… 一样只淡 opacity，避免收起时整块背景突然变清晰。 */
+/* 磨砂单独淡入淡出，收起时玻璃始终贴着按钮。 */
 .side-header::after {
   content:'';
   position:absolute;
@@ -2581,9 +2800,9 @@ onMounted(loadActivityUnread)
   bottom:4px;
   z-index:-1;
   border-radius:18px;
-  corner-shape:superellipse(2);
-  -webkit-backdrop-filter:blur(12px) saturate(1.04);
-  backdrop-filter:blur(12px) saturate(1.04);
+  corner-shape:var(--corner-ui);
+  -webkit-backdrop-filter:var(--topbar-glass-filter);
+  backdrop-filter:var(--topbar-glass-filter);
   opacity:0;
   pointer-events:none;
   transition:opacity 200ms cubic-bezier(.4,0,.2,1);
@@ -2627,34 +2846,27 @@ onMounted(loadActivityUnread)
   height:32px;
   padding:2px 4px;
   border-radius:18px;
-  corner-shape:superellipse(2);
+  corner-shape:var(--corner-ui);
 }
 .side-header.is-compact .kb-title-wrap { flex:0 1 auto; max-width:140px; }
-.side-header.is-compact .kb-title-compact {
-  max-width:140px;
+.side-header.is-compact .kb-title-label:hover { color:var(--nav-cover-ink, var(--c-accent)); }
+.kb-title-stack { position:relative; display:grid; grid-template-columns:minmax(0,1fr); min-width:0; max-width:100%; vertical-align:top; }
+.kb-title-text { grid-area:1 / 1; justify-self:stretch; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.kb-title-measure { display:none; }
+.side-header.is-compact .kb-title-measure {
+  display:block;
+  grid-area:1 / 1;
+  height:0;
   overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  padding:1px 3px;
-  border:0;
-  background:transparent;
-  color:var(--c-ink);
-  font-size:15px;
-  font-weight:500;
-  cursor:pointer;
+  visibility:hidden;
+  white-space:pre;
 }
-.side-header.is-compact .kb-title-compact:hover { color:var(--c-accent); }
-/* 隐藏的编辑框不能继续参与紧凑标题的宽度计算。 */
-.side-header.is-compact .kb-title,
-.side-header.is-expanding .kb-title { display:none; }
-.side-header.is-expanding .kb-title-compact { opacity:1; pointer-events:none; }
-/* 收起第一帧就显示紧凑标题，避免输入框先消失、标题再淡入造成闪空。 */
-.side-header.is-collapsing .kb-title-compact { opacity:1; transition:none; }
-.kb-title-stack { position:relative; display:inline-grid; min-width:0; max-width:100%; vertical-align:top; }
-.kb-title-text { grid-area:1 / 1; justify-self:start; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.lib-title-enter-active,.lib-title-leave-active { transition:opacity 160ms ease; }
-.lib-title-enter-from,.lib-title-leave-to { opacity:0; }
-.side-header .brand-logo:hover,.side-header .brand-logo:focus-visible{box-shadow:none;background:transparent;outline:none}
+@media (prefers-reduced-motion:no-preference) {
+  .kb-title-text { animation:kb-title-in 115ms ease-out; }
+  @keyframes kb-title-in { from { opacity:.65; } to { opacity:1; } }
+}
+.side-header .brand-logo:hover { box-shadow:none; background:transparent; }
+.side-header :is(.brand-logo,.kb-title-label,.icon-btn):focus-visible { outline:2px solid var(--c-focus); outline-offset:-2px; }
 .sidebar-actions.is-compact {
   position:relative;
   display:flex;
@@ -2664,11 +2876,11 @@ onMounted(loadActivityUnread)
   width:32px;
   height:32px;
   border-radius:18px;
-  corner-shape:superellipse(2);
+  corner-shape:var(--corner-ui);
 }
 .sidebar-actions.is-compact:hover::before,
 .sidebar-actions.is-compact.is-revealed::before { background-color:var(--topbar-chip-bg-hover); }
-.sidebar-actions.is-compact .sidebar-toggle { width:24px; height:24px; border-radius:8px; }
+.sidebar-actions.is-compact .sidebar-toggle { width:24px; height:24px; border-radius:var(--radius-item); }
 .sidebar-actions.is-compact .sidebar-toggle:hover { background:transparent; color:var(--c-ink); }
 .sidebar-actions.is-compact .kb-list-btn {
   position:absolute;
@@ -2681,7 +2893,7 @@ onMounted(loadActivityUnread)
   padding:4px 0 0;
   border:0;
   border-radius:18px;
-  corner-shape:superellipse(2);
+  corner-shape:var(--corner-ui);
   background:transparent;
   box-shadow:none;
   color:var(--c-ink);
@@ -2697,14 +2909,15 @@ onMounted(loadActivityUnread)
   position:absolute;
   inset:4px 0 0;
   border-radius:18px;
-  corner-shape:superellipse(2);
+  corner-shape:var(--corner-ui);
   background:var(--topbar-chip-bg-hover);
-  -webkit-backdrop-filter:blur(12px) saturate(1.04);
-  backdrop-filter:blur(12px) saturate(1.04);
+  -webkit-backdrop-filter:var(--topbar-glass-filter);
+  backdrop-filter:var(--topbar-glass-filter);
   box-shadow:var(--topbar-glass-shadow);
 }
 .sidebar-actions.is-compact .kb-list-btn svg { position:relative; z-index:1; }
-.sidebar-actions.is-compact.is-revealed .kb-list-btn {
+.sidebar-actions.is-compact.is-revealed .kb-list-btn,
+.side-header.is-compact:has(:focus-visible) .kb-list-btn {
   opacity:1;
   visibility:visible;
   pointer-events:auto;
@@ -2786,7 +2999,12 @@ onMounted(loadActivityUnread)
 .batch-bar span{flex:1;min-width:0}
 .batch-bar button{padding:5px 7px;border-radius:var(--radius-control);white-space:nowrap}
 .batch-bar button:hover{background:var(--c-hover)}
-.batch-bar .batch-delete{color:#c8403b}
+.batch-bar .batch-delete{color:var(--c-danger,#c8403b)}
+@media (hover:none), (pointer:coarse) {
+  .batch-bar button,.tree-search-trigger,.tree-sort-control > button,.tree-sort-control .side-menu-item,.tree-menu-item { min-height:44px; }
+  .tree-menu { max-height:calc(100dvh - 16px); overflow-y:auto; overscroll-behavior:contain; }
+  .batch-bar button,.tree-search-trigger,.tree-sort-control > button { min-width:44px; }
+}
 .batch-bar .batch-delete:disabled{opacity:.4;cursor:default}
 /* 分组排序菜单 */
 .side-menu {
@@ -2818,7 +3036,8 @@ onMounted(loadActivityUnread)
   text-align: left;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.side-menu-item:hover {
+.tree-sort-control .side-menu { top:calc(100% + 4px); max-height:calc(100dvh - 132px); overflow-y:auto; overscroll-behavior:contain; }
+.side-menu-item:is(:hover,:focus-visible) {
   background: var(--c-hover);
   color: var(--c-ink);
 }
@@ -2851,30 +3070,8 @@ onMounted(loadActivityUnread)
 .lib-panel-sort .select-menu-trigger:hover{background:var(--c-field)}
 .lib-panel-sort :deep(.select-menu-trigger){min-height:34px;width:auto;min-width:114px;flex:none;padding:6px 11px;background:var(--c-field);border-color:var(--c-line)}
 .lib-panel-sort :deep(.select-menu-trigger:hover){background:var(--c-field)}
-.lib-manager-tools{display:flex;flex-direction:column;gap:12px;padding-bottom:18px}
-.lib-manager-search-row{display:flex;align-items:center;gap:10px;min-width:0}
-.lib-manager-search-row>input{flex:1;min-width:0;padding:11px 14px;font-size:13px}
-.lib-manager-filter-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.lib-manager-filters{display:flex;align-items:center;gap:4px;min-width:0;overflow:auto}
-.lib-manager-filters button{flex:none;padding:7px 11px;border-radius:var(--radius-control);corner-shape:superellipse(2);color:var(--c-sub);font-size:12px}
-.lib-manager-filters button:hover{background:var(--c-hover)}
-.lib-manager-filters button.is-on{background:var(--c-field);color:var(--c-ink)}
-.lib-manager-search-row :deep(.select-menu-trigger){flex:none;width:125px;min-height:39px;padding:8px 12px;background:var(--c-field);white-space:nowrap}
-.lib-manager-search-row :deep(.select-menu-trigger:hover){background:var(--c-hover)}
-.lib-manager-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
-.lib-manager-card{min-height:120px;padding:17px;border-radius:26px;transition:background .16s ease,transform .16s ease}
-.lib-manager-card:hover{transform:translateY(-1px)}
-.lib-manager-card strong{font-size:13px;font-weight:400}
-.lib-card-meta{display:flex;align-items:center;flex-wrap:wrap;gap:7px 12px;color:var(--c-faint);font-size:11px}
 .lib-card-status{display:inline-flex;align-items:center;gap:4px;color:var(--c-sub);white-space:nowrap}
 .lib-card-status svg{flex:none;opacity:.85}
-.lib-manager-head h2,.transfer-dialog h2{font-weight:400}
-.lib-manager-head{padding:38px 36px 18px}
-.lib-manager-navigation{display:flex;align-items:center;min-width:0;gap:10px}
-.lib-manager-navigation h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lib-manager-back{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:var(--radius-control);color:var(--c-sub)}
-.lib-manager-back:hover{background:var(--c-hover);color:var(--c-ink)}
-.lib-manager-previews{flex:1;min-height:0;overflow:auto}
 .preview-list{display:flex;flex-direction:column;gap:7px;padding:0 30px 24px}
 .preview-list-row{display:flex;align-items:center;gap:14px;min-height:65px;padding:8px 10px 8px 13px;border-radius:var(--radius-control);background:var(--c-field)}
 .preview-list-main{display:flex;align-items:center;gap:12px;flex:1;min-width:0;text-align:left}
@@ -2891,33 +3088,34 @@ onMounted(loadActivityUnread)
 .lib-preview-body{flex:1;min-height:140px;max-height:none}
 .lib-preview-actions{flex:none;padding-top:12px}
 .lib-preview-actions button{display:inline-flex;align-items:center;justify-content:center;gap:5px}
-.lib-manager-tools{padding-inline:30px}
-.lib-manager-grid{padding-inline:30px}
-.lib-manager-footer{padding-inline:30px}
-.lib-manager-icon{width:23px;height:23px}
-.lib-manager-footer{display:flex;align-items:center;gap:7px;padding:16px 24px 18px}
-.lib-manager-footer button{display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:var(--radius-control);corner-shape:superellipse(2);color:var(--c-sub);font-size:12px}
-.lib-manager-footer button:hover{background:var(--c-field);color:var(--c-ink)}
-.transfer-field{display:flex;flex-direction:column;gap:7px;margin:14px 0;color:var(--c-sub);font-size:12px}
-.transfer-field :deep(.select-menu-trigger){width:100%;min-width:0;min-height:39px;background:var(--c-field);color:var(--c-ink)}
-.transfer-dialog{width:min(630px,calc(100vw - 32px));padding:26px}
-.transfer-source{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.transfer-library-head{display:flex;align-items:center;gap:16px;margin:18px 0 10px;color:var(--c-sub);font-size:12px}
-.transfer-library-head span{flex:none}
-.transfer-library-head input{margin:0;min-width:0;flex:1;padding:8px 11px}
-.transfer-library-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-height:290px;overflow:auto}
-.transfer-library-grid button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;min-height:85px;padding:11px 13px;border:1px solid transparent;border-radius:22px;corner-shape:superellipse(2);background:var(--c-field);text-align:left}
-.transfer-library-grid button:hover{background:var(--c-hover)}
-.transfer-library-grid button.is-on{border-color:var(--c-accent);background:var(--c-active)}
-.transfer-library-grid button.is-draft{background:color-mix(in srgb,var(--c-accent) 5%,var(--c-pop))}
-.transfer-library-grid button.is-draft:hover{background:color-mix(in srgb,var(--c-accent) 9%,var(--c-pop))}
-.transfer-library-grid button.is-draft.is-on{border-color:var(--c-accent);background:var(--c-active)}
-.transfer-library-grid button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-ink);font-size:12px}
-.transfer-library-grid button small{color:var(--c-faint);font-size:10px}
+.transfer-backdrop { position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:12px; }
+.transfer-dialog { width:min(440px,100%); max-height:calc(100dvh - 24px); display:flex; flex-direction:column; gap:12px; overflow:auto; padding:22px; border-radius:var(--radius-surface); background:var(--c-pop); color:var(--c-ink); }
+.transfer-dialog header { min-width:0; }
+.transfer-dialog h2 { margin:0; font-size:17px; font-weight:600; line-height:1.4; }
+.transfer-source { display:flex; flex-direction:column; align-items:start; gap:2px; margin:6px 0 2px; overflow-wrap:anywhere; color:var(--c-text); font-size:13px; line-height:1.45; }
+.transfer-source small { font-size:11px; color:var(--c-sub); }
+.transfer-library-head { display:flex; align-items:center; flex:none; gap:8px; background:var(--c-field); border-radius:var(--radius-control); padding:0 11px; color:var(--c-sub); }
+.transfer-library-head input { min-width:0; width:100%; min-height:36px; background:transparent; outline:0; color:var(--c-ink); font-size:13px; }
+.transfer-library-head:focus-within { outline:2px solid var(--c-focus); outline-offset:1px; }
+.transfer-library-grid { min-height:44px; }
+.transfer-field { display:grid; gap:5px; }
+.transfer-field > span { color:var(--c-sub); font-size:12px; }
+.transfer-field :deep(.select-menu-trigger) { width:100%; min-height:36px; border:0; gap:8px; }
+.transfer-error, .transfer-empty { margin:0; font-size:12px; line-height:1.5; }
+.transfer-empty { padding:10px; text-align:center; color:var(--c-sub); }
+.transfer-error { color:var(--c-danger); }
+.transfer-actions { display:flex; flex:none; align-items:center; justify-content:flex-end; gap:6px; }
+.transfer-actions button { min-width:64px; min-height:36px; padding:6px 12px; border-radius:var(--radius-control); font-size:13px; }
+.transfer-actions button:first-child:hover { background:var(--c-hover); }
+.transfer-actions button:last-child { color:var(--c-on-accent); background:var(--c-accent); }
+.transfer-actions button:disabled { opacity:.45; cursor:default; }
+@media (pointer:coarse) {
+  .transfer-library-head input, .transfer-field :deep(.select-menu-trigger), .transfer-actions button { min-height:44px; }
+}
 .transfer-backdrop.overlay-enter-active .transfer-dialog,.transfer-backdrop.overlay-leave-active .transfer-dialog{transition:transform var(--motion-enter) var(--motion-ease),opacity var(--motion-enter) ease}
 .transfer-backdrop.overlay-enter-from .transfer-dialog,.transfer-backdrop.overlay-leave-to .transfer-dialog{transform:translateY(5px) scale(.975);opacity:0}
-@media(max-width:520px){.transfer-dialog{padding:20px}.transfer-library-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.transfer-library-head{display:block}.transfer-library-head input{margin-top:8px}}
-@media(max-width:520px){.lib-manager{width:calc(100vw - 16px);max-height:calc(100dvh - 24px);border-radius:28px}.lib-manager-head{padding:20px 20px 14px}.lib-manager-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding-inline:20px}.lib-manager-tools{padding-inline:20px}.lib-manager-search-row :deep(.select-menu-trigger){width:105px}.lib-manager-filters button{padding-inline:8px}.lib-manager-footer{padding-inline:20px}.lib-preview-detail{max-height:calc(100dvh - 130px);margin:0 14px 14px;padding:14px}.lib-preview-actions{flex-wrap:wrap}.lib-preview-actions button{flex:1;white-space:nowrap}}
+@media(max-width:520px){.transfer-dialog{padding:18px}}
+@media(max-width:520px){.lib-preview-detail{max-height:calc(100dvh - 130px);margin:0 14px 14px;padding:14px}.lib-preview-actions{flex-wrap:wrap}.lib-preview-actions button{flex:1;white-space:nowrap}}
 @media(max-width:520px){.preview-list{padding-inline:20px}.preview-list-row{align-items:stretch;flex-direction:column;gap:7px}.preview-list-actions{justify-content:flex-end;flex-wrap:wrap}}
 .workspace-tools-footer{flex:none;padding:7px 10px 12px;border:0}
 </style>
@@ -2980,11 +3178,11 @@ onMounted(loadActivityUnread)
   color: inherit;
 }
 .lib-icon-btn:not(:disabled):hover { background: var(--c-line); }
-.lib-icon-btn:disabled { cursor: default; }
+.lib-icon-btn:disabled { pointer-events: none; }
 .lib-row-icon { width: 18px; height: 18px; }
 .lib-row-body { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding-right: 0; transition: padding-right 160ms var(--motion-snap); }
-.lib-icon-placeholder { opacity: .3; color: var(--c-faint); transition: opacity 140ms ease, color 140ms ease; }
-.lib-icon-btn:hover .lib-icon-placeholder, .lib-manager-card:hover .lib-icon-placeholder { opacity: .65; color: var(--c-ink); }
+.lib-icon-placeholder { color: var(--c-faint); transition: color 140ms ease; }
+.lib-icon-btn:is(:hover,:focus-visible) .lib-icon-placeholder { color: var(--c-ink); }
 .lib-row:hover .lib-row-body, .lib-row:focus-within .lib-row-body, .lib-row.is-current .lib-row-body { padding-right: var(--lib-row-actions-pad, 68px); }
 .lib-row-actions {
   position: absolute;
@@ -3012,7 +3210,7 @@ onMounted(loadActivityUnread)
   font-size: 12.5px;
   color: var(--c-ink);
 }
-.lib-row-meta { margin-left: auto; flex: none; font-size: 10.5px; color: var(--c-faint); font-variant-numeric: tabular-nums; }
+.lib-row-meta { margin-left: auto; flex: none; font-size: 11px; color: var(--c-sub); font-variant-numeric: tabular-nums; }
 .lib-more { flex: none; opacity: .32; transition: opacity .12s ease, background .12s ease; }
 .lib-row:hover .lib-more, .lib-row:focus-within .lib-more, .lib-more:focus-visible { opacity: 1; }
 .lib-row-input {
@@ -3038,8 +3236,13 @@ onMounted(loadActivityUnread)
   padding: 4px 12px 10px;
   border: 0;
 }
-.lib-panel-footer .icon-btn { opacity: .55; }
-.lib-panel-footer .icon-btn:hover { opacity: 1; }
+.lib-panel-footer .icon-btn { width:32px; height:32px; color:var(--c-sub); }
+@media (pointer:coarse) {
+  .lib-panel-footer .icon-btn { width:44px; height:44px; }
+}
+.lib-panel-footer .icon-btn:hover, .lib-panel-footer .icon-btn[aria-current="page"] { opacity: 1; }
+.lib-panel-footer .icon-btn[aria-current="page"] { background: var(--c-active); }
+@media (max-width:820px) { .lib-panel.is-gallery-nav { display:none; } }
 .lib-create-toggle svg { transition: transform 180ms var(--motion-pop); }
 .lib-create-toggle.is-open svg { transform: rotate(45deg); }
 .sidebar-chevron { display:block; flex-shrink:0; }
@@ -3048,93 +3251,26 @@ onMounted(loadActivityUnread)
   background: var(--c-hover);
   color: var(--c-ink);
 }
-
-/* ---------- 管理弹窗 ---------- */
-.lib-manager { width: min(640px, calc(100vw - 32px)); border-radius: var(--radius-dialog); }
-.lib-manager-head { padding: 18px 24px 8px; justify-content: flex-end; }
-.lib-manager-head-actions { gap: 2px; }
-.library-welcome { margin: 0; padding: 0 24px 12px; font-size: 12px; line-height: 1.6; }
-.lib-manager-tools {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 0 24px 14px;
-  flex-wrap: wrap;
-}
-.lib-manager-search {
-  flex: 1 1 190px;
-  min-width: 0;
-  height: 34px;
-  padding: 0 11px;
-  border: 1px solid var(--c-line);
-  border-radius: 9px;
-  background: var(--c-field);
-  color: var(--c-ink);
-  font: inherit;
-  font-size: 12px;
-  outline: none;
-}
-.lib-manager-search:focus { border-color: color-mix(in srgb, var(--c-ink) 22%, transparent); }
-.lib-manager-tools :deep(.select-menu-trigger) {
-  width: 112px;
-  min-height: 34px;
-  padding: 0 9px;
-  border-color: var(--c-line);
-  background: var(--c-field);
-  font-size: 11.5px;
-}
-@media (max-width: 520px) {
-  .lib-manager-search { flex-basis: 100%; }
-  .lib-manager-sort { flex: none; }
-  .lib-manager-list { padding: 0 14px 10px; }
-  .lib-manager-footer { padding: 10px 18px 12px; }
-}
 @media (max-width: 820px) and (hover: none) {
   .lib-row-body { padding-right: var(--lib-row-actions-pad, 44px); }
   .lib-row-actions { opacity: 1; pointer-events: auto; transform: translateY(-50%); }
 }
-@media (max-width: 360px) {
-}
 </style>
 
 <style scoped>
-/* 管理知识库：紧凑的一行卡片，过滤只改列表内容，不改窗口高度。 */
-.lib-manager { width: min(640px, calc(100vw - 32px)); border-radius: var(--radius-dialog); }
-.lib-manager-head { padding: 18px 24px 8px; justify-content: flex-end; }
-.lib-manager-head-actions { gap: 2px; }
-.library-welcome { margin: 0; padding: 0 24px 12px; font-size: 12px; line-height: 1.6; }
-.lib-manager-tools { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 24px 14px; flex-wrap: wrap; }
-.lib-manager-search { flex: 1 1 190px; min-width: 0; height: 34px; padding: 0 11px; border: 1px solid var(--c-line); border-radius: 9px; background: var(--c-field); color: var(--c-ink); font: inherit; font-size: 12px; outline: none; }
-.lib-manager-search:focus { border-color: color-mix(in srgb, var(--c-ink) 22%, transparent); }
-.lib-manager-sort { flex: none; width: 34px; height: 34px; border-radius: 9px; color: var(--c-sub); }
-.lib-manager-sort:hover { background: var(--c-hover); color: var(--c-ink); }
-.lib-manager-sort.is-active { background: var(--c-hover); color: var(--c-ink); }
-.lib-manager-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; align-content: start; flex: 1; min-height: 160px; padding: 0 24px 12px; overflow-y: auto; }
-.lib-manager-card { position: relative; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 8px 0 10px; border-radius: 12px; background: var(--c-field); cursor: pointer; transition: background 160ms var(--motion-snap), box-shadow 160ms var(--motion-snap); }
-.lib-manager-card:hover { background: var(--c-hover); transform: none; }
-.lib-manager-card.is-current { background: color-mix(in srgb, var(--c-accent) 7%, var(--c-field)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 16%, transparent); }
-.lib-manager-current { flex: none; color: var(--c-accent); }
-.lib-manager-icon-btn { flex: none; width: 26px; height: 26px; margin-left: -3px; }
-.lib-manager-icon { width: 22px; height: 22px; flex: none; }
-.lib-manager-card strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-ink); font-size: 13px; font-weight: 500; }
-.lib-card-meta { flex: none; color: var(--c-faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.lib-manager-rename { flex: 1; width: auto; min-width: 0; height: 28px; padding: 0 7px; border: 1px solid var(--c-line); border-radius: 7px; background: var(--c-surface); color: var(--c-ink); font: inherit; font-size: 13px; outline: none; }
-.lib-manager-create { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px; background: var(--c-field); cursor: text; }
-.lib-manager-create-icon { flex: none; color: var(--c-sub); }
-.lib-manager-create .lib-manager-rename { flex: 1; width: auto; }
-.lib-manager-card-more { position: static; flex: none; margin-left: 2px; opacity: .4; transition: opacity .12s ease, background .12s ease; }
-.lib-manager-card-more.is-active { opacity: 1; background: var(--c-line); }
-.lib-manager-card:hover .lib-manager-card-more, .lib-manager-card:focus-within .lib-manager-card-more, .lib-manager-card-more:focus-visible { opacity: 1; }
-.lib-manager-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 24px 14px; border: 0; }
-.lib-manager-count { color: var(--c-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-@media (max-width: 520px) {
-  .lib-manager-head { padding: 16px 18px 8px; }
-  .lib-manager-tools { padding: 0 18px 12px; }
-  .lib-manager-list { padding: 0 14px 10px; }
-  .lib-manager-footer { padding: 10px 18px 12px; }
+@media screen and (max-width:720px) {
+  .app-sidebar > aside { transition:none; }
+  .app-sidebar.is-browsing-files, .app-sidebar.is-browsing-files > aside { width:100% !important; }
+  .app-sidebar.is-browsing-files > aside { border-right:0; }
+  .file-nav-resize { display:none; }
+  .side-header.is-compact .kb-title-wrap { max-width:clamp(32px,calc(100vw - 326px),140px); }
+  .side-header:not(.is-compact) .sidebar-actions { width:auto !important; }
+  .side-header:not(.is-compact) .sidebar-actions .icon-btn { width:44px; height:44px; }
+  .side-header.is-compact .sidebar-toggle::after { content:''; position:absolute; inset:-10px -4px; }
+}
+@media screen and (max-width:380px) {
+  .side-header.is-compact .kb-title-wrap { display:none; }
+  .side-header.is-compact .sidebar-actions:not(.is-revealed) .kb-list-btn { visibility:hidden; opacity:0; pointer-events:none; }
 }
 </style>
-
-<style scoped>
-</style>
+<style scoped src="../styles/drawer-browser.css"></style>

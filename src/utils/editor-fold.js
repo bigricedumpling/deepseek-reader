@@ -12,6 +12,7 @@ import { watch } from 'vue'
 import { $prose } from '@milkdown/kit/utils'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
+import { isFrontmatterBlock } from './preserved-markdown.js'
 import { foldKey, foldedKeys, foldState, foldDoc, foldableKeys, foldableState } from './toc-fold.js'
 
 export const editorFoldKey = new PluginKey('reader-editor-fold')
@@ -42,9 +43,12 @@ export function buildDeco(doc) {
   const rules = []
   const foldedLevels = []
   const blocks = sections(doc)
+  // Cursor widgets are DOM siblings of the title. Only document blocks count.
+  const firstContent = blocks.find(block => !isFrontmatterBlock(block.node))
   for (let i = 0; i < blocks.length; i++) {
     const s = blocks[i]
     const classes = []
+    if (s === firstContent && s.level === 1) classes.push('reader-document-title')
     if (s.level) {
       while (foldedLevels.length && s.level <= foldedLevels[foldedLevels.length - 1]) foldedLevels.pop()
     }

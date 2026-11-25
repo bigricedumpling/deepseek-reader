@@ -10,7 +10,7 @@
           :class="{ 'is-drop': tree.dropInto === node.path, 'is-on': containsCurrent(node), 'is-parent': isCurrentParent(node), 'is-dragging': isDragging(node), 'is-batch-selected': batch.checked(node), 'is-editing': isEditing('cat', node) }"
           :data-level="depth"
           :data-path="node.path"
-          :style="{ paddingLeft: 8 + depth * 11 + 'px' }"
+          :style="{ paddingLeft: `calc(8px + min(${depth * 11}px, 18%))` }"
           :draggable="!batch.mode && store.canEdit(node)"
           @click.self="batch.mode ? batch.toggle(node) : emit('toggle', node.path)"
           @dragstart="tree.start(node, $event)"
@@ -45,8 +45,7 @@
             v-model="tree.edit.value"
             class="cat-edit"
             @click.stop
-            @keydown.enter.prevent="tree.editCommit()"
-            @keydown.esc.prevent="tree.editCancel()"
+            @keydown="tree.editKey($event)"
             @blur="tree.editCommit()"
           />
           <span class="row-acts">
@@ -90,9 +89,9 @@
 
         <div class="tree-children" :inert="isCollapsed(node.path) && !query" :class="{ 'is-collapsed': isCollapsed(node.path) && !query }">
           <div class="tree-children-inner">
-            <div v-if="tree.create && tree.create.parent === node.path" class="tree-create-row" :style="{ paddingLeft: 28 + depth * 11 + 'px' }">
+            <div v-if="tree.create && tree.create.parent === node.path" class="tree-create-row" :style="{ paddingLeft: `calc(28px + min(${depth * 11}px, 18%))` }">
               <component :is="tree.create.kind === 'doc' ? PhFilePlus : PhFolderSimplePlus" :size="14" />
-              <input v-model="tree.create.value" class="tree-create-input" :placeholder="tree.create.kind === 'doc' ? '文档名称' : '文件夹名称'" @keydown.enter.prevent="tree.createCommit()" @keydown.esc.prevent="tree.createCancel()" @blur="tree.createCommit()" />
+              <input v-model="tree.create.value" class="tree-create-input" :placeholder="tree.create.kind === 'doc' ? '文档名称' : '文件夹名称'" @keydown="tree.createKey($event)" @blur="tree.createCommit()" />
             </div>
             <DocTree
               :nodes="node.children"
@@ -110,7 +109,7 @@
             <p
               v-if="!node.children.length"
               class="text-[12px] text-[var(--c-faint)] py-2"
-              :style="{ paddingLeft: 22 + depth * 11 + 'px' }"
+              :style="{ paddingLeft: `calc(22px + min(${depth * 11}px, 18%))` }"
             >
               空目录
             </p>
@@ -127,7 +126,7 @@
         :class="{ 'is-on': node.file === currentPath, 'is-dragging': isDragging(node), 'is-pdf': node.type === 'pdf', 'is-batch-selected': batch.checked(node) }"
         :data-level="depth"
         :data-file="node.file"
-        :style="{ paddingLeft: 26 + depth * 11 + 'px' }"
+        :style="{ paddingLeft: `calc(26px + min(${depth * 11}px, 18%))` }"
         :draggable="!batch.mode && store.canEdit(node)"
         @dragstart="tree.start(node, $event)"
         @dragover="tree.overRow(node, $event)"
@@ -141,8 +140,7 @@
           v-model="tree.edit.value"
           class="doc-title doc-edit"
           @click.stop
-          @keydown.enter.prevent="tree.editCommit()"
-          @keydown.esc.prevent="tree.editCancel()"
+          @keydown="tree.editKey($event)"
           @blur="tree.editCommit()"
         />
         <button
@@ -356,6 +354,10 @@ function relTime(ms) {
 .tree-children.is-collapsed { grid-template-rows: 0fr; opacity: 0; }
 .tree-children-inner { overflow: hidden; min-height: 0; }
 
+@container (max-width:220px) {
+  .row-acts:has(.acts-btn) :is(.row-create-btn,.row-finder),
+  .doc-row:has(.acts-btn) :is(.row-finder,.doc-time) { display:none; }
+}
 @media (hover: none), (pointer: coarse) {
   .cat-row:not(.is-editing) .row-acts { max-width: none; padding: 0; opacity: 1; pointer-events: auto; }
   .cat-row .row-create-btn, .cat-row .row-finder, .doc-row .row-finder { display: none; }

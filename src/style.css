@@ -1,6 +1,7 @@
 @import "tailwindcss";
 /* 令牌必须先于用到它们的规则加载，放在最上面 */
 @import "./styles/tokens.css";
+@import "./styles/document-flow.css";
 /* --- 基础 --- */
 * { box-sizing: border-box; }
 
@@ -77,9 +78,7 @@ code, pre, kbd { font-family: var(--font-mono); }
 
 /*
  * 界面与正文默认用 Noto Sans SC（SIL OFL，可按常用字裁剪、体积可接受）。
- * HarmonyOS Sans 只保留给独立落地页；它的许可不允许改动字形，
- * 整包 4 MB/字重在应用首屏不划算，因此应用不再声明它的 @font-face。
- * 许可仍随包保留在 public/fonts/HarmonyOS-Sans-LICENSE.txt。
+ * 独立落地页也使用 Noto Sans SC，字体与许可记录见 docs/THIRD-PARTY-ASSETS.md。
  */
 
 /*
@@ -162,10 +161,14 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
 .view-enter-from { opacity: 0; transform: translateY(4px); }
 .view-leave-to { opacity: 0; }
 
-.pop-enter-active { transition: opacity .18s ease, transform .26s var(--motion-pop), filter .18s ease; }
-.pop-leave-active { transition: opacity .17s ease, transform .20s var(--motion-snap), filter .16s ease; }
-.pop-enter-from { opacity: 0; transform: translateY(8px) scale(.92,.9); filter: blur(2px); }
-.pop-leave-to { opacity: 0; transform: translateY(5px) scale(.95,.97); filter: blur(1px); }
+/* Command menus appear at their final hit targets from the first frame. */
+.pop-enter-active { transition: opacity var(--motion-menu-enter) ease-out; }
+.pop-leave-active { transition: opacity var(--motion-menu-leave) ease-in; }
+.pop-enter-from, .pop-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .pop-enter-from { opacity: 1; }
+  .pop-leave-active { visibility: hidden; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -173,7 +176,8 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
     animation-iteration-count: 1 !important;
     animation-delay: 0s !important;
     transition-delay: 0s !important;
-    transition-duration: .01ms !important;
+    /* Visibility must take effect before a newly opened menu receives focus. */
+    transition-duration: 0s !important;
   }
 }
 
@@ -634,7 +638,7 @@ mark { background: #fff6c2; color: inherit; border-radius: 2px; padding: 0 1px; 
 /* Shared small dialogs for metadata, icons, and safe conflict resolution. */
 .reader-modal-shade{position:fixed;inset:0;background:var(--c-overlay);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px}
 .reader-dialog{width:460px;max-width:100%;max-height:90dvh;overflow:auto;background:var(--c-pop);color:var(--c-text);border:1px solid var(--c-line);border-radius:var(--radius-row);padding:18px;box-shadow:var(--c-pop-shadow);font-family:var(--font-sans);font-size:13px}
-.reader-dialog header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;font-size:16px}.reader-dialog header button{font-size:22px;padding:0 5px}.reader-dialog p{font-size:12px;color:var(--c-sub);line-height:1.7;margin:12px 0}.reader-dialog label{display:block;margin:12px 0}.reader-dialog input:not([type=checkbox]):not([type=file]):not([type=range]),.reader-dialog textarea,.reader-dialog select{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);margin-top:6px;outline:none}.reader-dialog textarea{min-height:70px;resize:vertical}.reader-dialog input[type=checkbox]{margin-right:8px}.reader-dialog footer{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:15px}.reader-dialog button{cursor:pointer}.reader-dialog button:disabled{opacity:.5;cursor:wait}.reader-button{display:inline-flex!important;align-items:center;justify-content:center;padding:8px 12px;border-radius:var(--radius-control);background:var(--c-active);color:var(--c-accent);cursor:pointer}.reader-dialog .reader-error{color:#c94c4c}
+.reader-dialog header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;font-size:16px}.reader-dialog header button{font-size:22px;padding:0 5px}.reader-dialog p{font-size:12px;color:var(--c-sub);line-height:1.7;margin:12px 0}.reader-dialog label{display:block;margin:12px 0}.reader-dialog input:not([type=checkbox]):not([type=file]):not([type=range]),.reader-dialog textarea,.reader-dialog select{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--c-line);border-radius:var(--radius-control);background:var(--c-field);margin-top:6px;outline:none}.reader-dialog textarea{min-height:70px;resize:vertical}.reader-dialog input[type=checkbox]{margin-right:8px}.reader-dialog footer{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:15px}.reader-dialog button{cursor:pointer}.reader-dialog button:disabled{opacity:.5;cursor:wait}.reader-button{display:inline-flex!important;align-items:center;justify-content:center;padding:8px 12px;border-radius:var(--radius-control);background:var(--c-active);color:var(--c-accent);cursor:pointer}.reader-dialog .reader-error{color:var(--c-danger)}
 @media print{.reader-modal-shade{display:none!important}}
 
 .reader-rich-block{position:relative;margin:1.1em 0;line-height:1.7;font-size:inherit}.reader-rich-block p:first-child{margin-top:0}.reader-rich-block p:last-child{margin-bottom:0}.reader-rich-callout{display:flex;align-items:flex-start;gap:14px;padding:18px 20px;background:var(--c-field);border-radius:11px}.rich-callout-icon{flex-shrink:0}.reader-rich-columns{display:grid;grid-template-columns:1fr 1fr;gap:28px}.reader-rich-columns>div{min-width:0}.reader-rich-figure figure{display:inline-block;margin:0}.reader-rich-figure img{display:block;width:100%;height:auto;border-radius:0}.reader-rich-figure figcaption{font:12px var(--font-sans);color:var(--c-faint);margin-top:9px;line-height:1.6}.reader-rich-card{border:1px solid var(--c-line);border-radius:10px;padding:18px 20px}.reader-rich-card>a{font-weight:600;color:var(--c-ink);text-decoration:none}.reader-rich-card>div{color:var(--c-sub);font-size:13px;margin-top:6px}.reader-rich-block.ProseMirror-selectednode{outline:2px solid var(--c-focus);outline-offset:3px}@media(max-width:640px){.reader-rich-columns{grid-template-columns:1fr;gap:12px}}@media print{.reader-rich-columns{grid-template-columns:1fr}.reader-rich-block{break-inside:avoid}}
@@ -654,21 +658,25 @@ button:focus-visible{outline:2px solid var(--c-focus);outline-offset:3px}
 .reader-button:hover{--smooth-fill:color-mix(in srgb,var(--c-accent) 19%,var(--c-pop))}.reader-dialog{border-radius:var(--radius-dialog)}.ui-font button,.reader-dialog button{font-weight:400}.workspace-footer .manage-entry{background:var(--c-field)!important;border-radius:var(--radius-row)}.workspace-footer .manage-entry:hover{background:var(--c-chip-hover)!important}
 
 /* One motion system for popovers, dialogs and menus. */
-:root{--motion-enter:200ms;--motion-leave:180ms;--motion-dialog:260ms;--motion-ease:cubic-bezier(.22,1,.36,1);--motion-snap:cubic-bezier(.2,.9,.25,1);--motion-pop:cubic-bezier(.16,1.06,.3,1)}
-.overlay-enter-active,.overlay-leave-active{transition:opacity var(--motion-enter) ease}
-.overlay-leave-active{transition-duration:var(--motion-leave)}
-.overlay-enter-active>.reader-dialog{transition:transform var(--motion-dialog) var(--motion-pop),opacity var(--motion-enter) ease,filter var(--motion-enter) ease}
-.overlay-leave-active>.reader-dialog{transition:transform 200ms var(--motion-snap),opacity var(--motion-leave) ease,filter 160ms ease}
-.overlay-enter-from,.overlay-leave-to{opacity:0}
-.overlay-enter-from>.reader-dialog,.overlay-leave-to>.reader-dialog{transform:translateY(12px) scale(.95);opacity:0;filter:blur(2.5px)}
-.editor-pop-enter-active { transition: opacity 120ms ease, transform 150ms var(--motion-snap); }
-.editor-pop-leave-active { transition: opacity 80ms ease, transform 100ms ease; }
-.editor-pop-enter-from { opacity: 0; transform: translateY(-3px) scale(.985); }
-.editor-pop-leave-to { opacity: 0; transform: translateY(-2px) scale(.99); }
+:root{--motion-enter:200ms;--motion-leave:180ms;--motion-menu-enter:110ms;--motion-menu-leave:75ms;--motion-dialog:260ms;--motion-ease:cubic-bezier(.22,1,.36,1);--motion-snap:cubic-bezier(.2,.9,.25,1);--motion-pop:cubic-bezier(.16,1.06,.3,1)}
+/* The shade fades once. Move the dialog at its final text size and finish
+   with its host, which Vue uses to decide when the subtree may be removed. */
+.overlay-enter-active { transition: opacity var(--motion-enter) ease-out; }
+.overlay-leave-active { transition: opacity var(--motion-leave) ease-in; }
+.overlay-enter-from, .overlay-leave-to { opacity: 0; }
+.overlay-enter-active > :is(.reader-dialog,.app-dialog,.pick) { transition: transform var(--motion-enter) var(--motion-ease); }
+.overlay-leave-active > :is(.reader-dialog,.app-dialog,.pick) { transition: transform var(--motion-leave) var(--motion-snap); }
+.overlay-enter-from > :is(.reader-dialog,.app-dialog,.pick) { transform: translateY(5px); }
+.overlay-leave-to > :is(.reader-dialog,.app-dialog,.pick) { transform: translateY(2px); }
 .doc-row,.cat-row{border-radius:var(--radius-row)!important}
 
 @media(prefers-reduced-motion:reduce){.overlay-enter-active,.overlay-leave-active,.overlay-enter-active>.reader-dialog,.overlay-leave-active>.reader-dialog,.pop-enter-active,.pop-leave-active,.fade-enter-active,.fade-leave-active{transition:none!important}}
-@media(prefers-reduced-motion:reduce){.overlay-enter-from>.reader-dialog,.overlay-leave-to>.reader-dialog{filter:none!important}}
+@media (prefers-reduced-motion: reduce) {
+  .overlay-enter-from { opacity: 1; }
+  .overlay-leave-active { visibility: hidden; }
+  .overlay-enter-from > :is(.reader-dialog,.app-dialog,.pick),
+  .overlay-leave-to > :is(.reader-dialog,.app-dialog,.pick) { transform: none; }
+}
 .tree-menu.is-measuring{visibility:hidden!important;opacity:0!important;transition:none!important}
 :is(.icon-btn,.btn-icon,.lib-icon-btn,.lib-more,.lib-access-chip,.lib-manager-card-more,.type-chip,.cover-shapes button,.picker-tabs button,.cover-tabs button,.reading-tabs button,.type-tabs button,.lib-manager-filters button){transition:background 160ms var(--motion-snap),color 160ms ease,box-shadow 160ms ease,opacity 160ms ease,transform 160ms var(--motion-snap)}
 @keyframes icon-check-in{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:scale(1)}}
@@ -718,7 +726,7 @@ input[type="checkbox"],input[type="radio"],input[type="range"]{accent-color:var(
   .cover-actions,
   .rail-peek-enter-active,
   .rail-peek-leave-active {
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
     animation-duration: 0.01ms !important;
     transition-delay: 0s !important;
   }
@@ -752,9 +760,10 @@ input[type="checkbox"],input[type="radio"],input[type="range"]{accent-color:var(
   .typocket-print th, .typocket-print td { padding: .3em .6em; border: 1px solid #ccc; }
   .typocket-print table, .typocket-print pre, .typocket-print .table-wrap,
   .typocket-print .reader-rich-block { overflow: visible; break-inside: auto; }
-  .typocket-print pre { white-space: pre-wrap; font-size: .88em; }
+  .typocket-print pre { white-space: pre-wrap; }
+  .typocket-print pre > code { font-size: .88em; }
   .typocket-print img, .typocket-print svg { max-width: 100%; height: auto; }
-  .typocket-print .page-cover img { height: 100%; }
+  .typocket-print .page-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .typocket-print .reader-columns, .typocket-print .reader-rich-columns { display: block; }
   .typocket-print .page-heading-inner { padding: 0; }
   .typocket-print .page-header { padding: 0; }

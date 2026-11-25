@@ -11,12 +11,14 @@
     -->
     <div id="app-lib-panel-slot" class="lib-panel-slot"></div>
 
-    <div class="app-main-col relative flex-1 min-w-0 flex flex-col">
+    <div class="app-main-col relative flex-1 min-w-0 flex flex-col" :class="{ 'is-browsing-files': !reader.navCollapsed, 'is-gallery-open': galleryOpen, 'is-resizing-nav': navDragging }">
     <!--
       知识库列表在整窗最左列，这条顶栏从它右侧开始。
       chrome 在顶栏时这一行才展开：侧栏 header 和文档标签都 Teleport 进来，
       合成一条横跨文档区的顶栏。展开时高度为 0，header 归侧栏、标签归文档区。
     -->
+    <div id="workspace-gallery-slot" ref="gallerySlot" class="workspace-gallery-slot" :inert="!galleryOpen"></div>
+    <div class="workspace-reader" :inert="galleryOpen">
     <header class="app-topbar" :class="{ 'is-open': chromeCollapsed }">
       <div id="app-topbar-left" ref="topbarLeftEl" class="min-w-0" :style="topbarLeftStyle"></div>
       <div id="app-topbar-main" class="flex-1 min-w-0 flex items-center"></div>
@@ -29,14 +31,19 @@
       :current-path="store.currentPath"
       :width="reader.navWidth"
       @update:width="reader.navWidth = $event"
+      @update:dragging="setNavDragging"
       :collapsed="reader.navCollapsed"
       :chrome-collapsed="chromeCollapsed"
       :chrome-compact="chromeCompact"
       :chrome-expanding="chromeExpanding"
       @select="onSelect"
+      @find-result="openLibraryMatch"
       @delete-doc="askDeleteDoc"
       @delete-category="askDeleteCategory"
       @toggle-collapse="toggleNav"
+      :gallery-present="galleryPresent"
+      @gallery-change="setGalleryOpen"
+      @return-to-reading="returnToReading"
     />
 
     <main class="flex-1 flex flex-col h-full relative min-w-0">
@@ -44,7 +51,8 @@
         只传文档本身的东西。阅读设置（字体/字号/主题/表格…）一律由组件自己读
         reader store，不再从这里下发——下发过一次 size，结果漏了，四档字号全失效。
       -->
-      <DocView
+      <DocView ref="docView"
+        :active="!galleryOpen"
         :doc-id="store.currentPath"
         :chrome-collapsed="chromeCollapsed"
         :pdf-page="store.pdfPage"
@@ -52,12 +60,8 @@
         :meta="store.currentMeta"
         :raw="store.currentRaw"
         :toc="store.currentToc"
-        :keyword="store.searchKeyword"
-        :results="store.searchResults"
         :loaded="store.currentLoaded"
         @select="onSelect"
-        :epoch="docEpoch"
-        @canonize="onCanonize"
         @close-tab="onCloseTab"
         @close-tabs="onCloseTabs"
         @reorder="onReorderTabs"
@@ -65,13 +69,12 @@
         :saving="store.saving"
         :saved-at="store.savedAt"
         :error="store.error"
-        @update:keyword="store.searchKeyword = $event"
         @input="onEdit"
-        @jump="onJump"
         @create-doc="askCreateDocInCurrentLib"
         @reload="store.reload()"
+        @open-outline="openDocumentOutline"
       />
-      <RailToc />
+      <RailToc @open="openDocumentOutline" />
     </main>
 
     <TocPanel
@@ -88,6 +91,7 @@
       @go-page="store.pdfPage = $event"
     />
 
+    </div>
     </div>
     </div>
 
@@ -129,10 +133,26 @@ import RailToc from './components/RailToc.vue'
 import AppDialog from './components/AppDialog.vue'
 import { useDocsStore } from './stores/docs'
 import { useReaderStore } from './stores/reader'
-import { scrollToTarget } from './utils/scroll-target'
-import { foldedKeys, unfoldKeys } from './utils/toc-fold'
+import { findRoutedDocument } from './utils/routes.js'
+const docView = ref(null)
 
 const store = useDocsStore()
+const galleryOpen = ref(false)
+const gallerySlot = ref(null)
+const galleryPresent = ref(false)
+let galleryRequest = 0
+async function setGalleryOpen(open) {
+  const request = ++galleryRequest
+  galleryOpen.value = open
+  if (open) {
+    galleryPresent.value = true
+    return
+  }
+  // Keep the outgoing gallery and its scroll position until the reversible CSS transition finishes.
+  await nextTick()
+  await Promise.allSettled((gallerySlot.value?.getAnimations() || []).map(animation => animation.finished))
+  if (request === galleryRequest) galleryPresent.value = false
+}
 const topbarReady = ref(false)
 onMounted(() => { topbarReady.value = true })
 /** 当前这篇是不是 pdf：右栏显示它的书签目录，点击跳页 */
@@ -143,11 +163,6 @@ const isPdfDoc = computed(() => store.currentNode?.type === 'pdf')
  */
 const reader = useReaderStore()
 
-/*
- * chrome 指侧栏 header + 文档标签这一条。
- * 它和 navCollapsed 在动画期间会短暂分离：展开时先让侧栏宽度长出来，
- * 再把这一条从顶栏交给侧栏/文档区，避免同一帧里位置和宽度同时硬跳。
- */
 /* 顶栏常驻：侧栏展开/收起只改变左段宽度，不再把 header 和标签搬回文档区。 */
 const chromeCollapsed = ref(true)
 /** 收起的静止态：header 用内容宽度，不是整条侧栏宽度 */
@@ -159,56 +174,60 @@ const topbarLeftStyle = computed(() => ({
   width: chromeWidth.value || (reader.navCollapsed ? 'auto' : reader.navWidth + 'px')
 }))
 const topbarLeftEl = ref(null)
-let chromeTimer = 0
+let navChange = 0
+const navDragging = ref(false)
+function setNavDragging(active) {
+  navDragging.value = active
+  if (active) {
+    // A drag can take over while the sidebar is still opening.
+    navChange++
+    chromeWidth.value = ''
+    chromeCompact.value = false
+    chromeExpanding.value = false
+  }
+}
 
 async function toggleNav() {
-  clearTimeout(chromeTimer)
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    reader.navCollapsed = !reader.navCollapsed
-    chromeCompact.value = reader.navCollapsed
+  const change = ++navChange
+  const closing = !reader.navCollapsed
+  if (mobileFileView() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    reader.navCollapsed = closing
+    chromeCompact.value = closing
     chromeExpanding.value = false
     chromeWidth.value = ''
     return
   }
-  if (reader.navCollapsed) {
-    /* 展开：左段和侧栏一起从 compact 内容宽长到侧栏宽，顶栏不换位置。 */
-    const start = topbarLeftEl.value?.getBoundingClientRect().width
-      || sidebarRef.value?.compactHeaderWidth?.() || reader.navWidth
-    chromeCompact.value = false
-    chromeExpanding.value = true
-    chromeWidth.value = start + 'px'
-    reader.navCollapsed = false
-    await nextTick()
-    /* 和侧栏同一帧开始过渡，避免顶栏先停一拍再追。 */
-    void topbarLeftEl.value?.offsetWidth
-    chromeWidth.value = reader.navWidth + 'px'
-    chromeTimer = window.setTimeout(() => {
-      chromeExpanding.value = false
-      chromeWidth.value = ''
-    }, 220)
-  } else {
-    /* 收起：左段和侧栏一起收窄，最后切回 compact 内容。 */
-    const start = topbarLeftEl.value?.getBoundingClientRect().width || reader.navWidth
-    const target = sidebarRef.value?.compactHeaderWidth?.() || reader.navWidth
-    /* 先保持展开布局，宽度收完再切 compact：右侧动作组始终贴着顶栏右缘，不会先跳回左边。 */
-    chromeCompact.value = false
-    chromeExpanding.value = false
-    chromeWidth.value = start + 'px'
-    reader.navCollapsed = true
-    await nextTick()
-    void topbarLeftEl.value?.offsetWidth
-    chromeWidth.value = target + 'px'
-    chromeTimer = window.setTimeout(() => {
-      chromeCompact.value = true
-      chromeWidth.value = ''
-    }, 240)
-  }
+
+  const slot = topbarLeftEl.value
+  const start = slot?.getBoundingClientRect().width || reader.navWidth
+  const end = closing ? (sidebarRef.value?.compactHeaderWidth() || reader.navWidth) : reader.navWidth
+  chromeCompact.value = false
+  chromeExpanding.value = !closing
+  chromeWidth.value = start + 'px'
+  reader.navCollapsed = closing
+  await nextTick()
+  if (change !== navChange) return
+
+  void slot?.offsetWidth
+  chromeWidth.value = end + 'px'
+  await nextTick()
+  if (change !== navChange) return
+  // On reversal, only the last request can hand the width back to auto.
+  const panel = document.querySelector('.app-sidebar > aside')
+  const widths = [slot, panel].flatMap(el => el?.getAnimations() || [])
+    .filter(animation => animation.transitionProperty === 'width')
+  await Promise.allSettled(widths.map(animation => animation.finished))
+  if (change !== navChange) return
+  chromeCompact.value = closing
+  chromeExpanding.value = false
+  chromeWidth.value = ''
 }
 function collapseNavNow(immediate = false) {
   if (immediate || reader.navCollapsed) {
-    clearTimeout(chromeTimer)
+    navChange++
     chromeCollapsed.value = true
     chromeCompact.value = true
+    chromeExpanding.value = false
     chromeWidth.value = ''
     if (immediate) reader.navCollapsed = true
     return
@@ -259,49 +278,17 @@ function closeDialog() {
   if (cb) cb()
 }
 
-/**
- * 做任何会离开当前文档的操作之前，先处理没保存的改动。
- * 返回 true 表示可以继续；保存失败或用户取消都返回 false，调用方必须检查。
- */
-function ensureSafe() {
-  return new Promise((resolve) => {
-    if (!store.isDirty) {
-      if (store.saving) store.save().then(resolve)
-      else resolve(true)
-      return
-    }
-    ask({
-      title: '有没保存的改动',
-      message: '' + store.currentMeta.name + '改过还没保存。',
-      confirmText: '保存并继续',
-      altText: '丢弃改动',
-      onConfirm: async () => {
-        dialog.open = false
-        // 保存失败就停在这里，不能带着未保存的内容走
-        resolve(await store.save())
-      },
-      onAlt: () => {
-        dialog.open = false
-        store.discard()
-        resolve(true)
-      },
-      onCancel: () => resolve(false)
-    })
-  })
-}
-
 /* ---------- 树结构操作 ---------- */
 
 function askDeleteCategory(folder) {
   ask({
-    title: '删除目录' + folder.name + '',
-    message:
-      '目录及其内容将移入回收站。',
-    confirmText: '删除',
+    title: '将文件夹移入回收站？',
+    message: folder.path + '\n\n文件夹里的内容也会移入回收站。',
+    confirmText: '移入回收站',
     danger: true,
     onConfirm: async () => {
       dialog.open = false
-      if (store.currentPath.startsWith(folder.path + '/') && !(await ensureSafe())) return
+      if (store.currentPath.startsWith(folder.path + '/') && !(await store.saveBeforeNavigation())) return
       await guard(() => store.deleteCategory(folder.path))
     }
   })
@@ -314,11 +301,9 @@ function askCreateDocInCurrentLib() {
 function askDeleteDoc(doc) {
   const editingThis = doc.file === store.currentPath && store.isDirty
   ask({
-    title: '删除文档' + doc.name + '',
-    message:
-      '移入回收站：' + doc.file +
-      (editingThis ? '\n\n注意：这篇正文有改动还没保存，删掉之后这些改动也没了。' : ''),
-    confirmText: '删除',
+    title: '将文档移入回收站？',
+    message: doc.file + (editingThis ? '\n\n继续删除会丢弃尚未保存的修改。' : ''),
+    confirmText: '移入回收站',
     danger: true,
     onConfirm: async () => {
       dialog.open = false
@@ -331,39 +316,9 @@ async function guard(fn) {
   try {
     await fn()
   } catch (e) {
-    ask({ title: '没成功', message: String(e.message || e), confirmText: '知道了' })
+    if (!store.conflict) ask({ title: '没成功', message: String(e.message || e), confirmText: '知道了' })
   }
 }
-
-/**
- * 按编辑器规范重排这篇（真丢内容、用户在有损黄条上主动点的）。
- *
- * 有损时编辑器不能自动保存，否则会静默改写正文；但用户可以让它"一次性对齐规范"：
- * 把还原后的文本写回磁盘，这篇从此就能富文本编辑。所以这里要先确认、再写、写完重读。
- */
-function onCanonize(text) {
-  const file = store.currentPath
-  const name = store.currentNode?.name || store.currentPath
-  ask({
-    title: '按编辑器规范重排《' + name + '》？',
-    message: '就是把这篇按编辑器能表达的写法重写一遍 —— 上面列出的差异行会全部落到磁盘上。改完这篇就能用富文本编辑，之后不再提示。',
-    confirmText: '重排并保存',
-    onConfirm: () => {
-      dialog.open = false
-      if (store.currentPath !== file) return
-      store.updateContent(text)
-      guard(async () => {
-        if (!(await store.save())) throw new Error(store.error || '保存失败')
-        // 重排完重新挂一次编辑器：黄条才会消失（:key 不变的话组件是复用的）
-        docEpoch.value++
-        await store.select(store.currentPath)
-      })
-    }
-  })
-}
-
-/** 换一个"重新挂载编辑器"的信号：重排、重新读取之后靠它让黄条重新判断 */
-const docEpoch = ref(0)
 
 /* ---------- 切换与保存 ---------- */
 
@@ -371,34 +326,42 @@ function onReorderTabs(files) {
   store.reorderTabs(files)
 }
 
+const mobileFileView = () => window.matchMedia('(max-width:720px)').matches
+async function openDocumentOutline() {
+  reader.tocOpen = true
+  await nextTick()
+  const outline = document.getElementById('document-outline')
+  const target = outline?.querySelector('.toc-item.is-active') || outline?.querySelector('.toc-collapse-chip')
+  target?.focus({ preventScroll: true })
+}
+
+function returnToReading() {
+  if (reader.navCollapsed || !mobileFileView()) return
+  collapseNavNow(true)
+  nextTick(() => document.querySelector('.doc-tab.is-active .doc-tab-main, .sidebar-toggle')?.focus({ preventScroll: true }))
+}
+
 async function onSelect(file) {
-  if (file === store.currentPath) return
-  clearTimeout(saveTimer)
-  if (!(await ensureSafe())) return
-  await store.select(file)
+  if (await store.select(file)) returnToReading()
 }
 
-/**
- * 关掉一个标签。
- *
- * 关的是当前这篇时，**先确认能安全离开（该存先存），再删标签、再切到邻居** ——
- * 顺序反过来的话，保存失败或被取消时标签已经没了，界面会自相矛盾。
- */
 async function onCloseTabs(files) {
-  const targets = files.filter(file => store.tabs.includes(file))
-  if (!targets.length) return
-  if (targets.includes(store.currentPath) && !(await ensureSafe())) return
-  for (const file of targets.filter(file => file !== store.currentPath)) store.closeTab(file)
-  if (targets.includes(store.currentPath)) await onCloseTab(store.currentPath)
+  const targets = new Set(files)
+  const available = store.tabs.filter(file => store.tabIcons.has(file))
+  const remaining = available.filter(file => !targets.has(file))
+  if (!remaining.length) return
+  if (targets.has(store.currentPath)) {
+    const index = available.indexOf(store.currentPath)
+    const next = available.slice(index + 1).find(file => !targets.has(file)) || remaining.at(-1)
+    if (!(await store.select(next))) return
+  }
+  for (const file of targets) {
+    if (file !== store.currentPath) store.closeTab(file)
+  }
 }
 
-async function onCloseTab(file) {
-  if (file === store.currentPath) {
-    clearTimeout(saveTimer)
-    if (!(await ensureSafe())) return
-  }
-  const next = store.closeTab(file)
-  if (next && next !== store.currentPath) await store.select(next)
+function onCloseTab(file) {
+  return onCloseTabs([file])
 }
 
 /* ---------- 自动保存 ---------- */
@@ -416,11 +379,11 @@ function onEdit(text) {
 
 // 监听脏标记而不是挂在编辑器的 input 上：不管改动从哪来，停手就落盘
 watch(
-  () => [store.currentPath, store.currentRaw, store.isDirty, store.saving],
-  ([path, raw, dirty, saving]) => {
+  () => [store.currentPath, store.currentRaw, store.isDirty, store.saving, store.conflict?.path],
+  ([path, raw, dirty, saving, conflictPath]) => {
     clearTimeout(saveTimer)
     if (!dirty) failedSave = null
-    if (!dirty || saving) return
+    if (!dirty || saving || path === conflictPath) return
     if (failedSave?.path === path && failedSave?.raw === raw) return
     saveTimer = setTimeout(async () => {
       if (store.isDirty && !store.saving && store.currentPath === path) {
@@ -437,6 +400,14 @@ watch(
 function onKey(e) {
   if (e.defaultPrevented) return
   const meta = e.metaKey || e.ctrlKey
+  if (galleryOpen.value && meta && ['k', 'f'].includes(e.key.toLowerCase())) {
+    if (document.querySelector('[aria-modal="true"]')) return
+    e.preventDefault()
+    const input = document.querySelector('#workspace-gallery-slot input[type="search"]')
+    input?.focus()
+    input?.select()
+    return
+  }
   if (meta && e.key.toLowerCase() === 'k') {
     // 弹窗打开时不要把焦点抢到后面的侧栏搜索
     if (document.querySelector('[aria-modal="true"]')) return
@@ -519,8 +490,7 @@ onMounted(async () => {
     const strip = (f) => f.replace(/\.(md|pdf|html?)$/i, '')
     const tail = (f) => f.split('/').pop()
     const hit =
-      store.allFiles.find((f) => f.file === routed) ||
-      store.allFiles.find((f) => strip(f.file) === routed) ||
+      findRoutedDocument(store.allFiles, routed) ||
       store.allFiles.find((f) => strip(tail(f.file)) === tail(routed))
     if (hit && store.currentPath !== hit.file) await store.select(hit.file)
   }
@@ -556,7 +526,7 @@ window.addEventListener('resize', fitViewport)
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', fitViewport)
-  clearTimeout(chromeTimer)
+  navChange++
   clearInterval(staleTimer)
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('beforeunload', onBeforeUnload)
@@ -585,62 +555,11 @@ function focusSearch() {
   }
 }
 
-async function onJump({ id, keyword, hit }) {
-  // 当前文档内定位不会离开编辑器，不应因为尚未自动保存而弹出离开确认。
-  if (id !== store.currentPath && !(await ensureSafe())) return
-  await jumpTo(id, keyword, hit)
-}
-
-function findSearchBlock(root, keyword, ordinal) {
-  const needle = keyword.toLocaleLowerCase()
-  let seen = 0, first = null
-  for (const block of root.children) {
-    if (block.classList.contains('prosemirror-virtual-cursor')) continue
-    const text = block.textContent.toLocaleLowerCase()
-    let at = text.indexOf(needle)
-    while (at >= 0) {
-      if (!first) first = block
-      if (seen++ === ordinal) return block
-      at = text.indexOf(needle, at + needle.length)
-    }
-  }
-  return first
-}
-
-async function jumpTo(id, keyword, hit) {
-  if (id !== store.currentPath) await store.select(id)
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await new Promise((resolve) => requestAnimationFrame(resolve))
-    const root = document.getElementById('main-scroll-container')
-    const srcEditor = root?.querySelector('textarea.src-editor')
-    if (srcEditor && srcEditor.offsetParent !== null && keyword) {
-      const text = srcEditor.value
-      const needle = keyword.toLocaleLowerCase()
-      const lower = text.toLocaleLowerCase()
-      let at = lower.indexOf(needle), seen = 0, targetAt = at
-      while (at >= 0) {
-        if (seen++ === (hit?.ordinal ?? 0)) { targetAt = at; break }
-        at = lower.indexOf(needle, at + needle.length)
-      }
-      if (targetAt >= 0) {
-        srcEditor.focus()
-        srcEditor.setSelectionRange(targetAt, targetAt + keyword.length)
-      }
-      return
-    }
-    const editor = root?.querySelector('.ProseMirror')
-    if (!editor || !keyword) continue
-    const block = findSearchBlock(editor, keyword, hit?.ordinal ?? 0)
-    if (!block) continue
-    if (block.classList.contains('reader-folded')) {
-      unfoldKeys(Object.keys(foldedKeys()))
-      await new Promise((resolve) => requestAnimationFrame(resolve))
-    }
-    scrollToTarget(root, block)
-    block.classList.add('search-flash')
-    setTimeout(() => block.classList.remove('search-flash'), 1600)
-    return
-  }
+async function openLibraryMatch(hit) {
+  if (!(await store.select(hit.file))) return
+  returnToReading()
+  await nextTick()
+  await docView.value?.showLibraryHit(hit)
 }
 </script>
 
@@ -651,6 +570,9 @@ async function jumpTo(id, keyword, hit) {
   flex-shrink: 0;
   min-width: 0;
 }
+.app-main-col { --workspace-topbar-height: 48px; }
+.app-main-col.is-resizing-nav #app-topbar-left,
+.app-main-col.is-resizing-nav :deep(.app-sidebar > aside) { transition:none; }
 .app-topbar {
   height: 0;
   padding: 0;
@@ -662,17 +584,53 @@ async function jumpTo(id, keyword, hit) {
   background: transparent;
 }
 .app-topbar.is-open {
-  height: 48px;
+  height: var(--workspace-topbar-height);
   pointer-events: none;
   /* 左内边距保持 0：header 自己带 10px，和侧栏里的位置完全重合 */
   padding: 0 10px 0 0;
   overflow: visible;
-  /* 顶栏不占布局行：文档从窗口顶部开始，封面/正文从它下面滚过 */
+  /* Document and panel headers keep their own backgrounds beneath this shared row. */
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   z-index: 40;
+}
+/* Reading and browsing occupy independent planes. The incoming view takes focus
+   immediately; an interrupted transition reverses from its current opacity. */
+.workspace-reader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  z-index: 0;
+  opacity: 1;
+  visibility: visible;
+}
+.workspace-gallery-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: var(--c-surface);
+  opacity: 0;
+  visibility: hidden;
+}
+.is-gallery-open > .workspace-gallery-slot { opacity: 1; visibility: visible; }
+.is-gallery-open > .workspace-reader { opacity: 0; visibility: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-gallery-slot {
+    transform: translateY(4px);
+    transition: opacity 120ms ease-in, transform 160ms var(--motion-ease), visibility 0s linear 160ms;
+  }
+  .is-gallery-open > .workspace-gallery-slot {
+    transform: none;
+    transition: opacity 170ms ease-out 30ms, transform 200ms var(--motion-ease) 30ms, visibility 0s;
+  }
+  .workspace-reader { transition: opacity 150ms ease-out 30ms, visibility 0s; }
+  .is-gallery-open > .workspace-reader { transition: opacity 120ms ease-in, visibility 0s linear 120ms; }
 }
 #app-topbar-left {
   pointer-events: auto;
@@ -682,6 +640,11 @@ async function jumpTo(id, keyword, hit) {
   align-items: center;
   /* 宽度动画和侧栏同步，收起态宽度由内容撑开 */
   transition: width 0.22s cubic-bezier(0,0,.2,1);
+}
+@media screen and (max-width:720px) {
+  .app-main-col.is-browsing-files #app-topbar-left { width:100% !important; }
+  .app-main-col.is-browsing-files :is(#app-topbar-main, main),
+  .app-main-col.is-browsing-files :deep(.toc-panel) { display:none; }
 }
 #app-topbar-main {
   pointer-events: none;

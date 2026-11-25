@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { resolveEntry } from '../src/utils/routes.js'
+import { resolveEntry, documentRoutePath, findRoutedDocument } from '../src/utils/routes.js'
 import { loadRouteAliases, redirectForAlias } from '../server/route-aliases.js'
 
 for (const base of ['', '/plugins/reader']) {
@@ -17,6 +17,11 @@ for (const base of ['', '/plugins/reader']) {
   assert.equal(own.searchParams.has('token'), false)
   assert.doesNotThrow(() => resolveEntry(base + '/doc/%broken', '', base))
 }
+
+const files = ['Draft/Review.html.md', 'Draft/Review.html', 'Draft/Review.pdf', 'Draft/Review.md'].map(file => ({ file }))
+for (const node of files) assert.equal(findRoutedDocument(files, documentRoutePath(node.file)), node)
+assert.equal(findRoutedDocument(files, 'Draft/Review').file, 'Draft/Review.md')
+assert.equal(findRoutedDocument(files.slice(1, 2), 'Draft/Review').file, 'Draft/Review.html')
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'typocket-routes-'))
 try {

@@ -1,3 +1,28 @@
-export const coverPalettes=[['#c8dcca','#e9d4b8','#a4bec4'],['#c9c8ee','#f0cfd7','#b9dce5'],['#dcbda6','#c97861','#eadcc0'],['#abc2d8','#dce4ed','#b8b5d3'],['#bdcbb4','#e6e1b8','#a0bdb4'],['#eed7c6','#e9bfc4','#d3c6da'],['#b3c5cc','#a6b4c3','#e0d6c9'],['#dfc781','#d9ad93','#e9dcc6']]
-export const coverShapes=[['mist','柔雾'],['mesh','色域'],['ribbon','流线'],['grain','颗粒']]
-export function randomCover(){return {type:'gradient',preset:coverShapes[Math.floor(Math.random()*coverShapes.length)][0],colors:[...coverPalettes[Math.floor(Math.random()*coverPalettes.length)]],seed:Math.floor(Math.random()*1000),animated:false,height:'medium',position:50}}
+export const coverPalettes = [
+  ['#bdd8c8', '#f4d9b9', '#76a6a8'],
+  ['#625a93', '#ecc7da', '#8ed1d8'],
+  ['#71394d', '#dd806c', '#f6dcb1'],
+  ['#95afcf', '#edf0ec', '#9389ac'],
+  ['#647d66', '#e1e6aa', '#9bbfab'],
+  ['#eebf93', '#edc9ce', '#9c90b0'],
+  ['#536778', '#b8c8c3', '#ebe4cf'],
+  ['#b3795e', '#ead29a', '#789995']
+]
+
+export const coverShapes = [
+  ['mist', '柔雾'], ['mesh', '色域'], ['ribbon', '流线'],
+  ['grain', '颗粒'], ['pixel', '像素'], ['halftone', '网印']
+]
+
+export function randomCover() {
+  const pick = items => items[Math.floor(Math.random() * items.length)]
+  return {
+    type: 'gradient',
+    preset: pick(coverShapes)[0],
+    colors: [...pick(coverPalettes)],
+    seed: Math.floor(Math.random() * 1000),
+    animated: true,
+    height: 'medium',
+    position: 50
+  }
+}

@@ -44,16 +44,37 @@ try {
   assert.equal(noBackup.json.ok, false, 'a failed backup must block the overwrite')
   assert.equal(fs.readFileSync(path.join(root, 'sample.md'), 'utf8'), '# Original\n')
   fs.unlinkSync(versionDir)
-  assert.equal((await request('PUT', '/api/doc', { path: 'sample.md', content: '# Replaced\n' }, 'owner')).json.ok, true)
-  assert.equal((await request('PUT', '/api/doc', { path: 'sample.md', content: '# Again\n' }, 'owner')).json.ok, true)
-  assert.equal(fs.readdirSync(versionDir).length, 2, 'rapid saves must keep both previous versions')
+  async function previousVersions(file) {
+    const route = '/api/history?path=' + encodeURIComponent(file)
+    const listing = await request('GET', route, null, 'owner')
+    assert.equal(listing.json.ok, true)
+    const { items } = listing.json.data
+    assert.equal(new Set(items.map(item => item.id)).size, items.length, 'each saved version has its own ID')
+    return Promise.all(items.map(async item => {
+      const result = await request('GET', route + '&version=' + item.id, null, 'owner')
+      assert.equal(result.json.ok, true, 'each listed version can be reopened')
+      return result.json.data.content
+    }))
+  }
+
+  // Two saves in the same millisecond must remain readable in reverse save order.
+  const now = Date.now
+  const instant = now()
+  Date.now = () => instant
+  try {
+    assert.equal((await request('PUT', '/api/doc', { path: 'sample.md', content: '# Replaced\n' }, 'owner')).json.ok, true)
+    assert.equal((await request('PUT', '/api/doc', { path: 'sample.md', content: '# Again\n' }, 'owner')).json.ok, true)
+  } finally {
+    Date.now = now
+  }
+  assert.deepEqual(await previousVersions('sample.md'), ['# Replaced\n', '# Original\n'])
   const oldName = '2026-01-01-00-00-00-000--0__sample.md'
   fs.writeFileSync(path.join(versionDir, oldName), '# Older format\n')
   for (let revision = 1; revision <= 3; revision++) {
     assert.equal((await request('PUT', '/api/doc', { path: 'sample.md', content: `# Sample ${revision}\n` }, 'owner')).json.ok, true)
   }
-  assert.equal(fs.readdirSync(versionDir).length, 6, 'five indexed versions and the unrelated legacy file remain')
-  assert.equal(fs.existsSync(path.join(versionDir, oldName)), true, 'unindexed legacy files must never be silently deleted')
+  assert.deepEqual(await previousVersions('sample.md'), ['# Sample 2\n', '# Sample 1\n', '# Again\n', '# Replaced\n', '# Original\n'])
+  assert.equal(fs.readFileSync(path.join(versionDir, oldName), 'utf8'), '# Older format\n', 'unindexed legacy files must remain intact')
 
   const longRel = '图书馆/专题/包含数字与中文的长文件名_10个常见的分类记录.md'
   assert.ok(Buffer.byteLength('2026-09-24-04-02-28-450--0__' + encodeURIComponent(longRel)) > 255,
@@ -61,17 +82,16 @@ try {
   const longFile = path.join(root, longRel)
   fs.mkdirSync(path.dirname(longFile), { recursive: true })
   fs.writeFileSync(longFile, '# Original long document\n')
-  const existingVersions = new Set(fs.readdirSync(versionDir))
   for (let revision = 1; revision <= 6; revision++) {
     const saved = await request('PUT', '/api/doc', { path: longRel, content: `# Revision ${revision}\n` }, 'owner')
     assert.equal(saved.json.ok, true, `long document revision ${revision} must save`)
   }
   assert.equal(fs.readFileSync(longFile, 'utf8'), '# Revision 6\n')
-  const longVersions = fs.readdirSync(versionDir).filter((name) => !existingVersions.has(name))
-  assert.equal(longVersions.length, 6, 'all six previous versions remain below the 100-version limit')
-  assert.ok(longVersions.every((name) => Buffer.byteLength(name) <= 255), 'backup filenames must stay below the filesystem limit')
-  assert.deepEqual(longVersions.map((name) => fs.readFileSync(path.join(versionDir, name), 'utf8')).sort(),
-    ['# Original long document\n',...[1, 2, 3, 4, 5].map((revision) => `# Revision ${revision}\n`)].sort())
+  assert.deepEqual(await previousVersions(longRel), [
+    ...[5, 4, 3, 2, 1].map(revision => `# Revision ${revision}\n`), '# Original long document\n'
+  ], 'all six preceding contents must reopen byte-for-byte')
+  const entries = fs.readdirSync(versionDir, { recursive: true, withFileTypes: true })
+  assert.ok(entries.every(entry => Buffer.byteLength(entry.name) <= 255), 'snapshot path components must stay below the filesystem limit')
 
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'reader-outside-'))
   try {

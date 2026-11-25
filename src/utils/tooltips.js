@@ -18,21 +18,25 @@ export function installTooltips() {
   function show(anchor) {
     if (active === anchor && tip.classList.contains('is-visible')) return
     hide()
+    if (anchor.hasAttribute('data-feedback-active')) return
     const label = anchor.getAttribute('title') || anchor.dataset.tooltip
     if (!label) return
-    // Text buttons already explain themselves; reserve automatic hints for icon controls.
-    if (!anchor.dataset.tooltip && anchor.textContent.trim().length > 2) {
-      anchor.removeAttribute('title')
-      return
-    }
+    // A name can fit now and be clipped later by resizing the sidebar.
+    // Measure the text-bearing element each time, keeping its full label.
+    const text = anchor.matches('input') ? anchor.value : anchor.textContent.trim()
+    const children = anchor.querySelectorAll('span,input')
+    const clipped = text && [anchor, ...children].some(el =>
+      el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1 &&
+      (el.matches('input') || getComputedStyle(el).overflowX !== 'visible'))
     anchor.dataset.tooltip = label
     anchor.removeAttribute('title')
-    if (!anchor.getAttribute('aria-label') && !anchor.textContent.trim()) anchor.setAttribute('aria-label', label)
+    if (anchor.matches('input:focus') || (text && !clipped && (text === label || text.length > 2 || anchor.matches('input')))) return
+    if (!anchor.getAttribute('aria-label') && !text) anchor.setAttribute('aria-label', label)
     active = anchor
     tip.textContent = label
     tip.classList.toggle('is-long', label.length > 22)
     timer = window.setTimeout(() => {
-      if (active !== anchor || !anchor.isConnected || anchor.getAttribute('aria-expanded') === 'true') return
+      if (active !== anchor || !anchor.isConnected || anchor.hasAttribute('data-feedback-active') || anchor.getAttribute('aria-expanded') === 'true') return
       const rect = anchor.getBoundingClientRect()
       tip.classList.add('is-visible')
       tip.setAttribute('aria-hidden', 'false')
@@ -45,7 +49,10 @@ export function installTooltips() {
       tip.classList.toggle('is-below', below)
     }, 550)
   }
-  function anchorFor(target) { return target?.closest?.('[title], [data-tooltip]') }
+  function anchorFor(target) {
+    if (target?.closest?.('.ProseMirror,[data-user-content]')) return null
+    return target?.closest?.('[title], [data-tooltip]')
+  }
   document.addEventListener('pointerover', event => {
     if (event.pointerType !== 'mouse' || !window.matchMedia('(any-hover: hover)').matches) return
     const anchor = anchorFor(event.target)

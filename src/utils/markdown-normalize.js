@@ -3,6 +3,7 @@ if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload())
 }
 import MarkdownIt from 'markdown-it'
+import { mathSourceSpans, protectedMarkdownRanges } from './math-source.js'
 
 /**
  * Crepe 序列化 markdown 时会做一批改动，内容多数不受影响，但源码会变样、体积能翻倍，
@@ -50,8 +51,8 @@ const mediaKey = (s) =>
   String(s)
     /* ![alt](url) → 只留 url：alt 被编辑器换掉是常态 */
     .replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, '![]($2)')
-    /* [text](url) 与 <url> 指向同一个目标，统一成裸 url */
-    .replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '$2')
+    /* Only a URL used as its own label is equivalent to an autolink. */
+    .replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (link, label, url) => label === url ? url : link)
     .replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
 
 const cellKey = (s) =>
@@ -78,7 +79,7 @@ function escapeStripper(original) {
   if (original) for (const m of String(original).matchAll(/\\([\s\S])/g)) intentional.add(m[1])
   return (s) =>
     s.replace(/\\([\s\S])/g, (whole, ch) =>
-      ESCAPABLE.test(ch) && !intentional.has(ch) ? ch : whole
+      ch !== '$' && ch !== '\\' && ESCAPABLE.test(ch) && !intentional.has(ch) ? ch : whole
     )
 }
 
@@ -144,7 +145,8 @@ function restoreOriginalLines(lines, original) {
    */
   const strip = (s) => {
     /* 先抹平图片 alt 与链接写法（见 mediaKey 的说明），再管尖括号和列表符号 */
-    let out = mediaKey(s)
+    // Match a literal price even if the Markdown writer escaped its dollar. Formulas are already masked.
+    let out = mediaKey(s).replaceAll('\\$', '$')
     out = unifyBullet(out)
     if (out.trimStart().startsWith('|')) out = out.replace(/\s+/g, ' ')
     return out.trim()
@@ -209,13 +211,19 @@ export function diffLines(original, out, limit = 8) {
       j++
       continue
     }
-    diffs.push({ line: i + 1, original: a[i] === undefined ? null : a[i], out: b[j] === undefined ? null : b[j] })
-    // 对齐：找下一个相同行，找不到就各自前进一行
-    const ni = a[i] === undefined ? -1 : b.indexOf(a[i], j + 1)
-    const nj = b[j] === undefined ? -1 : a.indexOf(b[j], i + 1)
-    if (nj >= 0 && (ni < 0 || nj - i <= ni - j)) i = nj
-    else if (ni >= 0) j = ni
-    else {
+    const nextNew = i < a.length ? b.indexOf(a[i], j + 1) : -1
+    const nextOld = j < b.length ? a.indexOf(b[j], i + 1) : -1
+    // An anchor realigns the following text. Emit *each* intervening line.
+    if (nextOld >= 0 && (nextNew < 0 || nextOld - i <= nextNew - j)) {
+      while (i < nextOld && diffs.length < limit) {
+        diffs.push({ line: i + 1, newLine: j + 1, original: a[i++], out: null })
+      }
+    } else if (nextNew >= 0) {
+      while (j < nextNew && diffs.length < limit) {
+        diffs.push({ line: i + 1, newLine: j + 1, original: null, out: b[j++] })
+      }
+    } else {
+      diffs.push({ line: i + 1, newLine: j + 1, original: a[i] ?? null, out: b[j] ?? null })
       i++
       j++
     }
@@ -223,7 +231,81 @@ export function diffLines(original, out, limit = 8) {
   return diffs
 }
 
-export function normalizeMarkdown(input, original, { spacing = true } = {}) {
+// For flat prose and tables, single-line backtick pairs are unambiguous.
+// Leave nested blocks, HTML, multiline spans and complex links to the Markdown parser.
+function simpleCodeRanges(source) {
+  if (/^[ \t>]|^(?:[-+*]|\d+[.)])[ \t]|^(?:---|\+\+\+)[ \t]*\r?$|``|~~~|[<>\uFEFF]/m.test(source)) return null
+  const ranges = []
+  const tokens = /\[[^\[\]`\\\r\n]*\]\([^()[\]\s`\\]+\)|`[^`|\r\n]+`|[\[\]`]/g
+  for (const match of source.matchAll(tokens)) {
+    const token = match[0]
+    if (token.length === 1) return null
+    if (token[0] !== '`') continue
+    // A space or table edge before the delimiter excludes escapes and bare-URL paths.
+    if (match.index && !/[ \t\r\n|]/.test(source[match.index - 1])) return null
+    ranges.push({ from: match.index, to: match.index + token.length })
+  }
+  return ranges
+}
+
+// The line normalizer repairs Markdown prose. TeX, code and frontmatter have
+// their own escape and whitespace rules; keep their original bytes out of it.
+function literalMask(first, second, compareMath = false) {
+  let prefix = '\uE000'
+  while (first.includes(prefix) || second.includes(prefix)) prefix += '\uE000'
+  const values = []
+  const indices = new Map()
+  function mask(source) {
+    if (!/[$`~\\]|^(?:---|\+\+\+| {4}|\t)/m.test(source)) return source
+    const possibleMath = /\$|\\[[(]/.test(source)
+    if (compareMath && !possibleMath) return source
+    let spans = possibleMath ? null : simpleCodeRanges(source)
+    if (spans === null) {
+      const protectedRanges = protectedMarkdownRanges(source)
+      spans = mathSourceSpans(source, protectedRanges)
+      if (!compareMath) {
+        spans = spans.concat(protectedRanges.filter(range =>
+          range.type === 'code' || range.type === 'inlineCode' || range.type === 'frontmatter'))
+        spans.sort((a, b) => a.from - b.from || b.to - a.to)
+      }
+    }
+    const parts = []
+    let at = 0
+    for (const span of spans) {
+      if (span.from < at) continue
+      const raw = source.slice(span.from, span.to)
+      const key = compareMath ? JSON.stringify([span.display, span.value]) : raw
+      if (!indices.has(key)) {
+        indices.set(key, values.length)
+        values.push(raw)
+      }
+      parts.push(source.slice(at, span.from), prefix + indices.get(key) + '\uE001')
+      at = span.to
+    }
+    return parts.join('') + source.slice(at)
+  }
+  const pattern = new RegExp(prefix + '(\\d+)\uE001', 'g')
+  return { mask, restore: text => text.replace(pattern, (_, index) => values[index]) }
+}
+
+export function normalizeMarkdown(input, original, options = {}) {
+  let source = String(input ?? '')
+  let previous = String(original ?? '')
+  // A signature belongs to the file, including when its first heading is edited.
+  const bom = previous.startsWith('\uFEFF') ? '\uFEFF' : ''
+  if (bom) {
+    previous = previous.slice(1)
+    if (source.startsWith(bom)) source = source.slice(1)
+  }
+  const crlf = previous.includes('\r\n') && !/(?<!\r)\n/.test(previous)
+  const current = crlf ? source.replaceAll('\r\n', '\n') : source
+  const base = crlf ? previous.replaceAll('\r\n', '\n') : previous
+  const literals = literalMask(current, base)
+  const result = literals.restore(normalizeProse(literals.mask(current), literals.mask(base), options))
+  return bom + (crlf ? result.replaceAll('\n', '\r\n') : result)
+}
+
+function normalizeProse(input, original, { spacing = true } = {}) {
   const src = String(input ?? '')
   const escape = escapeStripper(original)
   /* 先把编辑器加的尖括号一律拆掉，原文写没写交给下面的整行还原去对齐 */
@@ -253,6 +335,9 @@ export function normalizeMarkdown(input, original, { spacing = true } = {}) {
   const byRow = new Map()
   const byRowLine = new Map()
   const byFirst = new Map()
+  const separators = new Map()
+  const separatorKey = line => /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(line)
+    ? splitCells(line.trim()).map(cell => cell.replace(/-+/, '---')).join('|') : ''
 
   /* 原文无序列表的符号，同样按出现顺序排队 */
   const bullets = []
@@ -275,7 +360,9 @@ export function normalizeMarkdown(input, original, { spacing = true } = {}) {
       const b = line.match(/^((?:\s*>\s*)*)([-*+])\s+(.*)$/)
       if (b) bullets.push([b[2], cellKey(b[3])])
 
-      if (!line.startsWith('|') || /^\|[\s\-:|]+\|$/.test(line.trim())) continue
+      const separator = separatorKey(line)
+      if (separator) { push(separators, separator, line); continue }
+      if (!line.startsWith('|')) continue
       const cells = splitCells(line)
       if (!cells.length) continue
       const sig = cells.map(cellKey).join('\u0000')
@@ -304,9 +391,10 @@ export function normalizeMarkdown(input, original, { spacing = true } = {}) {
     }
 
     if (line.startsWith('|')) {
-      // 分隔行统一
-      if (/^\|[\s\-:|]+\|$/.test(line.trim())) {
-        out.push('|' + '---|'.repeat(line.trim().split('|').length - 2))
+      // Preserve alignment colons, including an intentional change by the user.
+      const separator = separatorKey(line)
+      if (separator) {
+        out.push(take(separators, separator) || '|' + separator + '|')
         continue
       }
       const parts = line.split(/(?<!\\)\|/)
@@ -394,7 +482,8 @@ const comparisonParser = new MarkdownIt({ html: true, linkify: true })
  */
 export function isCosmeticOnly(before, after) {
   const shape = (token) => ({
-    type: token.type,
+    // Indentation and an unlabelled fence produce the same preformatted code.
+    type: token.type === 'code_block' ? 'fence' : token.type,
     tag: token.tag,
     nesting: token.nesting,
     hidden: token.hidden,
@@ -405,8 +494,10 @@ export function isCosmeticOnly(before, after) {
     children: token.children?.map(shape) || null
   })
   try {
-    const a = comparisonParser.parse(String(before ?? ''), {}).map(shape)
-    const b = comparisonParser.parse(String(after ?? ''), {}).map(shape)
+    const left = String(before ?? ''), right = String(after ?? '')
+    const literals = literalMask(left, right, true)
+    const a = comparisonParser.parse(literals.mask(left), {}).map(shape)
+    const b = comparisonParser.parse(literals.mask(right), {}).map(shape)
     return JSON.stringify(a) === JSON.stringify(b)
   } catch {
     return false

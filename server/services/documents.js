@@ -3,8 +3,10 @@ import path from 'node:path'
 import { randomUUID, randomBytes } from 'node:crypto'
 import { digest, fault } from '../storage/workspace.js'
 import { recordSource } from './sources.js'
+import { librarySearch } from './library-search.js'
 
-export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
+export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible,inReader}) {
+  const searchLibraryDocuments = librarySearch(repo, assertMd, inReader)
   function current(body,url) {
     const id=body.id||url.searchParams.get('id')
     const rel=id?repo.byId(id)?.path:body.path||body.file||url.searchParams.get('path')
@@ -29,7 +31,7 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
         const colors=(c.colors||['#dbeafe','#e9d5ff','#fce7f3']).slice(0,4)
         if(colors.length<3)throw fault('INVALID_METADATA','至少需要三种颜色')
         if(colors.some(x=>!/^#[a-f\d]{6}$/i.test(x)))throw fault('INVALID_METADATA','颜色无效')
-        out.cover={type:c.type,asset:c.asset||'',preset:['mist','ribbon','grain','mesh'].includes(c.preset)?c.preset:'mist',colors,animated:!!c.animated,height:['small','medium','large'].includes(c.height)?c.height:'medium',position:Math.max(0,Math.min(100,Number.isFinite(Number(c.position))?Number(c.position):50)),seed:Math.max(0,Number(c.seed)||0),speed:Math.max(1,Math.min(3,Number(c.speed)||1)),grain:Math.max(0,Math.min(1,Number(c.grain)||0))}
+        out.cover={type:c.type,asset:c.asset||'',preset:['mist','ribbon','grain','mesh','pixel','halftone'].includes(c.preset)?c.preset:'mist',colors,animated:!!c.animated,height:['small','medium','large'].includes(c.height)?c.height:'medium',position:Math.max(0,Math.min(100,Number.isFinite(Number(c.position))?Number(c.position):50)),seed:Math.max(0,Number(c.seed)||0),speed:Math.max(1,Math.min(3,Number(c.speed)||1)),grain:Math.max(0,Math.min(1,Number(c.grain)||0))}
       }
     }
     return out
@@ -66,13 +68,14 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
     },
     'GET /history':async(body,url)=>{
       const n=current(body,url)
-      const items=repo.db.prepare('SELECT id,revision,at FROM versions WHERE node=? ORDER BY at DESC LIMIT 100').all(n.id)
+      const items=repo.db.prepare('SELECT id,revision,at FROM versions WHERE node=? ORDER BY at DESC, rowid DESC LIMIT 100').all(n.id)
       const id=url.searchParams.get('version')
       const v=id&&repo.db.prepare('SELECT * FROM versions WHERE id=? AND node=?').get(id,n.id)
       if(id&&!v)throw fault('NOT_FOUND','版本不存在',404)
       return {ok:true,data:{items,...(v?{content:fs.readFileSync(path.join(repo.root,v.path),'utf8')}: {})}}
     },
     'GET /search':async(body,url,ctx)=>{
+      if (url.searchParams.get('view') === 'documents') return searchLibraryDocuments(url, ctx)
       const query=String(url.searchParams.get('q')||'').trim().slice(0,200),lib=url.searchParams.get('lib')||''
       if(!query)return {ok:true,data:{hits:[]}}
       const hits=[]
@@ -90,8 +93,8 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible}) {
     },
     'GET /agent-keys':async()=>({ok:true,data:repo.db.prepare('SELECT id,name,scopes,permissions,expires,revoked FROM credentials').all().map(r=>({...r,scopes:JSON.parse(r.scopes),permissions:JSON.parse(r.permissions)}))}),
     'POST /agent-keys':async body=>{
-      if(!Array.isArray(body.scopes)||!body.scopes.length)throw fault('INVALID_SCOPE','请选择抽屉')
-      const scopes=body.scopes.map(rel=>{assertVisible(rel);if(rel.includes('/')||!fs.statSync(path.join(repo.root,rel)).isDirectory())throw fault('INVALID_SCOPE','抽屉范围无效');return repo.node(rel,'folder').id})
+      if(!Array.isArray(body.scopes)||!body.scopes.length)throw fault('INVALID_SCOPE','请选择知识库')
+      const scopes=body.scopes.map(rel=>{assertVisible(rel);if(rel.includes('/')||!fs.statSync(path.join(repo.root,rel)).isDirectory())throw fault('INVALID_SCOPE','知识库范围无效');return repo.node(rel,'folder').id})
       const permissions=body.write?['read','write']:['read'],token=randomBytes(32).toString('hex'),id=randomUUID()
       const expires=Date.now()+Math.max(1,Math.min(365,Number(body.days)||30))*86400000
       repo.db.prepare('INSERT INTO credentials VALUES (?,?,?,?,?,?,0)').run(id,digest(token),String(body.name||'Agent').slice(0,80),JSON.stringify(scopes),JSON.stringify(permissions),expires)

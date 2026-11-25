@@ -11,8 +11,8 @@
             <div class="activity-head-actions">
               <button v-if="unread" class="activity-text-btn" :disabled="busy" @click="markAll">全部已读</button>
               <button class="activity-text-btn" :disabled="busy" @click="toggleAll">{{ showAll ? '只看 Agent' : '包含我的改动' }}</button>
-              <button class="btn-icon" aria-label="关闭" @click="close"><PhX :size="18" /></button>
             </div>
+            <button autofocus class="btn-icon activity-close" aria-label="关闭" :disabled="busy" @click="close"><PhX :size="18" /></button>
           </header>
 
           <p v-if="error" class="reader-error activity-error" role="alert">{{ error }}</p>
@@ -26,6 +26,7 @@
                 v-for="item in items"
                 :key="item.id"
                 class="activity-item"
+                :title="item.path || undefined"
                 :class="{ 'is-active': selected?.id === item.id, 'is-read': item.reviewed }"
                 :aria-current="selected?.id === item.id || undefined"
                 @click="choose(item)"
@@ -63,11 +64,9 @@
                   <p v-if="diff.kind === 'delete'" class="activity-note">这篇文档已被删除，可以在回收站找回。</p>
                   <p v-else-if="diff.kind === 'rename' || diff.kind === 'move'" class="activity-note">{{ diff.kind === 'move' ? '文档已移动' : '文档已重命名' }}</p>
                   <p v-else-if="diff.kind === 'meta'" class="activity-note">页面设置发生变化，正文没有变化。</p>
-                  <template v-else-if="diff.kind === 'create'">
-                    <p class="activity-note">新建文档，下面是初始内容。</p>
-                    <pre class="activity-created">{{ diff.after }}</pre>
-                  </template>
-                  <TextComparison v-else :before="diff.before" :after="diff.after" />
+                  <p v-else-if="diff.kind === 'unavailable'" class="activity-note">这次修改的历史正文已不可用。</p>
+                  <p v-else-if="diff.kind === 'unchanged'" class="activity-note">此次保存的正文与上次相同。</p>
+                  <ActivityDocument v-else :key="selected.id" :diff="diff" />
                 </template>
                 <p v-else-if="!selected.hasDiff" class="activity-empty">此操作没有正文差异</p>
               </template>
@@ -82,7 +81,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { PhX } from '../icons/remix'
-import TextComparison from './TextComparison.vue'
+import ActivityDocument from './ActivityDocument.vue'
 import { useDialogFocus } from '../composables/useDialogFocus'
 import { getActivity, getActivityDiff, reviewActivity } from '../services/activity'
 
@@ -183,7 +182,6 @@ function openDoc() {
   const path = selected.value?.currentPath || selected.value?.path
   if (!path) return
   emit('select', path)
-  emit('close')
 }
 
 watch(() => props.open, async visible => {
@@ -197,7 +195,7 @@ watch(() => props.open, async visible => {
 
 <style scoped>
 .activity-panel { width: min(760px, calc(100vw - 24px)); height: min(560px, calc(100dvh - 24px)); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
-.activity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 8px; }
+.activity-head { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap: 12px; padding: 10px 16px 8px; }
 .activity-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .activity-head h2 { margin: 0; font-size: 13px; font-weight: 500; }
 .activity-sub { margin: 0; font-size: 11px; color: var(--c-faint); white-space: nowrap; }
@@ -215,8 +213,8 @@ watch(() => props.open, async visible => {
 .activity-line { display: flex; align-items: baseline; gap: 5px; font-size: 11px; line-height: 1.4; color: var(--c-sub); min-width: 0; }
 .activity-line b { color: var(--c-ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
 .activity-line time { margin-left: auto; flex-shrink: 0; font-size: 10px; color: var(--c-faint); }
-.activity-name { font-size: 12.5px; line-height: 1.4; color: var(--c-ink); overflow-wrap: anywhere; }
-.activity-path { font-size: 10.5px; line-height: 1.35; color: var(--c-faint); overflow-wrap: anywhere; }
+.activity-name { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size: 12.5px; line-height: 1.4; color: var(--c-ink); overflow-wrap: anywhere; }
+.activity-path { min-width:0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; font-size: 10.5px; line-height: 1.35; color: var(--c-faint); overflow-wrap: anywhere; }
 .activity-more { display: block; width: 100%; padding: 9px; border: 0; background: transparent; font-size: 12px; color: var(--c-sub); text-align: center; }
 .activity-more:hover:not(:disabled) { color: var(--c-ink); }
 .activity-empty { padding: 24px 16px; text-align: center; color: var(--c-faint); font-size: 12px; margin: 0; }
@@ -224,16 +222,31 @@ watch(() => props.open, async visible => {
 .activity-detail { min-width: 0; min-height: 0; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .activity-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .activity-detail-head h3 { margin: 0; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
-.activity-detail-head p { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; font-size: 11px; color: var(--c-sub); }
+.activity-detail-head p { overflow-wrap:anywhere; display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; font-size: 11px; color: var(--c-sub); }
 .activity-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .activity-note { margin: 0; padding: 12px; border-radius: 8px; background: var(--c-field); color: var(--c-sub); font-size: 12px; line-height: 1.65; }
-.activity-created { margin: 0; padding: 12px; border-radius: 8px; background: var(--c-field); color: var(--c-ink); white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.65 monospace; }
 .activity-detail :deep(.text-comparison) { flex: 1; min-height: 0; }
 @media (max-width: 720px) {
   .activity-panel { height: calc(100dvh - 24px); }
   .activity-body { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 34%) minmax(0, 1fr); }
   .activity-list { border-right: 0; margin: 0 6px 4px; border-radius: var(--radius-control); background: var(--c-field); }
-  .activity-head { padding: 12px; }
+  .activity-head { padding: 8px 12px; }
   .activity-detail { padding: 12px; }
+}
+.activity-detail-head > div:first-child { min-width:0; }
+@media(max-width:460px) {
+  .activity-head { grid-template-columns:minmax(0,1fr) auto; gap:0 8px; }
+  .activity-head-actions { grid-column:1/-1; grid-row:2; }
+  .activity-close { grid-column:2; grid-row:1; }
+  .activity-detail-head { flex-direction:column; gap:4px; }
+}
+@media(pointer:coarse) { .activity-text-btn { min-height:44px; } }
+@media (min-width:521px) and (max-width:720px) and (max-height:430px) {
+  .activity-body { grid-template-columns:minmax(140px,35%) minmax(0,1fr); grid-template-rows:minmax(0,1fr); }
+  .activity-list { margin:0 0 8px 6px; }
+  .activity-detail-head { flex-direction:column; gap:2px; }
+}
+@media (max-height:430px) {
+  .activity-detail :deep(.activity-document),.activity-detail :deep(.text-comparison) { flex-shrink:0; min-height:180px; }
 }
 </style>

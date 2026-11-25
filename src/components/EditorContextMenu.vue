@@ -1,18 +1,14 @@
 <template>
-  <Teleport to="body">
-    <Transition name="editor-pop">
-      <div v-if="items.length" ref="panel" class="editor-context-menu ui-font" role="menu" :aria-label="label" :style="{ left: pos.x + 'px', top: pos.y + 'px', visibility: ready ? 'visible' : 'hidden' }" @mousedown.stop.prevent @contextmenu.prevent @keydown="onKey">
-        <template v-for="item in items" :key="item.id">
-          <div v-if="item.separator" class="ctx-sep" role="separator" />
-          <button v-else type="button" role="menuitem" class="ctx-item" :class="{ 'is-danger': item.danger }" :disabled="item.disabled" @click="choose(item)">
-            <component :is="item.icon" v-if="item.icon" :size="15" class="ctx-icon" />
-            <span class="ctx-label">{{ item.label }}</span>
-            <kbd v-if="item.shortcut" class="ctx-shortcut">{{ item.shortcut }}</kbd>
-          </button>
-        </template>
-      </div>
-    </Transition>
-  </Teleport>
+  <div v-if="items.length" ref="panel" class="editor-context-menu ui-font" role="menu" :aria-label="label" :style="{ left: pos.x + 'px', top: pos.y + 'px', visibility: ready ? 'visible' : 'hidden' }" @mousedown.stop.prevent @contextmenu.prevent @keydown="onKey">
+    <template v-for="item in items" :key="item.id">
+      <div v-if="item.separator" class="ctx-sep" role="separator" />
+      <button v-else type="button" role="menuitem" class="ctx-item" :class="{ 'is-danger': item.danger }" :disabled="item.disabled" @click="choose(item, $event)">
+        <component :is="item.icon" v-if="item.icon" :size="15" class="ctx-icon" />
+        <span class="ctx-label">{{ item.label }}</span>
+        <kbd v-if="item.shortcut" class="ctx-shortcut">{{ item.shortcut }}</kbd>
+      </button>
+    </template>
+  </div>
 </template>
 
 <script setup>
@@ -40,12 +36,12 @@ onMounted(async () => {
   }
   ready.value = true
   await nextTick()
-  panel.value?.querySelector('button:not(:disabled)')?.focus()
+  panel.value?.querySelector('button:not(:disabled)')?.focus({ preventScroll: true })
 })
 
-function choose(item) {
+function choose(item, event) {
   if (!item || item.disabled) return
-  emit('select', item.id)
+  emit('select', item.id, event.currentTarget.getBoundingClientRect())
 }
 function onKey(event) {
   if (event.key === 'Escape') {
@@ -74,16 +70,16 @@ function onKey(event) {
 <style scoped>
 .editor-context-menu {
   position: fixed;
-  z-index: 980;
+  z-index: var(--layer-popover);
   width: 196px;
   max-height: min(420px, calc(100dvh - 16px));
   overflow-y: auto;
   padding: 5px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
+  border: 1px solid var(--surface-menu-border);
+  border-radius: var(--radius-tool);
   background: var(--c-pop);
-  box-shadow: var(--c-pop-shadow);
-  corner-shape: superellipse(2);
+  box-shadow: var(--surface-menu-shadow);
+  corner-shape: var(--corner-ui);
 }
 .ctx-item {
   display: flex;
@@ -92,7 +88,7 @@ function onKey(event) {
   width: 100%;
   min-height: 29px;
   padding: 5px 7px;
-  border-radius: 7px;
+  border-radius: var(--radius-item);
   color: var(--c-text);
   font-size: 12.5px;
   line-height: 1.35;

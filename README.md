@@ -1,68 +1,48 @@
-# Typocket
+<h1 align="center">Typocket</h1>
 
-**在 DSH 中阅读、编辑和整理你与 Agent 共同积累的资料。**
+<p align="center">一款可以和 Agent 共用的本地 Markdown 编辑器。<br>在 DSH 里读工作区的文档，接着写，把值得留下的资料收进自己的知识库。</p>
 
-一次调研往往会留下笔记、草稿、参考文献和网页。Agent 很擅长处理这些文件，人却需要一个适合阅读、修改和整理它们的地方。Typocket 把这个界面带到 DSH 中，让工作区里的成果成为可以反复使用的个人资料。
+<p align="center"><a href="https://awesome-dsh-plugin.com/?q=Typocket"><b>从 DSH 市场安装</b></a>　 <a href="https://github.com/bigricedumpling/deepseek-reader/releases">下载安装包</a>　 <a href="docs/USER-GUIDE.md">使用指南</a></p>
 
-正文以普通文件保存在本机。你可以在 Typocket 中继续写，也可以交给 Agent 或其他工具处理。Markdown 是主要写作格式，PDF 和 HTML 页面也能放在一起查看。
+![Typocket 正文阅读界面。英文声学笔记 Chladni plates 中，三幅原创数值插图呈现不同振动模式的节线。](docs/images/readme-reading.webp)
 
-## 可以用它做什么
+<sub>截图采用英文示例资料，界面标签作了对应翻译。</sub>
 
-- **阅读工作区成果**：直接预览 Agent 生成的 Markdown，查看相对图片和链接；想保留时在预览里收进抽屉。
-- **用抽屉整理资料**：将有用的资料收录为独立副本，用文件夹组织内容，通过搜索和多标签继续工作。
-- **专注阅读与写作**：调整字体、正文宽度、行距和主题，使用目录导航，编辑 Markdown、表格、公式与脚注。
-- **一起查看不同资料**：在同一处阅读 Markdown、PDF 和 HTML 页面，适合调研、学习、项目记录与个人笔记。
-- **看清 Agent 改了什么**：在「Agent 改动」中按时间查看 Agent 的写入，对比有历史版本的正文改动，再决定继续处理或标记已读。
-- **资料留在本机**：正文和附件是普通文件，阅读、编辑和整理都不会把内容搬进数据库。
+## 从 Agent 的草稿接着写
 
-Typocket 面向以本地文件为中心的个人工作。当前不提供多人实时协作、云同步或工作区原文件与抽屉副本的双向同步。
+在 DSH 的文件区打开一篇 Markdown，就能看见排好版的正文、图片、表格和公式。想留下它时，点「保存到知识库」。工作区原稿留在原处，你可以放心整理自己的副本。
 
-## 安装
+编辑时可以直接修改公式，或输入 `/` 插入内容。写到一半切去另一篇查资料，切回来仍能继续撤销刚才的输入。需要交付时，可以打印成 PDF，导出含图片的独立网页，或把 Markdown 和附件一起打成 ZIP，留给对方继续编辑。
 
-1. 在 [DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)搜索 Typocket 并安装。
-2. 在 DSH NEXT 右侧栏打开「开始 → Typocket」。
+## 记得一句话，也能找回一篇文档
 
-也可以从 [GitHub 发布页](https://github.com/bigricedumpling/deepseek-reader/releases)下载对应版本的 `.tgz`，在 DSH NEXT 的「插件 → 添加插件」中选择安装包。市场更新和 GitHub 发布可能有时间差。
+![Typocket 知识库总览。英文示例资料按研究主题收纳，每个文件夹都能预览里面的一页。](docs/images/readme-library.webp)
 
-插件自带页面和本机服务。首次使用会创建「草稿」抽屉，你可以改名或删除它。各平台验证情况见[支持范围与已知问题](docs/RELEASE-READINESS.md)。
+用知识库区分研究、项目和个人笔记，再用文件夹整理。标签可以跨库打开。只记得原文的一句话时，打开侧栏搜索，选择「跨库正文」，点结果即可回到那段话。Markdown 的章节链接和 PDF 的页码链接也能直接定位。
 
-## 文件始终在本机
+## 和 Agent 改同一篇文章
 
-工作区预览不会移动原文件。在预览里「收进抽屉」会把内容复制到抽屉，之后可以独立编辑和整理。正文与附件保留为文件，页面设置、文档标识和历史索引保存在抽屉的 `.reader` 目录。
+![Typocket 的 Agent 改动记录，展示 Listening notes 中一条观察在修改前后的措辞。](docs/images/readme-agent.webp)
 
-| 平台 | 默认抽屉目录 |
-| --- | --- |
-| macOS | `~/Library/Application Support/Reader/知识库` |
-| Windows | `%APPDATA%\Reader\知识库` |
-| Linux | `$XDG_DATA_HOME/Reader/知识库`，未设置时使用 `~/.local/share/Reader/知识库` |
+选中一段，点「复制给 Agent」，把选段、小节和出处一起粘贴到会话里。在知识库里，即使文章改过名，Agent 也可以通过文档标识找到原文。使用 Typocket 工具写回的修改会出现在「Agent 改动」里，方便逐段核对。遇到你们同时修改的段落，可以保留草稿再处理。
 
-更新或卸载插件不会主动删除抽屉。备份时请连同正文、附件和元数据一起保存，见 [数据与恢复](docs/DATA-AND-RECOVERY.md)。
+DSH 可直接使用随包工具。支持本机 stdio MCP 的其他 Agent 也能连接同一份资料。具体接法见[插件说明](plugins/reader-workspace/README.md#在其他-agent-中使用)。
 
-正文和附件始终保存在本机。需要交付单篇内容时使用导出；Typocket 不提供公开分享、云端发布或访客链接。
+## 安装与文件
 
-## 使用与帮助
+在 [DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)安装后，从 DSH 右侧栏的「开始 → Typocket」打开。安装包自带本机服务。手动安装时，从 [GitHub Releases](https://github.com/bigricedumpling/deepseek-reader/releases) 下载 `.tgz`，在 DSH NEXT 的「插件 → 添加插件」中选中它。
 
-- [使用指南](docs/USER-GUIDE.md)：从打开文档到整理和恢复。
-- [插件说明](plugins/reader-workspace/README.md)：安装、连接设置与文件位置。
-- [支持范围与已知问题](docs/RELEASE-READINESS.md)：平台、格式与已知限制。
-- [版本变化](CHANGELOG.md)：每个版本带来的变化。
-- [反馈问题](https://github.com/bigricedumpling/deepseek-reader/issues)：请附版本、系统和复现步骤，示例内容请先脱敏。
+正文以普通 Markdown 文件保存，PDF 和 HTML 也能在同一处预览。更新或卸载插件会保留知识库。备份时请同时保留正文、附件和元数据。[数据目录与备份恢复](docs/DATA-AND-RECOVERY.md) · [各平台支持情况](docs/RELEASE-READINESS.md) · [版本变化](CHANGELOG.md)
 
-## 从源码开发
+## 从源码运行
 
-开发环境需要 Node.js 24 或更新版本。在仓库根目录执行：
+需要 Node.js 24 或更新版本。
 
 ```bash
 npm ci
 npm run dev
 ```
 
-开发时可设置 `DOCS_ROOT` 指向独立数据目录。构建使用 `npm run build`；基础检查使用 `npm run check` 和 `npm run typecheck`。
+开发时可设置 `DOCS_ROOT` 指向独立的测试目录。`npm run build` 构建应用，`npm run release:plugin` 生成可安装的插件包。[工程说明](docs/ENGINEERING.md) · [报告问题](https://github.com/bigricedumpling/deepseek-reader/issues)
 
-交付到本机自用实例使用 `npm run release:local`：它会检查服务端语法、构建前端、同步插件自带运行时并重启本机服务。生成可安装的插件包使用 `npm run release:plugin`，产物在 `.dist-plugin/`。
-
-项目使用 Vue 3、Vite、Milkdown、Node.js 和 SQLite。参与开发可阅读 [工程说明](docs/ENGINEERING.md) 与 [存储架构](docs/数据与扩展架构.md)；独立网站维护者可阅读 [服务器部署](docs/DEPLOYMENT.md)。
-
-## 许可
-
-[MIT License](LICENSE)。第三方字体与阅读组件遵循各自许可，见 [第三方资产](docs/THIRD-PARTY-ASSETS.md)。
+项目代码采用 [MIT 许可](LICENSE)。字体、图标与阅读组件的许可见[第三方资产](docs/THIRD-PARTY-ASSETS.md)。

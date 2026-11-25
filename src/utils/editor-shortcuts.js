@@ -25,6 +25,8 @@ if (import.meta.hot) {
 }
 
 import { $prose } from '@milkdown/kit/utils'
+import { encodeDocumentPath, resolveDocHref, resolveDocReference } from '../../server/services/document-links.js'
+export { resolveDocHref, resolveDocReference } from '../../server/services/document-links.js'
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import { lift, wrapIn } from '@milkdown/kit/prose/commands'
@@ -345,23 +347,7 @@ function relativePath(fromDoc, target) {
   let i = 0
   while (i < a.length && i < b.length - 1 && a[i] === b[i]) i++
   const up = a.slice(i).map(() => '..')
-  return up.concat(b.slice(i)).join('/')
-}
-
-/** 把正文里的相对链接解析成知识库里的路径（点了要开哪一篇） */
-export function resolveDocHref(href, fromDoc) {
-  const raw = String(href || '').split('#')[0]
-  if (!raw || /^[a-z]+:/i.test(raw) || raw.startsWith('/')) return ''
-  if (!/\.(md|pdf|html?)$/i.test(raw)) return ''
-  let decoded
-  try { decoded = decodeURIComponent(raw) } catch { return '' }
-  const parts = String(fromDoc || '').split('/').slice(0, -1)
-  for (const seg of decoded.split('/')) {
-    if (seg === '.' || seg === '') continue
-    if (seg === '..') parts.pop()
-    else parts.push(seg)
-  }
-  return parts.join('/')
+  return encodeDocumentPath(up.concat(b.slice(i)).join('/'))
 }
 
 /**
@@ -532,11 +518,11 @@ export function editorShortcuts(props = {}) {
               return
             }
             // 指向当前知识库其他文档的链接：开成工具内部的标签页（不是浏览器标签页）
-            const target = resolveDocHref(href, props.docId)
-            if (!target) return
+            const target = resolveDocReference(href, props.docId)
+            if (!target || !props.onOpenDoc) return
             e.preventDefault()
             e.stopPropagation()
-            if (typeof props.onOpenDoc === 'function') props.onOpenDoc(target)
+            props.onOpenDoc(target)
           }
           editorView.dom.addEventListener('click', onClick, true)
 

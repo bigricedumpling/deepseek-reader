@@ -1,13 +1,18 @@
 <template>
   <aside
+    id="document-outline"
+    ref="panel"
+    aria-label="目录"
+    :inert="collapsed"
+    @keydown.esc.stop="closePanel(true)"
     class="toc-panel flex-shrink-0 flex relative overflow-hidden"
     :class="{ 'is-collapsed': collapsed, 'is-dragging': dragging }"
     :style="{ width: (collapsed ? 0 : width) + 'px' }"
   >
     <div class="flex-1 min-w-0 flex flex-col" :style="{ width: width + 'px' }">
       <!-- 顶栏悬浮在面板上方；Aa/… 通过 Teleport 落到左侧槽位，右上角只留目录收起。 -->
-      <div class="h-10 flex-shrink-0" />
-      <button class="toc-collapse-chip" :class="{ 'is-open': !collapsed, 'is-flat': shellFlat, 'is-entering': chipEnter }" :style="{ pointerEvents: chipHot ? 'auto' : 'none' }" title="收起目录" aria-label="收起目录" @click="emit('update:collapsed', true)"><PhCaretRight :size="16" /></button>
+      <div class="toc-header h-10 flex-shrink-0"><span class="ui-font">目录</span></div>
+      <button class="toc-collapse-chip" :class="{ 'is-open': !collapsed, 'is-flat': shellFlat, 'is-entering': chipEnter }" :style="{ pointerEvents: chipHot ? 'auto' : 'none' }" title="收起目录" aria-label="收起目录" @click="closePanel(true)"><PhCaretRight :size="16" /></button>
 
       <!-- 目录项 -->
       <nav ref="navEl" class="toc-scroll flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 pb-4">
@@ -23,6 +28,8 @@
             class="toc-fold"
             :class="{ 'is-folded': isFolded(r.key) }"
             :title="isFolded(r.key) ? '展开这一节' : '收起这一节'"
+            :aria-label="r.title"
+            :aria-expanded="!isFolded(r.key)"
             @click.stop="onToggle(r)"
           >
             <PhCaretDown :size="10" weight="bold" />
@@ -34,6 +41,7 @@
               r.level === 3 ? 'px-2 py-1 text-[12.5px]' : 'px-2 py-1.5 text-[13.5px]',
               activeIndex === r.index ? 'is-active' : ''
             ]"
+            :aria-current="activeIndex === r.index ? 'location' : undefined"
             @click="scrollTo(r.index)"
           >
             {{ r.title }}
@@ -54,7 +62,7 @@
           <div class="toc-progress flex-1 overflow-hidden">
             <div class="toc-progress-fill h-full" :style="{ width: progress + '%' }" />
           </div>
-          <span class="ui-font text-[10.5px] text-[var(--c-faint)] tabular-nums">
+          <span class="toc-percent ui-font text-[10.5px] text-[var(--c-faint)] tabular-nums">
             {{ progress }}%
           </span>
 
@@ -65,7 +73,7 @@
     <!-- 拖拽条：调整目录宽度 -->
     <div
       v-show="!collapsed"
-      class="absolute inset-y-0 -left-1.5 w-3 cursor-col-resize group z-10"
+      class="toc-resize absolute inset-y-0 -left-1.5 w-3 cursor-col-resize group z-10"
       title="拖动调整目录宽度"
       @pointerdown="startResize"
     >
@@ -77,6 +85,7 @@
 </template>
 
 <script setup>
+import { createOutlinePosition } from '../utils/outline-position.js'
 import { resizePanel } from '../utils/panel-resize'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { PhCaretDown, PhCaretRight } from '../icons/remix'
@@ -96,6 +105,22 @@ const props = defineProps({
   /** 当前文档路径：折叠状态是按文档记的 */
   docKey: { type: String, default: '' }
 })
+const panel = ref(null)
+const compact = () => matchMedia('(max-width:720px)').matches
+async function closePanel(returnFocus) {
+  emit('update:collapsed', true)
+  if (returnFocus) {
+    await nextTick()
+    const trigger = compact() ? '.doc-more > button' : '.rail-toc-handle'
+    document.querySelector(trigger)?.focus({preventScroll:true})
+  }
+}
+function outsidePanel(event) {
+  if (!props.collapsed && compact() && !panel.value?.contains(event.target)) closePanel(false)
+}
+onMounted(() => document.addEventListener('pointerdown', outsidePanel, true))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', outsidePanel, true))
+
 const emit = defineEmits(['update:collapsed', 'update:width', 'update:dragging', 'go-page'])
 
 /*
@@ -161,11 +186,13 @@ function scrollActiveRow() {
   if (!nav) return
   const el = nav.querySelector('.toc-item.is-active')
   if (!el) return
-  const top = el.offsetTop
+  const top = el.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop
   const h = el.offsetHeight
-  if (top < nav.scrollTop + 10) nav.scrollTo({ top: Math.max(0, top - 10), behavior: scrollBehavior() })
-  else if (top + h > nav.scrollTop + nav.clientHeight - 10) {
-    nav.scrollTo({ top: top + h - nav.clientHeight + 10, behavior: scrollBehavior() })
+  let target
+  if (top < nav.scrollTop + 10) target = Math.max(0, top - 10)
+  else if (top + h > nav.scrollTop + nav.clientHeight - 10) target = top + h - nav.clientHeight + 10
+  if (target !== undefined) {
+    nav.scrollTo({ top: target, behavior: scrollBehavior(Math.abs(target - nav.scrollTop) < nav.clientHeight) })
   }
 }
 
@@ -187,6 +214,12 @@ let chipTimer = 0
 function syncShell(open) {
   clearTimeout(shellTimer)
   clearTimeout(chipTimer)
+  if (compact() || matchMedia('(prefers-reduced-motion:reduce)').matches) {
+    chipHot.value = open
+    shellFlat.value = open
+    chipEnter.value = false
+    return
+  }
   if (open) {
     shellFlat.value = false
     // 首帧不播放入场动画：TOC 本来就是打开状态时（例如刷新页面）不要凭空滑一下。
@@ -201,8 +234,8 @@ function syncShell(open) {
 }
 watch(() => props.collapsed, v => syncShell(!v))
 let scroller = null
-let heads = []
-let ticking = false
+let scrollFrame = 0
+const outline = createOutlinePosition(onScroll)
 
 /* ---------- 拖拽调宽 ---------- */
 
@@ -215,38 +248,9 @@ function startResize(e) {
 
 /* ---------- 当前位置跟随 ---------- */
 
-/**
- * 正文现在由 ProseMirror 渲染，标题上没有 id，所以按 DOM 顺序跟目录一一对应。
- * 两者都来自同一篇文档，顺序必然一致。
- */
-function collect() {
-  if (!scroller) {
-    heads = []
-    return
-  }
-  /*
-   * 只认正文里的标题。
-   * 斜杠菜单也用 h6 做分组标题，而且就挂在滚动容器里；如果从 scroller 直接查，
-   * 菜单一挂载就会被算成正文标题，目录高亮会跳到不存在的项。
-   */
-  heads = [...scroller.querySelectorAll('.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6')]
-    .filter(el=>!el.closest('.reader-rich-block, .reader-columns, .reader-raw-block'))
-}
-
-function syncActive() {
-  if (!scroller || !heads.length) return
-  const base = scroller.getBoundingClientRect().top
-  let current = 0
-  for (let i = 0; i < heads.length; i++) {
-    if (heads[i].getBoundingClientRect().top - base <= 120) current = i
-    else break
-  }
-  if (activeIndex.value !== current) activeIndex.value = current
-}
-
 /* 读到哪，目录就跟着露出来、滚过去 */
 watch(activeIndex, (i) => {
-  if (i < 0) return
+  if (i < 0 || props.collapsed) return
   revealIndex(i)
   nextTick(scrollActiveRow)
 })
@@ -263,14 +267,13 @@ watch(
 )
 
 function onScroll() {
-  if (!scroller) return
-  const max = scroller.scrollHeight - scroller.clientHeight
-  progress.value = max > 0 ? Math.min(100, Math.round((scroller.scrollTop / max) * 100)) : 0
-  if (ticking) return
-  ticking = true
-  requestAnimationFrame(() => {
-    ticking = false
-    syncActive()
+  if (!scroller || scrollFrame) return
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0
+    if (!scroller) return
+    const max = scroller.scrollHeight - scroller.clientHeight
+    progress.value = max > 0 ? Math.min(100, Math.round(scroller.scrollTop / max * 100)) : 0
+    activeIndex.value = outline.atViewport()
   })
 }
 
@@ -280,112 +283,61 @@ function scrollTo(i) {
     const page = props.toc[i] && props.toc[i].page
     activeIndex.value = i
     if (page) emit('go-page', page)
+    if (compact()) closePanel(true)
     return
   }
-  const el = heads[i]
+  const el = outline.list()[i]
   if (!el || !scroller) return
   scrollToTarget(scroller, el)
   activeIndex.value = i
+  if (compact()) closePanel(true)
 }
 
 /* ---------- 装配 ---------- */
 
-let timer1 = null
-let timer2 = null
-let settleFrame = 0
-
-function clearTimers() {
-  clearTimeout(timer1)
-  clearTimeout(timer2)
-  if (settleFrame) cancelAnimationFrame(settleFrame)
-  settleFrame = 0
+function bindScroller(next) {
+  if (next === scroller) return
+  scroller?.removeEventListener('scroll', onScroll)
+  cancelAnimationFrame(scrollFrame)
+  scrollFrame = 0
+  scroller = next
+  outline.bind(next)
+  scroller?.addEventListener('scroll', onScroll, { passive: true })
 }
-
-function teardown() {
-  clearTimers()
+function setup() {
+  bindScroller(props.collapsed || props.pdf ? null : document.getElementById('main-scroll-container'))
+  onScroll()
+}
+onMounted(setup)
+onBeforeUnmount(() => {
+  bindScroller(null)
   clearTimeout(shellTimer)
   clearTimeout(chipTimer)
-  if (scroller) scroller.removeEventListener('scroll', onScroll)
-}
-
-/*
- * 正文是异步挂载的：目录数据已经到了，标题节点可能还没铺进 DOM。
- * 固定 400ms/1200ms 两次定时器在慢机器上会漏；这里逐帧重试到标题数量对得上，
- * 再初始化高亮。只跑几秒，不会常驻轮询。
- */
-function waitForHeadings(timeout = 3000) {
-  if (settleFrame) cancelAnimationFrame(settleFrame)
-  settleFrame = 0
-  const expected = Array.isArray(props.toc) ? props.toc.length : 0
-  if (!scroller || !expected || props.pdf) return
-  const deadline = performance.now() + timeout
-  const tick = () => {
-    settleFrame = 0
-    if (!scroller) return
-    collect()
-    if (heads.length >= expected) {
-      syncActive()
-      return
-    }
-    if (performance.now() < deadline) settleFrame = requestAnimationFrame(tick)
-    else syncActive()
-  }
-  settleFrame = requestAnimationFrame(tick)
-}
-
-function setup() {
-  if (scroller) scroller.removeEventListener('scroll', onScroll)
-  scroller = document.getElementById('main-scroll-container')
-  if (!scroller) return
-  collect()
-  scroller.addEventListener('scroll', onScroll, { passive: true })
-  onScroll()
-  syncActive()
-  waitForHeadings()
-}
-
-onMounted(() => nextTick(() => { timer1 = setTimeout(setup, 200) }))
-onBeforeUnmount(teardown)
-
-watch(
-  () => props.toc,
-  async () => {
-    clearTimers()
-    await nextTick()
-    setup()
-    // 编辑器是异步渲染的，等它把标题铺进 DOM 再量
-    timer1 = setTimeout(setup, 400)
-    timer2 = setTimeout(setup, 1200)
-  }
-)
-watch(
-  () => props.collapsed,
-  async (v) => {
-    if (v && dragging.value) { dragging.value = false; emit('update:dragging', false) }
-    if (!v) {
-      clearTimers()
-      await nextTick()
-      timer1 = setTimeout(setup, 120)
-    }
-  }
-)
+})
+watch(() => [props.toc, props.collapsed, props.pdf, props.docKey], setup, { flush: 'post' })
+watch(() => props.collapsed, collapsed => {
+  if (collapsed && dragging.value) { dragging.value = false; emit('update:dragging', false) }
+  if (!collapsed) nextTick(scrollActiveRow)
+})
 </script>
 
 <style scoped>
+.toc-header span { display: none; }
+.toc-percent { width: 4ch; flex: none; text-align: right; }
 .toc-panel {
   border-left: 1px solid var(--c-line-soft);
   transition: width 0.26s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.26s ease;
 }
 .toc-panel:not(.is-collapsed) { transition-delay: 140ms; }
 .toc-panel.is-collapsed {
-  border-left-color: transparent;
+  border-left-width: 0;
 }
 /* 拖拽时不能有过渡，否则跟手会飘 */
 .toc-panel.is-dragging {
   transition: none;
 }
-.toc-collapse-chip{position:fixed;top:4px;right:4px;z-index:35;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:18px;corner-shape:superellipse(2);color:var(--c-faint);visibility:hidden;pointer-events:none;transform:translateX(40px) scale(.96);transition:transform 340ms var(--motion-pop),background 140ms ease,color 140ms ease,visibility 0s linear 340ms}
-.toc-collapse-chip::before{content:'';position:absolute;inset:0;z-index:0;border-radius:inherit;corner-shape:inherit;background-color:var(--topbar-chip-bg);box-shadow:var(--topbar-glass-shadow);pointer-events:none;transition:background-color 160ms ease,box-shadow 160ms ease}
+.toc-collapse-chip{position:fixed;top:4px;right:4px;z-index:35;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:18px;corner-shape:var(--corner-ui);color:var(--c-sub);visibility:hidden;pointer-events:none;transform:translateX(40px) scale(.96);transition:transform 340ms var(--motion-pop),background 140ms ease,color 140ms ease,visibility 0s linear 340ms}
+.toc-collapse-chip::before{content:'';position:absolute;inset:0;z-index:0;border-radius:inherit;corner-shape:inherit;background-color:var(--topbar-chip-bg);-webkit-backdrop-filter:var(--topbar-glass-filter);backdrop-filter:var(--topbar-glass-filter);box-shadow:var(--topbar-glass-shadow);pointer-events:none;transition:background-color 160ms ease,box-shadow 160ms ease}
 .toc-collapse-chip svg{position:relative;z-index:1}
 .toc-collapse-chip.is-open{visibility:visible;pointer-events:auto;transform:translateX(0) scale(1);transition-delay:0s,0s,0s,0s}
 .toc-collapse-chip.is-open.is-entering{animation:toc-chip-in 340ms var(--motion-pop) 150ms backwards}
@@ -446,6 +398,7 @@ watch(
   pointer-events: none;
 }
 .toc-item {
+  overflow-wrap:anywhere;
   color: var(--c-sub);
   transition: color 0.16s ease, background 0.16s ease;
   position: relative;
@@ -470,6 +423,36 @@ watch(
 }
 .toc-progress { height: 2px; border-radius: 999px; background: color-mix(in srgb, var(--c-line) 55%, transparent); }
 .toc-progress-fill { border-radius: 999px; background: color-mix(in srgb, var(--c-accent) 28%, transparent); transition: width 180ms ease-out; }
+@media (max-width:720px) {
+  .toc-panel {
+    position: fixed;
+    z-index: var(--layer-popover);
+    top: 50%;
+    right: max(8px, env(safe-area-inset-right));
+    width: min(288px, calc(100vw - 32px)) !important;
+    max-height: min(70dvh, calc(100dvh - 112px));
+    background: var(--c-pop);
+    border: 1px solid var(--surface-menu-border);
+    border-radius: var(--radius-surface);
+    box-shadow: var(--surface-menu-shadow);
+    transform: translateY(-50%);
+    transition: opacity 140ms ease, visibility 0s;
+  }
+  .toc-panel.is-collapsed { opacity: 0; visibility: hidden; pointer-events: none; transition-delay: 0s, 140ms; }
+  .toc-panel:not(.is-collapsed) { transition-delay: 0s; }
+  .toc-panel > div:first-child { max-height: inherit; }
+  .toc-header { display: flex; align-items: center; height: 48px; padding: 0 16px; }
+  .toc-header span { display: inline; font-size: 13px; color: var(--c-sub); }
+  .toc-panel .toc-collapse-chip { position: absolute; top: 2px; right: 4px; width: 44px; height: 44px; animation: none; transition: none; transform: none; }
+  .toc-collapse-chip::before, .toc-resize { display: none; }
+  .toc-scroll { flex: 0 1 auto; overscroll-behavior: contain; }
+}
+@media (max-width:720px), (hover:none), (pointer:coarse) {
+  .toc-item, .toc-collapse-chip { min-height: 44px; }
+  .toc-collapse-chip { min-width: 44px; }
+  .toc-fold { width: 44px; height: 44px; margin: 0; }
+  .toc-scroll:not(:has(button.toc-fold)) .toc-fold.is-empty { display: none; }
+}
 </style>
 
 <style scoped>.toc-scroll{padding-bottom:28px;mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 24px),transparent);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 24px),transparent)}</style>

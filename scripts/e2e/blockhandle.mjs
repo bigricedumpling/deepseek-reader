@@ -5,6 +5,7 @@
  * 换端口：`APP_PORT=8103 node scripts/e2e/blockhandle.mjs`
  * 需要无头 Chrome 能连上 CDP；端口自动挑，冲突时用 CDP_PORT 指定。
  */
+import { chooseReadingSetting } from './reading-settings.mjs'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 const APP_PORT = process.env.APP_PORT || 8090
@@ -25,9 +26,7 @@ try{
   for(let k=0;k<80;k++){if(await ev(`return !!window.__crepe`))break;await sleep(300)}
   await sleep(2200)
   for (const w of ['宽','中','窄']) {
-    // 选宽度
-    await ev(`const b=[...document.querySelectorAll('button.btn-icon')].find(function(x){return x.title==='排版'}); if(!document.querySelector('.pop-menu'))b.click(); return true`); await sleep(400)
-    await ev(`const p=document.querySelector('.pop-menu'); const lab=[...p.querySelectorAll('.type-label')].find(function(l){return l.textContent.trim().startsWith('正文宽度')}); let el=lab.nextElementSibling; while(el&&!el.classList.contains('type-row'))el=el.nextElementSibling; [...el.querySelectorAll('button')].find(function(b){return b.textContent.trim()===${JSON.stringify('X')}.replace('X','')||b.textContent.trim()==='${w}'}).click(); return true`)
+    await chooseReadingSetting(ev, '正文宽度', w)
     await sleep(700)
     await ev(`document.body.click(); return true`); await sleep(300)
     // 悬停到一个标题上，块手柄才会出现

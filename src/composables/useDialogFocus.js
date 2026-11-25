@@ -4,7 +4,7 @@ const stack = []
 export function useDialogFocus(open, element, cancel, returnTo) {
   const token = {}; let previous
   function keydown(event) {
-    if (stack.at(-1) !== token || !element.value) return
+    if (event.isComposing || event.keyCode === 229 || stack.at(-1) !== token || !element.value) return
     const nestedMenu=event.target.closest?.('[role=listbox],[role=menu]')
     if(nestedMenu&&!element.value.contains(nestedMenu))return
     if (event.key === 'Escape' && cancel) {
@@ -29,7 +29,10 @@ export function useDialogFocus(open, element, cancel, returnTo) {
     const wasTop = stack.at(-1) === token, index = stack.indexOf(token)
     if (index >= 0) stack.splice(index, 1)
     document.removeEventListener('keydown', keydown, true)
-    if (wasTop && previous?.isConnected) previous.focus()
+    if (wasTop) {
+      const target = previous?.isConnected ? previous : returnTo?.()
+      if (target?.isConnected) target.focus({ preventScroll: true })
+    }
   }
   watch(open, async visible => {
     if (!visible) { release(); return }

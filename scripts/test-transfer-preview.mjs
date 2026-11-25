@@ -13,9 +13,9 @@ process.env.DOCS_ROOT = root
 process.env.READER_PASSWORD = 'test-only'
 const { handleApi } = await import('../server/content-api.js')
 
-function call(method, url, body, role = 'owner') {
+function call(method, url, body, role = 'owner', headers = {}) {
   const req = Readable.from(body ? [Buffer.from(JSON.stringify(body))] : [])
-  Object.assign(req, { method, url: '/api' + url, headers: { 'content-type': 'application/json' }, socket: { remoteAddress: 'test' } })
+  Object.assign(req, { method, url: '/api' + url, headers: { 'content-type': 'application/json', ...headers }, socket: { remoteAddress: 'test' } })
   return new Promise((resolve, reject) => {
     const chunks = []
     const res = new Writable({ write(chunk, _, done) { chunks.push(chunk); done() } })
@@ -31,6 +31,74 @@ const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwA
 try {
   await ok('POST', '/lib', { name: 'Source' })
   await ok('POST', '/lib', { name: 'Target' })
+  // Moving the referring note must not silently redirect it to a same-name note.
+  const linkFixture = '[exact](notes.md#结论)\n\n[definition]: <notes.md#结论> "title"\n\n[cite][definition]\n\n`[literal](notes.md)`\n\n[web](https://example.test/notes.md)\n'
+  for (const dir of ['Source', 'Target']) await ok('POST', '/doc', { dir, name: 'notes', content: dir })
+  await ok('POST', '/doc', { dir: 'Source', name: 'links', content: linkFixture })
+  const relocated = await ok('PUT', '/move/doc', { file: 'Source/links.md', dir: 'Target' })
+  const relocatedText = (await ok('GET', '/doc?path=' + relocated.file)).content
+  assert.equal(relocatedText, linkFixture.replaceAll('notes.md#结论', '../Source/notes.md#结论'))
+  assert.equal((await ok('GET', '/doc?path=Source/notes.md')).content, 'Source')
+  await ok('PUT', '/move/doc', { file: relocated.file, dir: 'Source', undo: { id: relocated.id, original: 'Source/links.md' } })
+  assert.equal((await ok('GET', '/doc?path=Source/links.md')).content, linkFixture)
+  const group = await ok('POST', '/category', {parent:'Source', name:'链接组'})
+  const groupIndex = '[inside](./参照.md#结论)\n\n[outside](../notes.md)\n'
+  await ok('POST', '/doc', {dir:group.path, name:'索引', content:groupIndex})
+  await ok('POST', '/doc', {dir:group.path, name:'参照', content:'# 结论'})
+  const groupMove = await ok('PUT', '/move/category', {path:group.path, toParent:'Target'})
+  assert.equal((await ok('GET','/doc?path=' + encodeURIComponent(groupMove.path+'/索引.md'))).content,
+    groupIndex.replace('../notes.md', '../../Source/notes.md'))
+  // Moving the target updates genuine incoming links, even when its old name is reused.
+  const previousSource = await ok('GET', '/doc?path=Source/links.md')
+  const expectedTarget = await ok('GET', '/doc?path=Source/notes.md')
+  const unrelated = '[external](https://example.org/notes.md)\n\n~~~md\n[example](notes.md)\n~~~\n'
+  await ok('POST', '/doc', {dir:'Source', name:'unchanged', content:unrelated})
+  const unchangedPath = path.join(root, 'Source/unchanged.md'), mtime = fs.statSync(unchangedPath).mtimeMs
+  const targetMove = await ok('PUT', '/move/doc', {file:'Source/notes.md', dir:'Target'})
+  assert(targetMove.updatedReferences.includes('Source/links.md'))
+  assert(!targetMove.updatedReferences.includes('Source/unchanged.md'))
+  assert.equal(fs.statSync(unchangedPath).mtimeMs, mtime)
+  assert.equal(fs.readFileSync(unchangedPath,'utf8'), unrelated)
+  const oldName = await ok('POST', '/doc', {dir:'Source', name:'notes', content:'different identity'})
+  assert.notEqual(oldName.id, expectedTarget.id)
+  const afterTargetMove = await ok('GET', '/doc?path=Source/links.md')
+  const finalHref = '../' + targetMove.file.split('/').map(encodeURIComponent).join('/')
+  assert.equal(afterTargetMove.content, linkFixture.replaceAll('notes.md#结论',finalHref+'#结论'))
+  assert.equal((await ok('GET','/doc?path='+encodeURIComponent(targetMove.file))).id, expectedTarget.id)
+  assert.equal((await call('PUT','/doc',{path:'Source/links.md',content:'simultaneous edit',revision:previousSource.revision})).status,409)
+  const preceding = (await ok('GET','/history?path=Source/links.md')).items[0]
+  assert.equal((await ok('GET','/history?path=Source/links.md&version='+preceding.id)).content, linkFixture)
+  // A scoped structural write cannot rewrite notes in a different library.
+  await ok('POST','/lib',{name:'Scope'})
+  const scopedTarget = await ok('POST','/doc',{dir:'Scope',name:'source',content:'owned by Scope'})
+  const outside = '[scoped](../Scope/source.md)\n'
+  await ok('POST','/doc',{dir:'Source',name:'outside authorization',content:outside})
+  const credential = await ok('POST','/agent-keys',{name:'scope test',scopes:['Scope'],write:true})
+  const result = await call('PATCH','/doc',{path:scopedTarget.file,name:'renamed'},'guest',{'x-reader-agent':credential.token})
+  assert.equal(result.ok,true)
+  assert(!result.data.updatedReferences.includes('Source/outside authorization.md'))
+  assert.equal(fs.readFileSync(path.join(root,'Source/outside authorization.md'),'utf8'),outside)
+  // Undo must restore the exact source, including an original name that collided on move.
+  const { file: originalPath } = await ok('POST', '/doc', { dir: 'Source', name: 'Trip' })
+  await ok('POST', '/doc', { dir: 'Target', name: 'Trip' })
+  const moved = await ok('PUT', '/move/doc', { file: originalPath, dir: 'Target' })
+  assert.notEqual(path.basename(moved.file), path.basename(originalPath))
+  const undoDoc = { file: moved.file, dir: 'Source', undo: { original: originalPath, id: moved.id } }
+  assert.equal((await call('PUT', '/move/doc', { ...undoDoc, undo: { original: originalPath, id: 'stale' } })).status, 409)
+  fs.writeFileSync(path.join(root, originalPath), 'a different file')
+  assert.equal((await call('PUT', '/move/doc', undoDoc)).status, 409)
+  assert.equal(fs.readFileSync(path.join(root, originalPath), 'utf8'), 'a different file')
+  fs.unlinkSync(path.join(root, originalPath))
+  const movedDoc = await ok('GET', '/doc?path=' + encodeURIComponent(moved.file))
+  await ok('PUT', '/doc', { path: moved.file, revision: movedDoc.revision, content: 'edited after filing' })
+  assert.equal((await ok('PUT', '/move/doc', undoDoc)).file, originalPath)
+  assert.equal(fs.readFileSync(path.join(root, originalPath), 'utf8'), 'edited after filing')
+  const category = await ok('POST', '/category', { parent: 'Source', name: 'Routes' })
+  await ok('POST', '/doc', { dir: category.path, name: 'Map' })
+  const movedFolder = await ok('PUT', '/move/category', { path: category.path, toParent: 'Target' })
+  const undoFolder = { path: movedFolder.path, toParent: 'Source', undo: { original: category.path, id: movedFolder.id } }
+  assert.equal((await ok('PUT', '/move/category', undoFolder)).path, category.path)
+  assert.ok(fs.existsSync(path.join(root, category.path, 'Map.md')))
   // The sentinel appears only at destinations we expect to change.
   const fixture = [
     '---', 'image: "![front](./a.png)"', '---',

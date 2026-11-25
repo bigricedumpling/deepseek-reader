@@ -1,0 +1,183 @@
+/* The editor, static reading view and exported documents share the same reading rhythm. */
+:is(.ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) {
+  --article-title-leading: 1.27;
+  --article-note-ink: var(--c-sub, #585858);
+  --article-block-gap: max(.72em, calc(.3em + var(--para-gap, .6em)));
+}
+
+:is(.ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) > :is(h1, h2, h3) {
+  text-wrap: balance;
+  hyphens: manual;
+  overflow-wrap: anywhere;
+}
+:is(.typocket-print, .typocket-export, .snapshot-reading) > h1:nth-child(1 of :not(.page-header)) {
+  line-height: var(--article-title-leading);
+}
+
+.typocket-print { --article-note-ink: #585858; }
+
+/* Markdown-it emits a table wrapper and a plain pre. Crepe supplies its own scroll wrappers. */
+:is(.source-reading .milkdown .ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) > :is(.table-wrap, pre) {
+  margin-block: var(--article-block-gap);
+}
+:is(.crepe-host .milkdown .ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) > .table-wrap > table {
+  margin-block: 0;
+}
+
+/* Milkdown keeps the label and editable content as a native definition list. */
+.ProseMirror dl[data-type="footnote_definition"] {
+  display: flex;
+  align-items: baseline;
+  column-gap: .55em;
+  margin-block: 1.45em 0;
+  color: var(--article-note-ink);
+  font-size: .86em;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.ProseMirror dl[data-type="footnote_definition"] + dl[data-type="footnote_definition"] {
+  margin-block-start: .36em;
+}
+.ProseMirror dl[data-type="footnote_definition"] > dt {
+  flex: none;
+  min-width: 2ch;
+  max-width: min(9ch, 26%);
+  font-variant-numeric: tabular-nums;
+}
+.ProseMirror dl[data-type="footnote_definition"] > dd { flex: 1; min-width: 0; margin: 0; }
+.crepe-host .milkdown .ProseMirror dl[data-type="footnote_definition"] > dd > p {
+  margin-block: 0;
+  padding-block: 0;
+  text-indent: 0;
+}
+.crepe-host .milkdown .ProseMirror dl[data-type="footnote_definition"] > dd > p + p {
+  margin-block-start: .35em;
+}
+
+/* Static Markdown has numbered notes and return links. Keep author-supplied rules intact. */
+:is(.ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) > hr.footnotes-sep { display: none; }
+:is(.ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) > .footnotes {
+  margin-block-start: 1.45em;
+  color: var(--article-note-ink);
+  font-size: .86em;
+  text-align: start;
+}
+:is(.crepe-host .milkdown .ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) .footnotes-list {
+  margin-block: 0;
+  padding-inline-start: 2.5ch;
+  list-style: decimal outside;
+}
+:is(.crepe-host .milkdown .ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) .footnote-item {
+  margin-block: .36em 0;
+  padding-inline-start: .35em;
+  font-variant-numeric: tabular-nums;
+}
+:is(.crepe-host .milkdown .ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) .footnote-item > p {
+  margin: 0;
+  padding-block: 0;
+  text-indent: 0;
+}
+:is(.crepe-host .milkdown .ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) .footnote-item > p + p { margin-block-start: .35em; }
+
+/* Exported math scrolls locally on a narrow screen and fits its column on paper. */
+:is(.typocket-print, .typocket-export) .export-math-block {
+  display: block;
+  margin-block: .8em;
+  max-width: 100%;
+  overflow-x: auto;
+}
+:is(.typocket-print, .typocket-export) .export-math-inline {
+  display: inline-grid;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: baseline;
+}
+.typocket-export :is(.export-math-block, .export-math-inline) { scrollbar-width: thin; }
+:is(.typocket-print, .typocket-export) .export-math-block > math {
+  width: max-content;
+  margin-inline: auto;
+}
+:is(.typocket-print, .typocket-export) :is(.export-math-block, .export-math-inline) {
+  overflow-y: hidden;
+  padding-block: .12em;
+}
+:is(.typocket-print, .typocket-export) .export-math-inline { margin-block: -.12em; }
+:is(.typocket-print, .typocket-export, .typocket-math-probe) math mtd { padding: revert; }
+:is(.typocket-print, .typocket-export) .math-block:has(> .math-number) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: .65em;
+}
+@media print {
+  :is(.typocket-print, .typocket-export),
+  :is(.typocket-print, .typocket-export) .export-math-block { container-type: inline-size; }
+  :is(.typocket-print, .typocket-export) :is(.export-math-block, .export-math-inline) {
+    overflow: visible;
+    break-inside: avoid;
+  }
+  :is(.typocket-print, .typocket-export) :is(.export-math-block, .export-math-inline) > math {
+    font-size: min(1em, var(--export-math-fit, 1em));
+  }
+}
+
+/* Formula spacing belongs to the math font even when reading preferences change. */
+:is(.ProseMirror, .snapshot-reading) .katex {
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-indent: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+:is(.ProseMirror, .snapshot-reading) .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: .15em;
+  text-indent: 0;
+}
+:is(.ProseMirror, .snapshot-reading) .katex-display > .katex {
+  width: max-content;
+  margin-inline: auto;
+}
+:is(.ProseMirror, .snapshot-reading) .katex-display > .katex:has(.katex-tag) {
+  min-width: 100%;
+}
+:is(.ProseMirror, .snapshot-reading) .katex-display .katex-html:has(> .katex-tag) {
+  display: flex;
+  align-items: baseline;
+}
+:is(.ProseMirror, .snapshot-reading) .katex-html:has(> .katex-tag) > .katex-base:first-child {
+  margin-inline-start: auto;
+}
+:is(.ProseMirror, .snapshot-reading) .katex-display .katex-html > .katex-tag {
+  position: static;
+  margin-inline-start: auto;
+  padding-inline-start: .6em;
+}
+:is(.ProseMirror, .snapshot-reading) .math-block {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  min-width: 0;
+  margin-block: var(--article-block-gap);
+}
+:is(.ProseMirror, .snapshot-reading) .math-block > .katex-display {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+:is(.ProseMirror, .snapshot-reading) .math-number { flex: none; }
+
+
+.snapshot-reading .reader-columns {
+  display: grid;
+  grid-template-columns: repeat(var(--column-count, 2), minmax(0, 1fr));
+  gap: 1.25em;
+}
+:is(.source-reading, .snapshot-reading) .reader-rich-callout > :last-child,
+:is(.source-reading, .snapshot-reading) .reader-rich-columns > *,
+.snapshot-reading .reader-column { min-width: 0; }
+@media (max-width: 640px) {
+  .snapshot-reading .reader-columns { grid-template-columns: 1fr; }
+}

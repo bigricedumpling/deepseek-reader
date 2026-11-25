@@ -1,19 +1,20 @@
 <template>
 <section class="pdf-preview" aria-label="PDF 阅读器">
+  <div class="pdf-toolbar">
   <nav class="pdf-controls" aria-label="PDF 翻页">
     <button title="上一页" aria-label="上一页" :disabled="current<=1||loading" @click="go(current-1)"><PhCaretLeft :size="16"/></button>
-    <label><input type="number" aria-label="PDF 页码" :value="current" :min="1" :max="total||1" :disabled="!total" @change="go(Number($event.target.value))"/> / {{ total || '—' }}</label>
+    <label><input type="number" aria-label="PDF 页码" :value="current" :min="1" :max="total||1" :disabled="!total" @change="commitPage"/> / {{ total || '—' }}</label>
     <button title="下一页" aria-label="下一页" :disabled="current>=total||loading" @click="go(current+1)"><PhCaretRight :size="16"/></button>
     <SelectMenu v-model="zoom" label="PDF 缩放" :options="zoomOptions" @update:model-value="draw" />
-    <button class="pdf-tool" :class="{ 'is-on': searchOpen }" title="查找（⌘F）" aria-label="在 PDF 中查找" :aria-expanded="searchOpen" @click="toggleSearch"><PhMagnifyingGlass :size="16"/></button>
+    <button ref="searchTrigger" class="pdf-tool" :class="{ 'is-on': searchOpen }" title="查找" aria-label="在 PDF 中查找" :aria-expanded="searchOpen" @click="toggleSearch"><PhMagnifyingGlass :size="16"/></button>
     <a :href="url.split('#')[0]" target="_blank" rel="noopener" title="在浏览器打开 PDF"><PhArrowSquareOut :size="16"/><span class="sr-only">打开原文件</span></a>
   </nav>
 
-  <Transition name="pdf-search">
-    <div v-if="searchOpen" class="pdf-search-pop" role="search" aria-label="在 PDF 中查找">
+  <Transition name="pop">
+    <div v-if="searchOpen" class="pdf-search-pop" role="search" @keydown.esc.stop.prevent="closeSearch" aria-label="在 PDF 中查找">
       <div class="pdf-search-field">
         <PhMagnifyingGlass :size="14" class="pdf-search-icon" />
-        <input ref="searchInput" v-model="query" type="search" placeholder="在 PDF 中查找" aria-label="查找内容" @input="queueSearch" @keydown.enter.prevent="onEnter" @keydown.esc.prevent="closeSearch" />
+        <input ref="searchInput" v-model="query" type="search" placeholder="在 PDF 中查找" aria-label="查找内容" @input="queueSearch" @keydown.enter.prevent="onEnter" />
         <span v-if="query.trim()" class="pdf-search-count" aria-live="polite">{{ searchCountLabel }}</span>
         <button type="button" title="上一处" aria-label="上一处" :disabled="!results.length" @click="step(-1)"><PhCaretLeft :size="14"/></button>
         <button type="button" title="下一处" aria-label="下一处" :disabled="!results.length" @click="step(1)"><PhCaretRight :size="14"/></button>
@@ -29,6 +30,7 @@
       </div>
     </div>
   </Transition>
+  </div>
 
   <p v-if="error" role="alert" class="pdf-message">{{ error }} <button @click="load">重试</button></p>
   <p v-else-if="loading && !total" role="status" class="pdf-message">正在加载 PDF…</p>
@@ -73,6 +75,11 @@ async function draw(){
  }catch(reason){if(id===paint&&reason.name!=='RenderingCancelledException'&&reason.name!=='AbortException')error.value='PDF 暂时无法显示，请重试或打开原文件。'}
  finally{if(id===paint)loading.value=false}
 }
+function commitPage(event) {
+ const input = event.currentTarget
+ if (Number.isFinite(input.valueAsNumber)) go(input.valueAsNumber)
+ input.value = String(current.value)
+}
 function go(page){if(!Number.isFinite(page)||!total.value)return;current.value=Math.max(1,Math.min(total.value,Math.trunc(page)));emit('page',current.value);draw()}
 async function load(){
  const id=++generation;++paint;renderTask?.cancel();textTask?.cancel();task?.destroy();pdf=null;total.value=0;loading.value=true;error.value=''
@@ -96,7 +103,7 @@ watch(()=>props.url.split('#')[0],load)
 watch(()=>props.page,page=>{if(page!==current.value)go(page)})
 
 /* ---------- PDF 内查找 ---------- */
-const searchOpen=ref(false),searchInput=ref(null),query=ref(''),results=ref([]),activeResult=ref(-1),searching=ref(false),searchPage=ref(0)
+const searchTrigger=ref(null),searchOpen=ref(false),searchInput=ref(null),query=ref(''),results=ref([]),activeResult=ref(-1),searching=ref(false),searchPage=ref(0)
 const textCache=new Map()
 let searchTimer=null,searchToken=0
 const searchCountLabel=computed(()=>{
@@ -198,7 +205,7 @@ function onEnter(event){
 function openSearch(){
  searchOpen.value=true
  nextTick(()=>{
-   searchInput.value?.focus()
+   searchInput.value?.focus({preventScroll:true})
    searchInput.value?.select()
    if(query.value.trim())queueSearch()
  })
@@ -209,7 +216,7 @@ function closeSearch(){
  ++searchToken
  searching.value=false
  clearSearchHits()
- searchInput.value?.blur()
+ nextTick(() => searchTrigger.value?.focus({preventScroll:true}))
 }
 function toggleSearch(){searchOpen.value?closeSearch():openSearch()}
 defineExpose({openSearch,closeSearch,toggleSearch})
@@ -218,17 +225,17 @@ onMounted(()=>{load();observer=new ResizeObserver(()=>{const w=container.value?.
 onBeforeUnmount(()=>{++generation;++paint;++searchToken;clearTimeout(timer);clearTimeout(searchTimer);observer?.disconnect();renderTask?.cancel();textTask?.cancel();task?.destroy()})
 </script>
 <style scoped>
-.pdf-preview{min-height:100%;background:var(--c-field);padding-bottom:24px}.pdf-controls{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px;background:var(--c-pop);font:12px var(--font-sans)}.pdf-controls button{display:grid;place-items:center;width:28px;height:28px;border-radius:8px}.pdf-controls button:hover{background:var(--c-field)}.pdf-controls button:disabled{opacity:.35}.pdf-controls input{width:42px;text-align:center;background:var(--c-field);padding:4px;border-radius:5px;font:inherit}.pdf-controls select{font:inherit;color:var(--c-ink);background:var(--c-field);padding:6px 8px;border-radius:8px;max-width:110px}.pdf-controls a{color:var(--c-sub);margin-left:12px}.pdf-tool.is-on{background:var(--c-active);color:var(--c-accent)}
+.pdf-preview{container-type:inline-size;min-height:100%;background:var(--c-field);padding-bottom:24px}.pdf-toolbar{position:sticky;top:0;z-index:4}.pdf-controls{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px;background:var(--c-pop);font:12px var(--font-sans)}.pdf-controls button{display:grid;place-items:center;width:28px;height:28px;border-radius:8px}.pdf-controls button:hover{background:var(--c-field)}.pdf-controls button:disabled{opacity:.35}.pdf-controls input{width:42px;text-align:center;background:var(--c-field);padding:4px;border-radius:5px;font:inherit}.pdf-controls select{font:inherit;color:var(--c-ink);background:var(--c-field);padding:6px 8px;border-radius:8px;max-width:110px}.pdf-controls a{color:var(--c-sub);margin-left:12px}.pdf-tool.is-on{background:var(--c-active);color:var(--c-accent)}
 .pdf-page-area{padding-top:16px;overflow:auto}.pdf-paper{position:relative;margin:0 auto;background:#fff;box-shadow:0 2px 12px #0001}.pdf-paper.pending{visibility:hidden}.pdf-message{text-align:center;font-size:13px;color:var(--c-sub);padding:12px}.pdf-message button{color:var(--c-accent)}canvas{display:block}.textLayer{position:absolute;inset:0}
-.pdf-search-pop{position:sticky;top:49px;z-index:4;width:min(440px,calc(100% - 24px));margin:8px auto 0}
-.pdf-search-field{display:flex;align-items:center;gap:4px;height:38px;padding:0 6px 0 10px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:12px;box-shadow:var(--c-pop-shadow)}
+.pdf-search-pop{position:absolute;z-index:4;inset-inline:0;top:calc(100% + 8px);width:min(440px,calc(100% - 24px));margin-inline:auto}
+.pdf-search-field{display:flex;align-items:center;gap:4px;height:38px;padding:0 6px 0 10px;background:var(--c-pop);border:1px solid var(--surface-menu-border);border-radius:var(--radius-tool);box-shadow:var(--surface-menu-shadow)}
 .pdf-search-icon{flex:none;color:var(--c-faint)}
 .pdf-search-field input{flex:1;min-width:0;width:auto;padding:5px 3px;background:transparent;border:0;text-align:left;font:12.5px var(--font-sans);color:var(--c-text);outline:none}
 .pdf-search-field input::-webkit-search-cancel-button{display:none}
-.pdf-search-field button{width:25px;height:25px;border-radius:7px;color:var(--c-faint);flex:none}
+.pdf-search-field button{width:25px;height:25px;border-radius:var(--radius-item);color:var(--c-faint);flex:none}
 .pdf-search-field button:hover{background:var(--c-hover);color:var(--c-ink)}
 .pdf-search-count{flex:none;font:11px var(--font-sans);color:var(--c-faint);font-variant-numeric:tabular-nums;padding:0 3px}
-.pdf-search-body{position:absolute;top:calc(100% + 6px);left:0;right:0;max-height:min(320px,45vh);overflow:auto;padding:5px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:12px;box-shadow:var(--c-pop-shadow)}
+.pdf-search-body{position:absolute;top:calc(100% + 6px);left:0;right:0;max-height:min(320px,45vh);overflow:auto;padding:5px;background:var(--c-pop);border:1px solid var(--surface-menu-border);border-radius:var(--radius-tool);box-shadow:var(--surface-menu-shadow)}
 .pdf-search-note{margin:0;padding:8px;font:11.5px var(--font-sans);color:var(--c-faint)}
 .pdf-search-hit{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;padding:7px 8px;border-radius:8px;font:11.5px/1.6 var(--font-sans);color:var(--c-text)}
 .pdf-search-hit:hover,.pdf-search-hit.is-on{background:var(--c-hover)}
@@ -237,11 +244,19 @@ onBeforeUnmount(()=>{++generation;++paint;++searchToken;clearTimeout(timer);clea
 .pdf-hit-text{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .pdf-hit-text mark{background:color-mix(in srgb,var(--c-accent) 16%,transparent);color:inherit;border-radius:3px;padding:0 1px}
 .textLayer :deep(.pdf-page-hit){background:color-mix(in srgb,var(--c-accent) 26%,transparent);border-radius:2px}
-.pdf-search-enter-active,.pdf-search-leave-active{transition:opacity 130ms ease,transform 160ms var(--motion-snap)}
-.pdf-search-enter-from,.pdf-search-leave-to{opacity:0;transform:translateY(-4px)}
-@media(max-width:560px){.pdf-search-pop{position:relative;top:auto}}
+
 </style>
 
 <style scoped>
 .pdf-controls :deep(.select-menu-trigger){width:104px;min-height:30px;padding:6px 9px;gap:8px;border:0;border-radius:7px}.pdf-controls a{display:grid;place-items:center;width:30px;height:30px;margin-left:0;border-radius:7px}.pdf-controls a:hover{background:var(--c-hover)}
+@media (pointer:coarse) {
+ .pdf-controls>button,.pdf-controls>a,.pdf-controls :deep(.select-menu-trigger),.pdf-search-field button { min-height:44px; min-width:44px; }
+ .pdf-controls input,.pdf-search-field { min-height:44px; }
+ .pdf-search-hit { min-height:44px; }
+}
+@container (max-width:400px) {
+ .pdf-controls { padding:4px; gap:1px; }
+ .pdf-controls :deep(.select-menu-trigger) { width:auto; gap:3px; padding-inline:5px; }
+ .pdf-controls input { width:36px; }
+}
 </style>

@@ -16,7 +16,6 @@ import { trashService } from './services/trash.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createHash, randomUUID as cryptoId } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { createShare, roleOf, EDIT_PASSWORD } from './share.js'
@@ -24,9 +23,11 @@ import { workspace, digest, fault } from './storage/workspace.js'
 import { resources } from './services/resources.js'
 import { publicSession } from './services/public-session.js'
 import { documentRoutes } from './services/documents.js'
-import { activityService } from './services/activity.js'
+import { drawerPreview } from './services/drawer-preview.js'
+import { activityService, recordDocumentChange, recordPreviousVersion } from './services/activity.js'
 import { recordSource } from './services/sources.js'
-import { rewriteCopiedAttachments } from './services/document-attachments.js'
+import { encodeDocumentPath } from './services/document-links.js'
+import { rewriteCopiedAttachments, rewriteDocumentUrls } from './services/document-attachments.js'
 import { workspaceImages, rewriteWorkspaceImages, normalizeImageReference } from './services/workspace-images.js'
 
 // 用文件自身位置推导，不依赖启动时的工作目录
@@ -122,7 +123,7 @@ function safeName(name) {
 function assertVisible(rel, { allowTranslate = false, allowAsset = false, allowStorage = false } = {}) {
   const segs = String(rel || '').split('/').filter(Boolean)
   const bad = segs.some((x) => x.startsWith('.') && !(allowTranslate && x === TRANSLATE_DIR) && !(allowAsset && x === '.配图') && !(allowStorage && x === '.reader'))
-  if (bad) throw new Error('隐藏目录不归阅读器管: ' + rel)
+  if (bad) throw new Error('无法访问隐藏文件夹：' + rel)
   if (segs.includes('node_modules')) throw new Error('node_modules 不归阅读器管: ' + rel)
 }
 
@@ -152,8 +153,25 @@ function assertDir(rel) {
   const dir = String(rel == null ? '' : rel).replace(/^\/+|\/+$/g, '')
   if (!dir) return ''
   assertVisible(dir)
-  if (inReader(safeResolve(dir))) throw new Error('这是阅读器自己的目录: ' + dir)
+  if (inReader(safeResolve(dir))) throw new Error('无法选择应用程序所在目录：' + dir)
   return dir
+}
+
+// Undo uses the stable identity and alias recorded by the original move.
+function originalMovePath(undo, source, parent) {
+  if (!undo) return ''
+  const original = undo.original
+  if (typeof original !== 'string' || path.posix.dirname(original) !== parent) {
+    throw fault('INVALID_PATH', '原位置无效', 400)
+  }
+  assertVisible(original)
+  const destination = safeResolve(original)
+  if (!fs.existsSync(safeResolve(parent))) throw fault('NOT_FOUND', '原文件夹已不存在', 404)
+  if (fs.existsSync(destination)) throw fault('CONFLICT', '原位置已被占用', 409)
+  if (!undo.id || repo.byId(undo.id)?.path !== source || repo.resolve(original) !== source) {
+    throw fault('CONFLICT', '文件位置已更改', 409)
+  }
+  return original
 }
 
 /* ---------- 扫盘 ---------- */
@@ -229,7 +247,7 @@ function scanDir(abs, rel, depth, order) {
  * 目录顺序的旁路文件。
  *
  * 磁盘上目录没有"顺序"这个概念，扫出来只能按名字排。用户拖过之后把顺序记在这里：
- * `{ "": ["调研", "面试"], "存档": ["04-调研原始报告", "05-论文与文献"] }`
+ * `{ "": ["项目", "存档"], "存档": ["草稿", "参考资料"] }`
  * 键是父目录（空串是根），值是这个层级里目录名的顺序。
  *
  * 它**只影响显示顺序**：不存在的条目直接忽略，没登记的目录按名字排在后面。
@@ -435,7 +453,7 @@ async function readPdfToc(rel) {
 
 /**
  * 删除一律走这里：不真删，挪进 .回收站 并加时间戳。
- * 文件和目录都能丢进来，误删了还能自己捞回来，不至于把面试资料搞丢。
+ * 用户可以从回收站恢复误删的文件或目录。
  */
 const backups = backupService(repo)
 const trash = trashService(repo, { safeResolve, assets, share, registry: readRegistry, saveRegistry: writeRegistry })
@@ -451,6 +469,77 @@ function uniqueFile(dir, name, ext = '.md') {
     i++
   }
   return rel
+}
+
+// A source can move, a target can move, or both can move together. Resolve each
+// original relative URL before mapping both endpoints into the new directory tree.
+function rebaseDocumentReferences(from, to, ctx) {
+  const changed = []
+  const within = (file, dir) => file === dir || file.startsWith(dir + '/')
+  // Unmoved sources outside the old directory must name it somewhere in their URL.
+  // Escapes and encoded punctuation fall through to the Markdown parser.
+  const nameHint = path.posix.basename(from).match(/[\p{L}\p{N}_.-]+/gu)?.sort((a, b) => b.length - a.length)[0]
+  const scopes = ctx.agentScopes
+  function visitDirectory(rel) {
+    const dir = path.join(DOCS_ROOT, rel)
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name) || entry.isSymbolicLink()) continue
+      const file = relJoin(rel, entry.name)
+      if (inReader(path.join(dir, entry.name))) continue
+      if (scopes && !scopes.some(scope => within(file, scope) || within(scope, file)) && !within(file, to) && !within(to, file)) continue
+      if (entry.isDirectory()) visitDirectory(file)
+      else if (entry.isFile() && /\.md$/i.test(file)) visitFile(file)
+    }
+  }
+  function visitFile(newFile) {
+    const relocated = within(newFile, to)
+    const oldFile = relocated ? from + newFile.slice(to.length) : newFile
+    if (ctx.role !== 'owner' && !share.isEditable(oldFile)) return
+    const abs = path.join(DOCS_ROOT, newFile)
+    const bytes = fs.readFileSync(abs), source = bytes.toString('utf8')
+    if (!source.includes('[') && !source.includes('<') && !source.includes('reader-')) return
+    if (!relocated && nameHint && !source.includes(nameHint) &&
+        !/(?:%[a-f\d]{2}|&(?:#\d+|#x[a-f\d]+|[a-z][a-z\d]*);|\\[\p{P}\p{S}]|reader-(?:columns|block))/iu.test(source)) return
+    const parent = path.posix.dirname(oldFile), destination = path.posix.dirname(newFile)
+    const updated = rewriteDocumentUrls(source, false, url => {
+      if (!url || /^(?:[a-z][\w+.-]*:|[/#?])/i.test(url)) return
+      const end = url.search(/[?#]/)
+      const spelling = end < 0 ? url : url.slice(0, end)
+      let relative
+      try { relative = decodeURIComponent(spelling) } catch { return }
+      if (!relative || relative.includes('\\') || relative.startsWith('/')) return
+      const original = path.posix.join(parent, relative)
+      if (original === '..' || original.startsWith('../')) return
+      const targetMoved = within(original, from)
+      if (!relocated && !targetMoved) return
+      const wanted = targetMoved ? to + original.slice(from.length) : original
+      if (!relocated && !fs.existsSync(path.join(DOCS_ROOT, wanted))) return
+      const next = path.posix.relative(destination, wanted) || '.'
+      if (next === (path.posix.relative(parent, original) || '.')) return
+      return encodeDocumentPath(next)
+        + (end < 0 ? '' : url.slice(end))
+    })
+    if (updated === source) return
+    // External editors need not take our transaction lock. Leave a concurrent
+    // edit untouched and roll the move back instead of overwriting new bytes.
+    if (!Buffer.from(source).equals(bytes)) throw fault('INVALID_ENCODING', '无法无损更新引用：' + newFile, 409)
+    if (!fs.readFileSync(safeResolve(newFile)).equals(bytes)) throw fault('CONFLICT', '整理期间文档已被修改，请重试：' + newFile, 409)
+    recordPreviousVersion(repo, repo.node(newFile).id, source)
+    repo.write(abs, updated)
+    repo.node(newFile)
+    changed.push(newFile)
+  }
+  visitDirectory('')
+  return changed
+}
+
+function moveWithReferences(from, to, ctx, intermediate) {
+  const source = safeResolve(from), destination = safeResolve(to)
+  assets.beforeMove(from)
+  if (intermediate) repo.move(source, intermediate)
+  repo.move(intermediate || source, destination)
+  repo.remap(from, to)
+  return rebaseDocumentReferences(from, to, ctx)
 }
 
 /** 复制文档时给新文档重新登记图片，避免副本继续依赖原文档的资源归属。 */
@@ -918,7 +1007,7 @@ function ensureDraftLibrary() {
   repo.setJSON('onboarding', {...state, defaultLibraryInitialized:true})
 }
 
-function listLibs() {
+function listLibs(includePreview = false) {
   const reg = syncRegistry()
   return reg.libs
     .filter((l) => !l.missing)
@@ -932,22 +1021,56 @@ function listLibs() {
       /* 副标题：跟随知识库走，不再是全站写死的一句 */
       sub: l.sub || '',
       ...share.status(l.name),
-      ...libSummary(path.join(DOCS_ROOT, l.name))
+      ...libSummary(path.join(DOCS_ROOT, l.name), includePreview)
     }))
   /*
    * 顺序 = 注册表里的顺序，不重新排序。
    *
    * 以前按名字排，而 'zh-Hans-CN' 的规则把中文排在拉丁字母前面，
-   * 首选抽屉可能被排到最后。
+   * 首选知识库可能被排到最后。
    * 顺序是使用者的意图，不该由排序规则决定。
    */
 }
 
+// A paper may only reference an image already served by this workspace. Never let
+// displaying all drawers automatically request an external URL or a full document.
+function drawerImageUrl(reference, doc) {
+  if (!reference || reference.length > 1500) return ''
+  try {
+    let rel
+    let assetId
+    if (reference.startsWith('/api/file?')) {
+      const query = new URLSearchParams(reference.slice('/api/file?'.length))
+      assetId = query.get('asset')
+      rel = query.get('path')
+    } else {
+      const raw = decodeURIComponent(reference.split(/[?#]/, 1)[0])
+      if (!raw || /^(?:[a-z][\w+.-]*:|\/)/i.test(raw) || raw.includes('\\')) return ''
+      rel = path.posix.join(path.posix.dirname(doc), raw)
+    }
+    const resource = assetId || rel?.includes('/.配图/') || rel?.startsWith('.reader/')
+      ? assets.find(rel || '', assetId) : null
+    if (assetId && !resource) return ''
+    if (resource && repo.byId(resource.owner)?.path !== doc) return ''
+    const file = resource?.path || rel || ''
+    if (!/\.(?:png|jpe?g|webp|gif)$/i.test(file)) return ''
+    const abs = assertFile(file, resource ? { allowAsset: true, allowStorage: true } : {})
+    const stat = fs.statSync(abs)
+    if (!stat.isFile() || stat.size > 4 * 1024 * 1024) return ''
+    return resource ? '/api/file?asset=' + encodeURIComponent(resource.id) : '/api/file?path=' + encodeURIComponent(file)
+  } catch {
+    return ''
+  }
+}
+
 /** 同一次有界遍历取得篇数与最近正文修改时间，供知识库管理排序。 */
-function libSummary(abs) {
-  let n = 0, mtime = 0
+function libSummary(abs, includePreview) {
+  let docs = 0
+  let visited = 0
+  let mtime = -Infinity
+  let previewFile = ''
   const walk = (dir, depth) => {
-    if (depth > MAX_DEPTH || n > MAX_NODES) return
+    if (depth >= MAX_DEPTH || visited >= MAX_NODES) return
     let list = []
     try {
       list = fs.readdirSync(dir, { withFileTypes: true })
@@ -956,15 +1079,40 @@ function libSummary(abs) {
     }
     for (const e of list) {
       if (e.name.startsWith('.') || e.isSymbolicLink()) continue
-      if (e.isDirectory()) walk(path.join(dir, e.name), depth + 1)
-      else if (/\.(md|pdf|html?)$/i.test(e.name)) {
-        n++
-        try { mtime = Math.max(mtime, fs.statSync(path.join(dir, e.name)).mtimeMs) } catch { /* 文件可能刚被移走 */ }
+      if (visited >= MAX_NODES) break
+      const entry = path.join(dir, e.name)
+      if (e.isDirectory()) {
+        if (SKIP_DIRS.has(e.name) || entry === READER_ROOT) continue
+        visited++
+        walk(entry, depth + 1)
+      } else if (e.isFile() && /\.(md|pdf|html?)$/i.test(e.name)) {
+        visited++
+        docs++
+        try {
+          const modified = fs.statSync(entry).mtimeMs
+          if (modified > mtime) {
+            mtime = modified
+            if (includePreview) previewFile = entry
+          } else if (includePreview && modified === mtime && entry < previewFile) {
+            previewFile = entry
+          }
+        } catch { /* 文件可能刚被移走 */ }
       }
     }
   }
   walk(abs, 0)
-  return { docs: n, mtime }
+  const summary = { docs, mtime: Number.isFinite(mtime) ? mtime : 0 }
+  if (includePreview) {
+    summary.previewName = path.basename(previewFile)
+    summary.preview = null
+    if (previewFile) {
+      const rel = relativeKey(previewFile)
+      try {
+        summary.preview = drawerPreview(assertFile(rel), reference => drawerImageUrl(reference, rel))
+      } catch { /* A selected directory may have disappeared or moved during the scan. */ }
+    }
+  }
+  return summary
 }
 
 const routes = {
@@ -972,9 +1120,9 @@ const routes = {
   'POST /trash/restore': async body => ({ ok: true, data: body.legacyId ? trash.restoreLegacy(String(body.legacyId),String(body.destination||'')) : trash.restore(String(body.trashId || '')) }),
   'GET /instance': async (_body, _url, ctx) => {
     if (ctx.role !== 'owner') throw fault('FORBIDDEN', '仅本机或管理者可查看实例', 403)
-    return { ok: true, data: { product: 'reader', protocol: 1, identity: digest(DOCS_ROOT).slice(0, 24), platform: process.platform, dataDirectory: DOCS_ROOT, profile: process.env.READER_PROFILE === 'dev' ? 'dev' : 'prod', name: path.basename(DOCS_ROOT) } }
+    return { ok: true, data: { product: 'reader', protocol: 1, capabilities: { localAgentWrites: true }, identity: digest(DOCS_ROOT).slice(0, 24), platform: process.platform, dataDirectory: DOCS_ROOT, profile: process.env.READER_PROFILE === 'dev' ? 'dev' : 'prod', name: path.basename(DOCS_ROOT) } }
   },
-  ...documentRoutes(repo,{share,assertFile,assertMd,assertVisible}),
+  ...documentRoutes(repo,{share,assertFile,assertMd,assertVisible,inReader}),
   /* Agent 改动收件箱：列出、看差异、标记已读。只给本机管理者看。 */
   'GET /activity': async (_body, url, ctx) => {
     if (ctx.role !== 'owner') throw fault('FORBIDDEN', '仅本机或管理者可查看改动记录', 403)
@@ -1015,14 +1163,14 @@ const routes = {
    *  ，在界面上改名，走 PUT /lib/name，服务端重命名文件夹后把 .分享.json 的键一起搬
    * 图标与说明是给人看的附加信息，存在根目录的 .知识库.json 里（可缺省）。
    */
-  'GET /libs': async (_body, _url, ctx) => {
+  'GET /libs': async (_body, url, ctx) => {
     if (ctx.role === 'owner') ensureDraftLibrary()
     const cfg = syncRegistry().config
     /*
      * 访客只看得到对外可见的库 —— 连"存在一个不公开的库"这件事都不该知道。
      * 主人看全部，并带上可见性开关的状态。
      */
-    const all = listLibs()
+    const all = listLibs(ctx.role === 'owner' && url.searchParams.get('preview') === '1')
     const libs = ctx.role === 'owner' ? all : all.filter((l) => l.shared)
     return { ok: true, data: { libs, config: cfg } }
   },
@@ -1039,17 +1187,17 @@ const routes = {
     return {ok:true,data:move}
   },
   'PUT /lib/name': async (body, _url, ctx) => {
-    if (ctx.role !== 'owner') throw new Error('只有你能改抽屉名')
+    if (ctx.role !== 'owner') throw new Error('只有管理者可以重命名知识库')
     const from = String(body.from || '').replace(/^\/+|\/+$/g, '')
     const to = String(body.to || '').replace(/^\/+|\/+$/g, '')
     if (!from || !to) throw new Error('缺 from / to')
-    if (from.includes('/') || to.includes('/')) throw new Error('抽屉名不能带斜杠')
+    if (from.includes('/') || to.includes('/')) throw new Error('知识库名称不能包含斜杠')
     const absOld = safeResolve(from)
     const absNew = safeResolve(to)
-    if (!fs.existsSync(absOld)) throw new Error('抽屉不存在: ' + from)
-    if (fs.existsSync(absNew)) throw new Error('已有同名抽屉: ' + to)
+    if (!fs.existsSync(absOld)) throw new Error('知识库不存在：' + from)
+    if (fs.existsSync(absNew)) throw new Error('已有同名知识库：' + to)
     const reg = syncRegistry()
-    assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
+    const updatedReferences = moveWithReferences(relativeKey(absOld), relativeKey(absNew), ctx)
     /* 分享与可编辑的键跟着搬，否则改名就等于把不公开的东西放出去了 */
     share.rename(from, to)
     remapOrderUnder(from, to)
@@ -1059,7 +1207,7 @@ const routes = {
     /* 注册表是唯一真源：改名就是改它，目录名与标题都从它派生 */
     const hit = reg.libs.find((l) => l.name === from)
     if (hit) { hit.name = to; writeRegistry(reg) }
-    return { ok: true, data: { libs: listLibs() } }
+    return { ok: true, data: { libs: listLibs(), updatedReferences } }
   },
 
   /** 改一个知识库的图标与说明 */
@@ -1069,7 +1217,7 @@ const routes = {
     if (!name || name.includes('/')) throw new Error('缺 name')
     const reg = syncRegistry()
     const hit = reg.libs.find((l) => l.name === name)
-    if (!hit) throw new Error('抽屉不存在: ' + name)
+    if (!hit) throw new Error('知识库不存在：' + name)
     if (body.icon !== undefined) {if(String(body.icon).length>200000)throw fault('INVALID_ICON','图标过大');hit.icon = String(body.icon)}
     if (body.desc !== undefined) hit.desc = String(body.desc)
     if (body.meta !== undefined) hit.meta = String(body.meta)
@@ -1080,12 +1228,12 @@ const routes = {
 
   /** 新建知识库：建目录 + 写进注册表，一步到位，不留"目录有了但没登记"的中间态 */
   'POST /lib': async (body, _url, ctx) => {
-    if (ctx.role !== 'owner') throw new Error('只有你能新建抽屉')
+    if (ctx.role !== 'owner') throw new Error('只有管理者可以新建知识库')
     const name = String(body.name || '').trim()
-    if (!name) throw new Error('抽屉名不能为空')
+    if (!name) throw new Error('请填写知识库名称')
     if (name.includes('/') || name.startsWith('.')) throw new Error('名字里不能有斜杠，也不能以点开头')
     const abs = safeResolve(name)
-    if (fs.existsSync(abs)) throw new Error('已有同名抽屉: ' + name)
+    if (fs.existsSync(abs)) throw new Error('已有同名知识库：' + name)
     // 先取注册表再建目录；建完才同步会先自动补一条，随后又追加一条。
     const reg = syncRegistry()
     repo.mkdir(abs)
@@ -1137,11 +1285,11 @@ const routes = {
    * 一次动几百个文件，误删代价大，所以只做移动 —— 回收站里还能捞回来。
    */
   'DELETE /lib': async (body, _url, ctx) => {
-    if (ctx.role !== 'owner') throw new Error('只有你能删抽屉')
+    if (ctx.role !== 'owner') throw new Error('只有管理者可以删除知识库')
     const name = String(body.name || '').replace(/^\/+|\/+$/g, '')
     if (!name || name.includes('/')) throw new Error('缺 name')
     const abs = safeResolve(name)
-    if (!fs.existsSync(abs)) throw new Error('抽屉不存在: ' + name)
+    if (!fs.existsSync(abs)) throw new Error('知识库不存在：' + name)
     if (!fs.statSync(abs).isDirectory()) throw new Error('不是目录: ' + name)
     moveToTrash(name)
     const reg = syncRegistry()
@@ -1162,10 +1310,10 @@ const routes = {
     const lib = String(url.searchParams.get('lib') || '')
     if (lib) {
       if (lib === '.' || lib === '..' || lib.startsWith('.') || /[/\\]/.test(lib)) {
-        throw new Error('抽屉名无效')
+        throw new Error('知识库名称无效')
       }
       const abs = safeResolve(lib)
-      if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new Error('抽屉不存在: ' + lib)
+      if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) throw new Error('知识库不存在：' + lib)
       const nodes = scanDir(abs, lib, 0, readOrder())
       return { ok: true, data: { nodes, lib } }
     }
@@ -1205,7 +1353,7 @@ const routes = {
   },
 
   /** 保存一篇文档 */
-  'PUT /doc': async (body) => {
+  'PUT /doc': async (body, _url, { operationId }) => {
     const abs = assertMd(body.path)
     if (!fs.existsSync(abs)) throw fault('NOT_FOUND', '文档不存在', 404)
     const old = fs.readFileSync(abs, 'utf8'), next = String(body.content ?? '')
@@ -1214,12 +1362,9 @@ const routes = {
     if (body.revision !== currentRevision) throw fault('CONFLICT', '文档已被其他编辑者修改，已保留你的内容，请比较后合并', 409, { content: old, revision: currentRevision })
     const n=repo.node(body.path)
     if (old !== next) {
-      const id=cryptoId(), versionPath='.reader/versions/'+id+'.md'
-      repo.write(path.join(DOCS_ROOT,versionPath),old)
-      repo.db.prepare('INSERT INTO versions VALUES (?,?,?,?,?)').run(id,n.id,currentRevision,versionPath,Date.now())
-      repo.write(abs,next);repo.node(body.path)
-      const expired=repo.db.prepare('SELECT id,path FROM versions WHERE node=? ORDER BY at DESC,rowid DESC LIMIT -1 OFFSET 100').all(n.id)
-      for(const v of expired){repo.remove(path.join(DOCS_ROOT,v.path));repo.db.prepare('DELETE FROM versions WHERE id=?').run(v.id)}
+      recordDocumentChange(repo, operationId, n.id, old, next)
+      repo.write(abs, next)
+      repo.node(body.path)
     }
     return { ok:true, savedAt:Date.now(), data:{id:n.id,revision:digest(next)} }
   },
@@ -1229,7 +1374,7 @@ const routes = {
   },
 
   /** 新建文档：dir 为空串表示根目录 */
-  'POST /doc': async (body) => {
+  'POST /doc': async (body, _url, { operationId }) => {
     const dir = assertDir(body.dir)
     const name = safeName(body.name)
     if (!name) throw new Error('文档名不能为空')
@@ -1238,6 +1383,7 @@ const routes = {
     const content = String(body.content ?? '# ' + name + '\n')
     repo.write(safeResolve(file), content)
     const node = repo.node(file)
+    recordDocumentChange(repo, operationId, node.id, null, content)
     if (body.source !== undefined) recordSource(repo, node.id, body.source)
     return { ok: true, data: { name: path.basename(file, '.md'), file, id: node.id, revision: digest(content) } }
   },
@@ -1296,7 +1442,7 @@ const routes = {
     return { ok: true, data: next }
   },
   /** 改名 = 改文件名 */
-  'PATCH /doc': async (body) => {
+  'PATCH /doc': async (body, _url, ctx) => {
     const absOld = assertFile(body.path)
     const name = safeName(body.name)
     if (!name) throw new Error('文档名不能为空')
@@ -1308,22 +1454,22 @@ const routes = {
     const absNew = assertFile(next)
     // 只差大小写不算重名，macOS 文件系统本来就不区分大小写
     const sameExceptCase = next.toLowerCase() === body.path.toLowerCase()
-    if (!sameExceptCase && fs.existsSync(absNew)) throw new Error('同目录下已有同名文件: ' + name + '.md')
+    if (!sameExceptCase && fs.existsSync(absNew)) throw new Error('当前文件夹已有同名文件：' + name + '.md')
+    let updatedReferences = []
     if (fs.existsSync(absOld)) {
       if (sameExceptCase) {
         // 大小写改名要两步走，否则在大小写不敏感的文件系统上会变成 no-op
         const tmp = absOld + '.rename-tmp'
-        assets.beforeMove(body.path); repo.move(absOld, tmp)
-        repo.move(tmp, absNew); repo.remap(body.path, next)
+        updatedReferences = moveWithReferences(body.path, next, ctx, tmp)
       } else {
-        assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
+        updatedReferences = moveWithReferences(relativeKey(absOld), relativeKey(absNew), ctx)
       }
     }
     share.rename(body.path, next)
     moveColWidths(body.path, next)
     remapFoldables(body.path, next)
     removeFromOrder(dir === '.' ? '' : dir, path.basename(body.path))
-    return { ok: true, data: { name, file: next } }
+    return { ok: true, data: { name, file: next, updatedReferences } }
   },
 
   /** 删除文档，挪进回收站 */
@@ -1340,40 +1486,40 @@ const routes = {
   'POST /category': async (body) => {
     const parent = assertDir(body.parent)
     const name = safeName(body.name)
-    if (!name) throw new Error('目录名不能为空')
+    if (!name) throw new Error('请填写文件夹名称')
     const rel = relJoin(parent, name)
     const abs = safeResolve(rel)
-    if (fs.existsSync(abs)) throw new Error('同位置已有同名目录: ' + name)
+    if (fs.existsSync(abs)) throw new Error('该位置已有同名文件夹：' + name)
     repo.mkdir(abs)
     return { ok: true, data: { name, path: rel } }
   },
 
   /** 目录改名 */
-  'PATCH /category': async (body) => {
+  'PATCH /category': async (body, _url, ctx) => {
     const rel = assertDir(body.path)
-    if (!rel) throw new Error('根目录不能改名')
+    if (!rel) throw new Error('根目录不能重命名')
     const name = safeName(body.name)
-    if (!name) throw new Error('目录名不能为空')
+    if (!name) throw new Error('请填写文件夹名称')
     const parent = path.posix.dirname(rel)
     const next = relJoin(parent === '.' ? '' : parent, name)
     if (next === rel) return { ok: true, data: { name, path: rel } }
     const absOld = safeResolve(rel)
     const absNew = safeResolve(next)
-    if (!fs.existsSync(absOld)) throw new Error('目录不存在: ' + rel)
-    if (fs.existsSync(absNew)) throw new Error('同位置已有同名目录: ' + name)
-    assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
+    if (!fs.existsSync(absOld)) throw new Error('文件夹不存在：' + rel)
+    if (fs.existsSync(absNew)) throw new Error('该位置已有同名文件夹：' + name)
+    const updatedReferences = moveWithReferences(relativeKey(absOld), relativeKey(absNew), ctx)
     share.rename(rel, next)
     remapColWidthsUnder(rel + '/', next + '/')
     remapFoldables(rel, next, true)
     dropOrderFor(rel)
-    return { ok: true, data: { name, path: next } }
+    return { ok: true, data: { name, path: next, updatedReferences } }
   },
 
   /** 删除目录：整个挪进回收站，目录里的东西一件不动 */
   'DELETE /category': async (body) => {
     const rel = assertDir(body.path)
-    if (!rel) throw new Error('根目录不能删')
-    if (!fs.existsSync(safeResolve(rel))) throw new Error('目录不存在: ' + rel)
+    if (!rel) throw new Error('根目录不能删除')
+    if (!fs.existsSync(safeResolve(rel))) throw new Error('文件夹不存在：' + rel)
     const moved = moveToTrash(rel)
     dropColWidthsUnder(rel + '/')
     dropFoldables(rel, true)
@@ -1389,7 +1535,7 @@ const routes = {
   'PUT /order': async (body) => {
     const parent = assertDir(body.parent)
     const abs = parent ? safeResolve(parent) : DOCS_ROOT
-    if (!fs.existsSync(abs)) throw new Error('目录不存在: ' + parent)
+    if (!fs.existsSync(abs)) throw new Error('文件夹不存在：' + parent)
     // 判据跟扫盘完全一致：隐藏项、软链、node_modules、阅读器自己那个目录都不算
     const existing = fs
       .readdirSync(abs, { withFileTypes: true })
@@ -1417,22 +1563,24 @@ const routes = {
    * 把目录挪到另一个目录下（把目录拖进目录里用）。
    * 连同里面的东西一起走：fs.rename 一次搞定，列宽和顺序记录的键跟着改。
    */
-  'PUT /move/category': async (body) => {
+  'PUT /move/category': async (body, _url, ctx) => {
     const rel = assertDir(body.path)
-    if (!rel) throw new Error('根目录不能挪')
+    if (!rel) throw new Error('根目录不能移动')
     const toParent = assertDir(body.toParent)
     const fromParent = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
     if (fromParent === toParent) return { ok: true, data: { path: rel } }
     // 不许挪进自己或自己的子孙里，否则就把自己装进自己了
-    if (toParent === rel || toParent.startsWith(rel + '/')) throw new Error('不能把目录挪进它自己里面')
+    if (toParent === rel || toParent.startsWith(rel + '/')) throw new Error('不能将文件夹移入自身或其子文件夹')
     const absOld = safeResolve(rel)
-    if (!fs.existsSync(absOld)) throw new Error('目录不存在: ' + rel)
+    if (!fs.existsSync(absOld)) throw new Error('文件夹不存在：' + rel)
     const name = path.posix.basename(rel)
     const next = toParent ? toParent + '/' + name : name
+    if (body.undo && originalMovePath(body.undo, rel, toParent) !== next) throw fault('INVALID_PATH', '原目录名不匹配', 400)
+    const movedId = repo.node(rel, 'folder').id
     const absNew = safeResolve(next)
-    if (fs.existsSync(absNew)) throw new Error('目标位置已有同名目录: ' + name)
+    if (fs.existsSync(absNew)) throw new Error('目标位置已有同名文件夹：' + name)
     repo.mkdir(safeResolve(toParent))
-    assets.beforeMove(relativeKey(absOld)); repo.move(absOld, absNew); repo.remap(relativeKey(absOld), relativeKey(absNew))
+    const updatedReferences = moveWithReferences(relativeKey(absOld), relativeKey(absNew), ctx)
     remapColWidthsUnder(rel + '/', next + '/')
     remapFoldables(rel, next, true)
     remapOrderUnder(rel, next)
@@ -1444,29 +1592,31 @@ const routes = {
     // 只把名字从源层摘掉；它自己在 next 那一层的顺序刚才已经搬过去了，不能删
     removeFromOrder(fromParent, name)
     removeFromOrder(toParent, name)
-    return { ok: true, data: { path: next } }
+    return { ok: true, data: { path: next, id: movedId, updatedReferences } }
   },
 
   /** 把一篇文档挪到某个目录（拖拽用） */
-  'PUT /move/doc': async (body) => {
+  'PUT /move/doc': async (body, _url, ctx) => {
     const absOld = assertFile(body.file)
     const dir = assertDir(body.dir)
     if (!fs.existsSync(absOld)) throw new Error('文档不存在: ' + body.file)
     const fromDir = path.dirname(body.file)
     if ((fromDir === '.' ? '' : fromDir) === dir) return { ok: true, data: { file: body.file } }
+    const original = originalMovePath(body.undo, body.file, dir)
+    const movedId = repo.node(body.file, /\.pdf$/i.test(body.file) ? 'pdf' : /\.html?$/i.test(body.file) ? 'h5' : 'doc').id
     repo.mkdir(safeResolve(dir))
     // 扩展名要保住：pdf 用 basename(x, '.md') 会变成「xxx.pdf.md」
     const fileName = path.basename(body.file)
     const ext = path.extname(fileName) || '.md'
     const base = fileName.slice(0, fileName.length - ext.length) || fileName
-    const next = uniqueFile(dir, base, ext)
-    assets.beforeMove(body.file); repo.move(absOld, safeResolve(next)); repo.remap(body.file, next)
+    const next = original || uniqueFile(dir, base, ext)
+    const updatedReferences = moveWithReferences(body.file, next, ctx)
     moveColWidths(body.file, next)
     remapFoldables(body.file, next)
     /* 同上：分享状态要跟着文档走，不然一拖就变了可见性 */
     share.rename(body.file, next)
     removeFromOrder(fromDir === '.' ? '' : fromDir, path.basename(body.file))
-    return { ok: true, data: { file: next } }
+    return { ok: true, data: { file: next, id: movedId, updatedReferences } }
   },
 
   'POST /copy/doc': async (body) => {
@@ -1474,7 +1624,7 @@ const routes = {
     const abs = assertFile(from)
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) throw fault('NOT_FOUND', '文档不存在', 404)
     const dir = assertDir(body.dir)
-    if (!dir) throw fault('DESTINATION_REQUIRED', '请选择目标抽屉')
+    if (!dir) throw fault('DESTINATION_REQUIRED', '请选择目标位置')
     if (!fs.existsSync(safeResolve(dir))) throw fault('NOT_FOUND', '目标目录不存在', 404)
     const ext = path.extname(from)
     const name = path.basename(from, ext)
@@ -1486,7 +1636,7 @@ const routes = {
   'POST /copy/category': async (body) => {
     const from = assertDir(body.path)
     const parent = assertDir(body.toParent)
-    if (!from || !parent) throw fault('INVALID_PATH', '请选择源目录和目标抽屉')
+    if (!from || !parent) throw fault('INVALID_PATH', '请选择要复制的文件夹和目标位置')
     if (parent === from || parent.startsWith(from + '/')) throw fault('INVALID_PATH', '不能复制到自身目录内')
     if (!fs.existsSync(safeResolve(from)) || !fs.statSync(safeResolve(from)).isDirectory()) throw fault('NOT_FOUND', '源目录不存在', 404)
     if (!fs.existsSync(safeResolve(parent))) throw fault('NOT_FOUND', '目标目录不存在', 404)
@@ -1591,7 +1741,7 @@ const routes = {
  */
 // 对文件及目录的所有修改在这里统一校验，包含改名、移动、排序、子树删除。
 function canWrite(rel, role, recursive = false) {
-  if (!rel) throw new Error('请选择一个抽屉')
+  if (!rel) throw new Error('请选择知识库或文件夹')
   assertVisible(rel)
   safeResolve(rel)
   if (role !== 'owner' && (!share.isShared(rel) || share.isLocked(rel))) throw new Error('该内容已锁定或不可访问')
@@ -1608,6 +1758,7 @@ function checkWrite(key, body, role) {
     return
   }
   const source = body.path || body.file
+  if (body.undo && key.startsWith('PUT /move/') && role !== 'owner') throw fault('FORBIDDEN', '撤销移动需要管理身份', 403)
   if (key === 'POST /copy/doc' || key === 'POST /copy/category') {
     if (role !== 'owner') throw fault('FORBIDDEN', '复制资料需要管理身份', 403)
     canWrite(source, role, key === 'POST /copy/category')
@@ -1691,6 +1842,10 @@ export async function handleApi(req, res, ctx = {}) {
       await revealInFileManager(abs, stat.isDirectory())
       return send(res, 200, { ok: true })
     }
+    // Capture the caller's identity/path before resolving aliases or adding the current path for an ID.
+    const requestId = req.method === 'GET' ? '' : String(req.headers['idempotency-key'] || body.requestId || '')
+    if (requestId.length > 160) throw fault('INVALID_REQUEST', '操作编号过长')
+    const fingerprint = requestId && 'v2:' + digest(key + url.search + JSON.stringify(body))
     const id=body.id||url.searchParams.get('id')
     if(id && !key.includes('agent-keys') && !key.includes('/activity')) {
       const n=repo.byId(id);if(!n)throw fault('NOT_FOUND','文档不存在',404)
@@ -1704,9 +1859,13 @@ export async function handleApi(req, res, ctx = {}) {
       ctx.agentScopes=scopes
       const assetScope=assets.find(url.searchParams.get('path')||'',url.searchParams.get('asset'));
       const fields=[assetScope&&repo.byId(assetScope.owner)?.path,body.path,body.file,body.dir,url.searchParams.get('path'),url.searchParams.get('lib')].filter(Boolean)
-      if(!fields.length && !['GET /me','GET /agent-libs'].includes(key))throw fault('SCOPE_REQUIRED','请指定已授权抽屉或文档',400)
+      if(!fields.length && !['GET /me','GET /agent-libs'].includes(key))throw fault('SCOPE_REQUIRED','请指定已授权的知识库或文档',400)
       for(const field of fields){const rel=repo.resolve(field);if(!scopes.some(p=>rel===p||rel.startsWith(p+'/')))throw fault('FORBIDDEN','超出 Agent 授权范围',403)}
       ctx.actor='agent:'+agent.id
+    } else if (req.headers['x-typocket-client'] === 'local-agent') {
+      // Attribution only. The service must already have authenticated the local owner.
+      if (role !== 'owner' || !localFileManagerRequest(req)) throw fault('FORBIDDEN', '需要本机 Typocket 连接', 403)
+      ctx.actor = 'agent:local'
     }
     if (key === 'GET /backups' || key === 'POST /backups') {
       if (role !== 'owner' || ctx.agentScopes || !localFileManagerRequest(req)) throw fault('FORBIDDEN', '备份管理仅限本机使用', 403)
@@ -1781,21 +1940,29 @@ export async function handleApi(req, res, ctx = {}) {
       const rel = url.searchParams.get('path') || url.searchParams.get('lib') || url.searchParams.get('file') || ''
       if (rel && !share.isShared(rel)) throw new Error('内容不可访问')
     }
-    const requestId=String(req.headers['idempotency-key']||body.requestId||'')
-    if(requestId.length>160)throw fault('INVALID_REQUEST','操作编号过长')
-    const retryKey=(ctx.actor||role)+':'+requestId, fingerprint=digest(key+JSON.stringify(body))
-    const run=async()=>{
-      if(requestId&&req.method!=='GET'){
-        const old=repo.db.prepare('SELECT * FROM retries WHERE key=?').get(retryKey)
-        if(old){if(old.fingerprint!==fingerprint)throw fault('IDEMPOTENCY_CONFLICT','同一操作编号不能用于不同内容',409);return JSON.parse(old.result)}
+    const retryKey = (ctx.actor || role) + ':' + requestId
+    const replay = requestId ? () => {
+      const previous = repo.db.prepare('SELECT fingerprint, result FROM retries WHERE key=?').get(retryKey)
+      if (!previous) return undefined
+      // Prior releases hashed the resolved request body and did not include query parameters.
+      const expected = previous.fingerprint.startsWith('v2:') ? fingerprint : digest(key + JSON.stringify(body))
+      if (previous.fingerprint !== expected) throw fault('IDEMPOTENCY_CONFLICT', '同一操作编号不能用于不同内容', 409)
+      return JSON.parse(previous.result)
+    } : undefined
+    const subject = operationSubject(body) || {}
+    const run = async operationId => {
+      const value = await handler(body, url, { role, agentScopes: ctx.agentScopes, operationId, cancelled: () => res.destroyed })
+      if (key === 'POST /doc' || key === 'PUT /doc') {
+        subject.id = value.data.id
+        subject.path = value.data.file || body.path
+        if (key === 'PUT /doc' && body.revision === value.data.revision) subject.unchanged = true
       }
-      const value=await handler(body,url,{role,agentScopes:ctx.agentScopes})
-      if(requestId&&req.method!=='GET')repo.db.prepare('INSERT INTO retries VALUES (?,?,?)').run(retryKey,fingerprint,JSON.stringify(value))
+      if (requestId) repo.db.prepare('INSERT INTO retries VALUES (?,?,?)').run(retryKey, fingerprint, JSON.stringify(value))
       return value
     }
-    const out = req.method === 'GET' || activityReview
-      ? await run()
-      : await repo.mutate(key, ctx.actor || role, run, operationSubject(body))
+    let out
+    if (req.method === 'GET' || activityReview) out = replay?.() ?? await run()
+    else out = await repo.mutate(key, ctx.actor || role, run, subject, replay)
     if (key === 'GET /tree' && out?.data?.nodes) out.data.nodes = share.decorate(isGuest ? share.filterTree(out.data.nodes) : out.data.nodes)
     send(res, 200, out)
   } catch (e) {

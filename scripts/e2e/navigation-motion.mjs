@@ -1,0 +1,130 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+
+async function followRow(rowSelector, markerSelector, clickSelector) {
+  const row = document.querySelector(rowSelector)
+  const oldTop = row.getBoundingClientRect().top
+  document.querySelector(clickSelector).click()
+  const start = performance.now()
+  let error = 0
+  do {
+    await new Promise(requestAnimationFrame)
+    const mark = row.querySelector(markerSelector) || document.querySelector(markerSelector)
+    if (!mark) throw Error('选中背景消失')
+    error = Math.max(error, Math.abs(row.getBoundingClientRect().top - mark.getBoundingClientRect().top))
+  } while (performance.now() - start < 430)
+  return { distance:Math.abs(row.getBoundingClientRect().top-oldTop), error }
+}
+
+async function measureOutline(rail) {
+  const scroller = document.getElementById('main-scroll-container')
+  const target = document.querySelectorAll('.ProseMirror h2')[104]
+  const dest = scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 90
+  const original = Element.prototype.getBoundingClientRect
+  let reads = 0
+  Element.prototype.getBoundingClientRect = function () {
+    if (this instanceof HTMLHeadingElement) reads++
+    return original.call(this)
+  }
+  try {
+    scroller.scrollTo({top:dest,behavior:'instant'})
+    for (let i = 0; i < 5; i++) await new Promise(requestAnimationFrame)
+    const active = rail ? document.querySelector('.rail-toc-stop.active')?.getAttribute('aria-label')
+      : document.querySelector('.toc-item.is-active')?.textContent.trim()
+    return { reads, active, target:target.textContent.trim() }
+  } finally { Element.prototype.getBoundingClientRect = original }
+}
+
+export async function verifyNavigationMotion({send, ev, root, appUrl, sleep}) {
+  const lib = '导航动效检查'
+  const activeFile = lib + '/99-阅读/长文.md'
+  const chunks = Array.from({length:128}, (_, i) => '## 章节 ' + i + '\n\n' + '行文示例。'.repeat(24) + '\n')
+  for (const file of [activeFile, ...Array.from({length:5}, (_, i) => lib + '/00-资料/' + i + '.md')]) {
+    fs.mkdirSync(path.dirname(path.join(root,file)), {recursive:true})
+    fs.writeFileSync(path.join(root,file), file === activeFile ? '# 长文\n\n' + chunks.join('\n') : '# 资料\n')
+  }
+  const ready = async expr => {
+    for (let i=0; i<120; i++) {
+      if (await ev('return ' + expr)) return
+      await sleep(60)
+    }
+    throw Error('导航测试未就绪 ' + expr)
+  }
+  const click = selector => ev('document.querySelector(' + JSON.stringify(selector) + ').click()')
+  const follow = (...args) => ev('return ('+followRow.toString()+')('+args.map(x=>JSON.stringify(x)).join(',')+')')
+  const viewport = width => send('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:width<500})
+  const media = value => send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value}]})
+  try {
+    await viewport(1180)
+    await media('no-preference')
+    await send('Page.navigate',{url:new URL('doc/' + activeFile.slice(0,-3) + '?lib=' + lib, appUrl).href})
+    await ready("document.querySelectorAll('.ProseMirror h2').length === 128")
+    if (await ev("return document.querySelector('.sidebar-toggle').getAttribute('aria-expanded')==='false'")) await click('.sidebar-toggle')
+    if (!(await ev("return !!document.querySelector('.lib-panel')"))) await click('.kb-list-btn')
+    await ready("!!document.querySelector('.lib-row.is-current .lib-more')")
+    await sleep(420)
+    await click('.lib-row.is-current .lib-more')
+    const pinSelector = await ev(`const pin = [...document.querySelectorAll('.tree-menu button')].find(el=>el.textContent.includes('置顶')); pin.id='test-pin-target'; return '#test-pin-target'`)
+    const pinned = await follow('.lib-row.is-current', '.lib-row-blob', pinSelector)
+    assert(pinned.error<1, '置顶时底色离开了选中行 '+JSON.stringify(pinned))
+    const folder = '.cat-row[data-path="' + lib + '/00-资料"] .folder-toggle'
+    const current = '.cat-row[data-path="' + lib + '/99-阅读"] .folder-toggle'
+    for (const selector of [folder, current]) {
+      if (await ev('return document.querySelector(' + JSON.stringify(selector) + ').getAttribute("aria-expanded")==="false"')) await click(selector)
+    }
+    await sleep(400)
+    for (let i = 0; i < 2; i++) {
+      const result = await follow('.doc-row.is-on', '.doc-row-blob', folder)
+      assert(result.distance>80 && result.error<1, '折叠目录时底色脱离了文档 '+JSON.stringify(result))
+    }
+    if (await ev("return document.querySelector('.toc-panel').classList.contains('is-collapsed')")) await click('.rail-toc-handle')
+    for (const rail of [false,true]) {
+      if (rail) await click('.toc-collapse-chip')
+      await ev("document.getElementById('main-scroll-container').scrollTo({top:0,behavior:'instant'})")
+      await sleep(500)
+      const result = await ev('return ('+measureOutline.toString()+')('+rail+')')
+      assert.equal(result.active,result.target, '长文当前位置应匹配实际标题')
+      assert(result.reads<=22, '每次滚动只需测量少量正文标题 '+JSON.stringify(result))
+    }
+    await click('.sidebar-toggle')
+    await sleep(380)
+    // Use a real keyboard event so :focus-visible follows keyboard modality.
+    for (const type of ['keyDown','keyUp']) await send('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab'})
+    await ev("document.querySelector('.kb-title-label').focus()")
+    for (const type of ['keyDown','keyUp']) await send('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab'})
+    assert(await ev("return document.activeElement.matches('.kb-list-btn') && getComputedStyle(document.activeElement).visibility==='visible'"), '收起时可用键盘访问知识库切换')
+    await viewport(360)
+    await ev("document.querySelector('.sidebar-toggle').focus()")
+    await sleep(250)
+    assert(await ev("return getComputedStyle(document.querySelector('.kb-list-btn')).visibility==='hidden'"), '紧凑触屏不可停在隐藏按钮')
+    await media('reduce')
+    await viewport(1180)
+    if (await ev("return document.querySelector('.sidebar-toggle').getAttribute('aria-expanded')==='false'")) await click('.sidebar-toggle')
+    await sleep(100)
+    const reduced = await follow('.doc-row.is-on','.doc-row-blob',folder)
+    assert(reduced.error<1 && reduced.distance>80, '减少动态时行与选择要一起就位')
+    // Start the actual formatted recovery reader, then navigate through its outline.
+    const fallbackFile = lib + '/00-资料/恢复阅读.md'
+    fs.writeFileSync(path.join(root, fallbackFile), '# 恢复阅读\n\n' + chunks.join('\n'))
+    await ev(`await window.__reader.loadTree()
+      const Editor = window.__crepe.editor.constructor, make = Editor.make
+      Editor.make = function(...args) {
+        Editor.make = make
+        const editor = make.apply(this,args)
+        editor.create = async () => { throw Error('模拟启动失败') }
+        return editor
+      }
+      await window.__reader.select(${JSON.stringify(fallbackFile)})`)
+    await ready("document.querySelectorAll('.source-reading article h2').length===128")
+    if (await ev("return document.querySelector('.toc-panel').classList.contains('is-collapsed')")) await click('.rail-toc-handle')
+    await ready("document.querySelectorAll('.toc-item').length===129")
+    await ev("document.querySelectorAll('.toc-item')[105].click()")
+    await ready(`(() => { const t=document.querySelectorAll('.source-reading article h2')[104].getBoundingClientRect().top
+      return Math.abs(t-document.getElementById('main-scroll-container').getBoundingClientRect().top-90)<2 })()`)
+    await ready("document.querySelector('.toc-item.is-active')?.textContent.trim()==='章节 104'")
+  } finally {
+    await media('no-preference')
+    await send('Emulation.clearDeviceMetricsOverride')
+  }
+}

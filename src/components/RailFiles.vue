@@ -426,11 +426,14 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--c-panel) 72%, transparent);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  background: var(--surface-tool-bg);
+  -webkit-backdrop-filter: var(--surface-tool-filter);
+  backdrop-filter: var(--surface-tool-filter);
   -webkit-mask: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
   mask: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+}
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  .rail-hint::before { -webkit-mask: none; mask: none; }
 }
 .rail-hint-name {
   min-width: 0;

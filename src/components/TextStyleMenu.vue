@@ -1,58 +1,57 @@
 <template>
-  <Teleport to="body">
-    <div ref="el" class="text-style-menu ui-font" :style="{ left: x + 'px', top: y + 'px' }" @mousedown.prevent @keydown="onKey">
-      <p>文字颜色</p>
-      <div class="style-row">
-        <button v-for="(hex, name) in TEXT_COLORS" :key="name" type="button" class="style-swatch"
+  <div ref="el" class="text-style-menu ui-font" :style="placement" @mousedown.prevent @keydown="onKey">
+    <p>文字颜色</p>
+    <div class="style-row">
+      <button v-for="(hex, name) in TEXT_COLORS" :key="name" type="button" class="style-swatch"
+        :class="{ 'is-on': color === name }"
+        :aria-pressed="color === name"
+        :title="COLOR_NAMES[name]" :aria-label="`文字颜色 ${COLOR_NAMES[name]}`" :style="{ color: hex }" @click="pickColor(name)">A</button>
+      <button type="button" class="style-swatch style-custom"
+        :class="{ 'is-on': customActive }"
+        :aria-pressed="customActive"
+        :title="customActive ? `自定义颜色 ${color}` : '自定义颜色'"
+        aria-label="自定义文字颜色"
+        :style="{ background: customActive ? color : 'conic-gradient(from 210deg, #2f6fed, #4a6fa5, #374151, #9aa7bd, #2f6fed)' }"
+        @click="customInput?.click()"><span aria-hidden="true">+</span></button>
+      <input ref="customInput" class="style-custom-input" type="color" tabindex="-1"
+        :value="customColor" aria-label="选择自定义文字颜色" @input="onCustomInput" />
+      <button type="button" class="style-reset" :class="{ 'is-on': !color }" :aria-pressed="!color" @click="emit('pick', 'color', null)">默认</button>
+    </div>
+    <template v-if="recentColors.length">
+      <p class="recent-label">最近使用</p>
+      <div class="style-row recent-row">
+        <button v-for="name in recentColors" :key="'recent-'+name" type="button" class="style-swatch"
           :class="{ 'is-on': color === name }"
           :aria-pressed="color === name"
-          :title="COLOR_NAMES[name]" :aria-label="`文字颜色 ${COLOR_NAMES[name]}`" :style="{ color: hex }" @click="pickColor(name)">A</button>
-        <button type="button" class="style-swatch style-custom"
-          :class="{ 'is-on': customActive }"
-          :aria-pressed="customActive"
-          :title="customActive ? `自定义颜色 ${color}` : '自定义颜色'"
-          aria-label="自定义文字颜色"
-          :style="{ background: customActive ? color : 'conic-gradient(from 210deg, #2f6fed, #4a6fa5, #374151, #9aa7bd, #2f6fed)' }"
-          @click="customInput?.click()"><span aria-hidden="true">+</span></button>
-        <input ref="customInput" class="style-custom-input" type="color" tabindex="-1"
-          :value="customColor" aria-label="选择自定义文字颜色" @input="onCustomInput" />
-        <button type="button" class="style-reset" :class="{ 'is-on': !color }" :aria-pressed="!color" @click="emit('pick', 'color', null)">默认</button>
+          :title="colorTitle(name)" :aria-label="`文字颜色 ${colorTitle(name)}`" :style="{ color: toneValue(name) }"
+          @click="pickColor(name)">A</button>
       </div>
-      <template v-if="recentColors.length">
-        <p class="recent-label">最近使用</p>
-        <div class="style-row recent-row">
-          <button v-for="name in recentColors" :key="'recent-'+name" type="button" class="style-swatch"
-            :class="{ 'is-on': color === name }"
-            :aria-pressed="color === name"
-            :title="colorTitle(name)" :aria-label="`文字颜色 ${colorTitle(name)}`" :style="{ color: toneValue(name) }"
-            @click="pickColor(name)">A</button>
-        </div>
-      </template>
-      <p>马克笔高光</p>
-      <div class="style-row">
-        <button v-for="(hex, name) in HIGHLIGHT_COLORS" :key="name" type="button" class="style-highlight"
-          :class="{ 'is-on': highlight === name }"
-          :aria-pressed="highlight === name"
-          :title="COLOR_NAMES[name]" :aria-label="`高光 ${COLOR_NAMES[name]}`" :style="{ backgroundColor: hex }" @click="emit('pick', 'highlight', name)"></button>
-        <button type="button" class="style-reset" :class="{ 'is-on': !highlight }" :aria-pressed="!highlight" @click="emit('pick', 'highlight', null)">清除</button>
-      </div>
+    </template>
+    <p>马克笔高光</p>
+    <div class="style-row">
+      <button v-for="(hex, name) in HIGHLIGHT_COLORS" :key="name" type="button" class="style-highlight"
+        :class="{ 'is-on': highlight === name }"
+        :aria-pressed="highlight === name"
+        :title="COLOR_NAMES[name]" :aria-label="`高光 ${COLOR_NAMES[name]}`" :style="{ backgroundColor: hex }" @click="emit('pick', 'highlight', name)"></button>
+      <button type="button" class="style-reset" :class="{ 'is-on': !highlight }" :aria-pressed="!highlight" @click="emit('pick', 'highlight', null)">清除</button>
     </div>
-  </Teleport>
+  </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, toRef } from 'vue'
+import { usePickerPlacement } from '../composables/usePickerPlacement'
 import { TEXT_COLORS, HIGHLIGHT_COLORS, isCustomTextColor, textColorName, textColorValue } from '../utils/inline-style'
 import { storageJSON, storageSet } from '../utils/storage'
 const COLOR_NAMES = { red: '红色', orange: '橙色', green: '绿色', blue: '蓝色', purple: '紫色', gray: '灰色', yellow: '黄色', pink: '粉色' }
 const props = defineProps({
-  x: Number,
-  y: Number,
+  anchor: { type: Object, required: true },
   color: { type: String, default: '' },
   highlight: { type: String, default: '' }
 })
 const emit = defineEmits(['pick'])
 const el = ref(null)
+const placement = usePickerPlacement(el, toRef(props, 'anchor'), 260)
 const customInput = ref(null)
 const recentColors = ref(storageJSON('reader:recent-text-colors', []).filter(name => textColorValue(name)).slice(0, 4))
 const customActive = computed(() => isCustomTextColor(props.color))
@@ -81,7 +80,7 @@ function onCustomInput(event) {
 onMounted(async () => {
   await nextTick()
   const active = el.value?.querySelector('button.is-on') || el.value?.querySelector('button')
-  active?.focus()
+  active?.focus({ preventScroll: true })
 })
 
 function onKey(event) {
@@ -105,8 +104,10 @@ function onKey(event) {
   z-index: 60;
   width: 260px;
   padding: 9px 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-tool);
   background: var(--c-pop);
   box-shadow: var(--c-pop-shadow);
 }
@@ -129,13 +130,14 @@ function onKey(event) {
   display: flex;
   align-items: center;
   gap: 5px;
+  flex-wrap: wrap;
 }
 .style-row button,
 .style-reset {
   cursor: pointer;
   border: 1px solid var(--c-line);
   background: var(--c-surface);
-  border-radius: 7px;
+  border-radius: var(--radius-item);
 }
 .style-swatch,
 .style-highlight {

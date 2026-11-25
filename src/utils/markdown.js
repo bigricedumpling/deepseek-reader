@@ -1,47 +1,60 @@
-import {layoutText} from './column-format.js'
 import MarkdownIt from 'markdown-it'
 import taskLists from 'markdown-it-task-lists'
 import sub from 'markdown-it-sub'
 import sup from 'markdown-it-sup'
 import footnote from 'markdown-it-footnote'
-import texmath from 'markdown-it-texmath'
+import { readMathAt, mathSourceSpans } from './math-source.js'
 import katex from 'katex'
 import { assetUrl } from './api.js'
 
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  breaks: false,      // 段内单个换行按 Markdown 标准并成一段，行尾反斜杠或两个空格才是硬换行
-  typographer: false
-})
-  .use(taskLists, { label: true, labelAfter: true })   // - [x] 画成真复选框
-  .use(sub)                                            // H~2~O
-  .use(sup)                                            // x^2^
-  .use(footnote)
-  .use(texmath, { engine: katex, delimiters: 'dollars', katexOptions: { throwOnError: false } })
+// Inline rules run only in Markdown text. Code samples, attributes, links and
+// HTML blocks stay with the Markdown parser that owns those source ranges.
+function inlineMath(state, silent) {
+  const span = readMathAt(state.src, state.pos, state.posMax)
+  if (!span) return false
+  if (!silent) {
+    const token = state.push('math_inline', '', 0)
+    token.content = span.value
+    token.meta = { display: span.display }
+  }
+  state.pos = span.to
+  return true
+}
 
-/* ---------- LaTeX 原生定界符 ---------- */
+function blockMath(state, start, end, silent) {
+  const offset = state.bMarks[start] + state.tShift[start]
+  const opener = state.src.slice(offset, offset + 2)
+  if (opener !== '$$' && opener !== '\\[') return false
+  if (state.sCount[start] - state.blkIndent >= 4) return false
+  const candidate = readMathAt(state.src, offset, state.eMarks[end - 1])
+  if (!candidate?.display) return false
+  const close = candidate.to - 1
+  let last = start
+  while (last + 1 < end && state.eMarks[last] < close) {
+    ++last
+    if (state.sCount[last] < state.blkIndent && !state.isEmpty(last)) return false
+  }
+  // getLines removes list/quote prefixes before passing multiline TeX to KaTeX.
+  const source = state.getLines(start, last + 1, state.blkIndent, false).trimStart()
+  const span = readMathAt(source, 0)
+  if (!span?.display) return false
+  const suffix = source.slice(span.to).trim()
+  if (suffix && !/^\([^()\s]+\)$/.test(suffix)) return false
+  if (!silent) {
+    const token = state.push('math_block', 'section', 0)
+    token.block = true
+    token.map = [start, last + 1]
+    token.content = span.value
+    token.info = suffix
+    state.line = last + 1
+  }
+  return true
+}
 
-/**
- * AI 工具输出的 markdown 常用 \(…\) 表行内公式、\[…\] 表独立公式，
- * 而不是 markdown 世界惯用的 $…$。这里转成 $ 形式再交给同一个渲染器。
- *
- * 恪守宁可不转、绝不错转：代码块、行内代码、HTML 块一律豁免。
- */
-function normalizeMathDelimiters(src) {
-  const text = String(src ?? '')
-  const parts = text.split(/(```[\s\S]*?```|`[^`\n]*`)/)
-  return parts
-    .map((part, i) => {
-      if (i % 2 === 1) return part          // 代码片段原样
-      return part
-        /* \[1\] 这种一到两位纯数字是引用标记，不是公式；真正的公式不会只有一个数字 */
-      .replace(/\\\[([\s\S]*?)\\\]/g, (m, body) =>
-        /^\s*\d{1,2}\s*$/.test(body) ? m : '$$' + body + '$$'
-      )
-        .replace(/\\\(([\s\S]*?)\\\)/g, (_, body) => '$' + body + '$')
-    })
-    .join('')
+export function renderFormula(value, display, label = '') {
+  const html = katex.renderToString(value, { displayMode: display, throwOnError: false, trust: false })
+  if (!label || html.includes('class="katex-tag"')) return html
+  return html + '<span class="math-number">' + md.utils.escapeHtml(label) + '</span>'
 }
 
 /* ---------- 标题锚点 ---------- */
@@ -57,43 +70,98 @@ function slugify(text) {
     .slice(0, 80)
 }
 
-/* 给标题加 id，供右侧目录跳转 */
-const defaultHeadingOpen =
-  md.renderer.rules.heading_open ||
-  function (tokens, idx, options, env, self) {
-    return self.renderToken(tokens, idx, options)
+function createParser(allowHtml) {
+  const md = new MarkdownIt({ html: allowHtml, linkify: true, breaks: false, typographer: false })
+    .use(taskLists, { label: true, labelAfter: true })
+    .use(sub)
+    .use(sup)
+    .use(footnote)
+
+  // GFM splits cells before inline parsing and consumes a backslash preceding a
+  // pipe. Protect TeX-owned pipes until the block parser has finished the rows.
+  md.core.ruler.before('block', 'protect_math_pipes', state => {
+    if (!state.src.includes('|') || !/^[\s>:|]*-+:?[ \t|:-]*$/m.test(state.src)) return
+    const spans = mathSourceSpans(state.src).filter(span => !span.raw.includes('\n') && span.raw.includes('|'))
+    if (!spans.length) return
+    let marker = '\uE000'
+    while (state.src.includes(marker)) marker += '\uE001'
+    state.env.tableMath = { source: state.src, marker }
+    let at = 0
+    const chunks = []
+    for (const { from, to } of spans) {
+      chunks.push(state.src.slice(at, from), state.src.slice(from, to).replaceAll('|', marker))
+      at = to
+    }
+    state.src = chunks.join('') + state.src.slice(at)
+  })
+  md.core.ruler.after('block', 'restore_math_pipes', state => {
+    const saved = state.env.tableMath
+    if (!saved) return
+    state.src = saved.source
+    for (const token of state.tokens) {
+      if (token.content.includes(saved.marker)) token.content = token.content.replaceAll(saved.marker, '|')
+    }
+    delete state.env.tableMath
+  })
+
+  md.inline.ruler.before('escape', 'math_inline', inlineMath)
+  md.block.ruler.before('fence', 'math_block', blockMath, { alt: ['paragraph', 'reference', 'blockquote'] })
+  md.renderer.rules.math_inline = (tokens, i, _, env) =>
+    env.renderMath(tokens[i].content, tokens[i].meta.display)
+  md.renderer.rules.math_block = (tokens, i, _, env) => {
+    const token = tokens[i]
+    return '<section class="math-block">' + env.renderMath(token.content, true, token.info) + '</section>\n'
   }
 
-md.renderer.rules.heading_open = function (tokens, idx, options, env, self) {
-  const token = tokens[idx]
-  const inline = tokens[idx + 1]
-  const text = inline && inline.type === 'inline' ? inline.content : ''
-  if (text) token.attrSet('id', slugify(text))
-  return defaultHeadingOpen(tokens, idx, options, env, self)
-}
+  // Add CJK spacing to prose before escaping. Math, code, attributes and HTML entities keep their bytes.
+  md.renderer.rules.text = (tokens, i, _, env) =>
+    md.utils.escapeHtml(env.gaps ? addGapsInText(tokens[i].content) : tokens[i].content)
+  md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
+  md.renderer.rules.table_close = () => '</table></div>\n'
 
-/* 外链新窗口打开 */
-const defaultLinkOpen =
-  md.renderer.rules.link_open ||
-  function (tokens, idx, options, env, self) {
-    return self.renderToken(tokens, idx, options)
+  /* 给标题加 id，供右侧目录跳转 */
+  const defaultHeadingOpen =
+    md.renderer.rules.heading_open ||
+    function (tokens, idx, options, env, self) {
+      return self.renderToken(tokens, idx, options)
+    }
+
+  md.renderer.rules.heading_open = function (tokens, idx, options, env, self) {
+    const token = tokens[idx]
+    const inline = tokens[idx + 1]
+    const text = inline && inline.type === 'inline' ? inline.content : ''
+    if (text) token.attrSet('id', slugify(text))
+    return defaultHeadingOpen(tokens, idx, options, env, self)
   }
 
-md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
-  const href = tokens[idx].attrGet('href') || ''
-  if (/^https?:\/\//.test(href)) {
-    tokens[idx].attrSet('target', '_blank')
-    tokens[idx].attrSet('rel', 'noopener noreferrer')
+  /* 外链新窗口打开 */
+  const defaultLinkOpen =
+    md.renderer.rules.link_open ||
+    function (tokens, idx, options, env, self) {
+      return self.renderToken(tokens, idx, options)
+    }
+
+  md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+    const href = tokens[idx].attrGet('href') || ''
+    if (/^https?:\/\//.test(href)) {
+      tokens[idx].attrSet('target', '_blank')
+      tokens[idx].attrSet('rel', 'noopener noreferrer')
+    }
+    return defaultLinkOpen(tokens, idx, options, env, self)
   }
-  return defaultLinkOpen(tokens, idx, options, env, self)
+
+  const defaultImage = md.renderer.rules.image || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
+  md.renderer.rules.image = function (tokens, idx, options, env, self) {
+    const src = tokens[idx].attrGet('src')
+    if (src) tokens[idx].attrSet('src', assetUrl(src))
+    return defaultImage(tokens, idx, options, env, self)
+  }
+
+  return md
 }
 
-const defaultImage = md.renderer.rules.image || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
-md.renderer.rules.image = function (tokens, idx, options, env, self) {
-  const src = tokens[idx].attrGet('src')
-  if (src) tokens[idx].attrSet('src', assetUrl(src))
-  return defaultImage(tokens, idx, options, env, self)
-}
+const md = createParser(true)
+const plainMarkdown = createParser(false)
 
 /* ---------- Front matter ---------- */
 
@@ -102,7 +170,7 @@ md.renderer.rules.image = function (tokens, idx, options, env, self) {
  * 文档中间或没闭合的 --- 仍然照常画成分隔线。
  */
 function stripFrontMatter(src) {
-  const text = String(src ?? '')
+  const text = String(src ?? '').replace(/^\uFEFF/, '')
   const m = text.match(/^(---|\+\+\+)\r?\n([\s\S]*?)\r?\n\1\r?\n?/)
   return m ? text.slice(m[0].length) : text
 }
@@ -110,7 +178,6 @@ function stripFrontMatter(src) {
 /* ---------- 中西文间距 ---------- */
 
 const CJK = '\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\u3000-\u303F'
-const CJK_RE = new RegExp('([' + CJK + '])', 'g')
 const CJK_END = new RegExp('[' + CJK + ']$')
 const LATIN_START = /^[A-Za-z0-9@#$%&*+=<>^_`~]/
 const LATIN_END = /[A-Za-z0-9)\]}>%]$/
@@ -118,44 +185,28 @@ const CJK_START = new RegExp('^[' + CJK + ']')
 
 /**
  * 中日韩文字与西文之间自动留出缝隙。
- * 用零宽标记实现，不改变复制的字节——选中复制出来的仍是原文。
+ * 正文的显示间距使用窄空格。公式、代码与原始 Markdown 不参与。
  */
-function cjkGap(html) {
-  // 代码块与行内代码里的汉字不参与中西缝，跟 Tamari 的判据保持一致
-  const parts = String(html).split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>)/)
-  return parts
-    .map((part, i) => (i % 2 === 1 ? part : addGapsInText(part)))
-    .join('')
+function addGapsInText(text) {
+  let result = ''
+  for (let i = 0; i < text.length; i++) {
+    const prev = text[i - 1]
+    const cur = text[i]
+    if (prev && ((CJK_END.test(prev) && LATIN_START.test(cur)) || (LATIN_END.test(prev) && CJK_START.test(cur)))) result += '\u2009'
+    result += cur
+  }
+  return result
 }
 
-function addGapsInText(html) {
-  return html.split(/(<(?:[^>"']|"[^"]*"|'[^']*')*>)/g).map((chunk, index) => {
-    if (index % 2) return chunk
-    let out = ''
-    for (let i = 0; i < chunk.length; i++) {
-      const prev = chunk[i - 1]
-      const cur = chunk[i]
-      if (prev && CJK_END.test(prev) && LATIN_START.test(cur)) out += '\u2009'
-      else if (prev && LATIN_END.test(prev) && CJK_START.test(cur)) out += '\u2009'
-      out += cur
-    }
-    return out
-  }).join('')
-}
-
-export function renderMarkdown(src, { gaps = true } = {}) {
+export function renderMarkdown(src, { gaps = true, allowHtml = true, renderMath = renderFormula } = {}) {
   if (!src) return ''
-  let html = md.render(normalizeMathDelimiters(stripFrontMatter(src)))
-  if (gaps) html = cjkGap(html)
-  return html
-    .replace(/<table>/g, '<div class="table-wrap"><table>')
-    .replace(/<\/table>/g, '</table></div>')
+  return (allowHtml ? md : plainMarkdown).render(stripFrontMatter(src), { gaps, renderMath })
 }
 
 /** 抽取一到六级标题生成右侧目录。 */
 export function extractToc(src) {
   const toc = []
-  const tokens = md.parse(normalizeMathDelimiters(stripFrontMatter(src)), {})
+  const tokens = md.parse(stripFrontMatter(src), {})
   const plain = (parts) => (parts || []).map((part) => {
     if (part.children?.length) return plain(part.children)
     if (['text', 'code_inline', 'image', 'sub', 'sup', 'math_inline'].includes(part.type)) return part.content
@@ -190,53 +241,4 @@ export function highlight(text, kw) {
     at = match.index + match[0].length
   }
   return out + escape(String(text).slice(at))
-}
-
-function searchLineText(line) {
-  return line
-    .replace(/<\/?(?:span|mark|u|strong|em|sup|sub|s|del|ins|br)(?:\s[^>]*)?>/gi, '')
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-}
-
-/**
- * 全文检索：返回命中的文档 + 上下文片段
- * @param {Array<{id,title,raw}>} docs
- * @param {string} keyword
- */
-export function searchDocs(docs, keyword) {
-  const kw = String(keyword || '').trim().toLowerCase()
-  if (!kw) return []
-  const results = []
-  for (const doc of docs) {
-    const raw = String(doc.raw ?? '')
-    const stripped = stripFrontMatter(raw)
-    const frontLines = raw === stripped ? 0 : raw.slice(0, raw.length - stripped.length).split('\n').length - 1
-    const lines = layoutText(stripped).split('\n')
-    const hits = []
-    let ordinal = 0
-    lines.forEach((line, i) => {
-      const visible = searchLineText(line)
-      const lower = visible.toLowerCase()
-      let from = lower.indexOf(kw)
-      let occurrence = 0
-      while (from >= 0) {
-        occurrence++
-        if (hits.length < 20) {
-          const start = Math.max(0, from - 55)
-          const clean = (start ? '…' : '') + visible.slice(start, from + kw.length + 75).replace(/^[#>\-*\s]+/, '').trim()
-          if (clean) hits.push({
-            line: frontLines + i + 1,
-            ordinal,
-            occurrence,
-            text: clean.length > 140 ? clean.slice(0, 140) + '…' : clean
-          })
-        }
-        ordinal++
-        from = lower.indexOf(kw, from + kw.length)
-      }
-    })
-    if (hits.length) results.push({ id: doc.id, title: doc.title, hits })
-  }
-  return results
 }

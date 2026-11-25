@@ -1,6 +1,6 @@
 {
   "name": "dsh-reader-workspace",
-  "version": "0.2.0-preview.6",
+  "version": "0.2.0-preview.8",
   "description": "Typocket: Read, write and organize local documents in DeepSeek Harness.",
   "license": "MIT",
   "repository": {
@@ -29,10 +29,12 @@
     "client.js",
     "managed-server.js",
     "platform.js",
+    "skill-provider.js",
     "cordis.patch.yml",
     "scripts/reader.mjs",
     "skills/**",
     ".codex-plugin/**",
+    ".claude-plugin/**",
     "locale/*.json",
     "runtime/dist/**",
     "runtime/server/**",

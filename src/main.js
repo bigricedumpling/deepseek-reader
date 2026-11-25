@@ -25,7 +25,7 @@ import { installTooltips } from './utils/tooltips'
 
 // 首页按身份进入当前工作区；旧 /edit 与 /onlyread 的书签仍按原路由兼容。
 const BASE_PATH = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '')
-history.replaceState(null, '', resolveEntry(location.pathname, location.search, BASE_PATH))
+history.replaceState(history.state, '', resolveEntry(location.pathname, location.search, BASE_PATH) + location.hash)
 window.__readerPublicView = location.pathname.slice(BASE_PATH.length).startsWith('/onlyread')
 window.__readerMode = 'guest'
 // 公开视角按标签页传递；不使用共享 cookie 切模式，避免影响另一页的管理操作。

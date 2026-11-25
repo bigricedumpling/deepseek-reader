@@ -1,12 +1,16 @@
-/** Typocket semantic color tokens. Palette values are owned by useAccent.js. */
+/** Typocket semantic color tokens. Shared by the reader and standalone library. */
 
-@theme {
-  /* Palette, interaction and contrast are distinct semantic roles. */
+@theme inline {
   --color-accent: var(--c-accent);
-  --c-accent: var(--accent-light, #303030);
+}
+
+/* Semantic tokens are also used by the standalone document portal. */
+:root {
+  --c-accent: #303030;
   --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,var(--c-ink));
   --c-on-accent: #ffffff;
-  --c-selection: rgb(var(--accent-rgb-light, 48 48 48) / .22);
+  --c-danger: #a43c37;
+  --c-selection: color-mix(in srgb, var(--c-accent) 22%, transparent);
   --c-focus: var(--c-accent);
 
   /* --- 灰阶（正文层级全靠这个）--- */
@@ -21,7 +25,7 @@
   --c-code-bg: #f5f5f5;  /* 代码块底色，暖灰 */
   --c-code-inline: #f5f5f5;
   --c-hover: rgba(0, 0, 0, 0.035);
-  --c-active: rgb(var(--accent-rgb-light, 48 48 48) / .09);
+  --c-active: color-mix(in srgb, var(--c-accent) 9%, transparent);
   --c-field: #f5f5f5;      /* 输入框 */
   --c-chip: #f5f5f5;       /* 小按钮 */
   --c-chip-hover: #ededed;
@@ -118,38 +122,25 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   margin-inline: auto;
 }
 
-/* 深色主题：只换色，排版规则一条不动 */
-/*
- * 深色主题。
- *
- * 底色原先是 #131417，压得太黑，长时间读白字发闷。提到 #202020 这一档，
- * 再靠 --c-panel / --c-pop 逐层加亮做层级，而不是一味往下压黑。
- */
-/*
- * 护眼模式。
- *
- * 思路不是「把白色调暗一点」，而是整体转暖：底色用米色，文字用暖灰而不是纯黑。
- * 对比度比浅色低一档但不发灰，长时间看白底刺眼的时候切过来。
- * 层级仍然靠 --c-panel / --c-pop 拉开，跟浅色一套结构。
- */
+/* Soft paper uses a warm neutral surface and the same graphite controls as light mode. */
 body[data-theme="sepia"] {
-  --c-ink: #2b2721;
-  --c-text: #3d382f;
-  --c-sub: #6b6455;
-  --c-faint: #9a917e;
-  --c-line: #ddd2bd;
-  --c-line-soft: #e8dfcd;
-  --c-surface: #f4eedd;
-  --c-panel: #efe7d3;
-  --c-code-bg: #ebe2cd;
-  --c-code-inline: #e7ddc6;
-  --c-hover: rgba(90, 74, 40, 0.06);
-  --c-active: rgb(var(--accent-rgb-light, 48 48 48) / .10);
-  --c-field: rgba(90, 74, 40, 0.07);
-  --c-chip: rgba(90, 74, 40, 0.08);
-  --c-chip-hover: rgba(90, 74, 40, 0.14);
-  --c-pop: #faf5e9;
-  --c-pop-shadow: 0 2px 6px rgba(90, 74, 40, 0.025), 0 8px 24px rgba(90, 74, 40, 0.045);
+  --c-ink: #292925;
+  --c-text: #383834;
+  --c-sub: #64645f;
+  --c-faint: #85847d;
+  --c-line: #dcdcd6;
+  --c-line-soft: #e9e8e3;
+  --c-surface: #f3f2ed;
+  --c-panel: #eeede8;
+  --c-code-bg: #e8e7e2;
+  --c-code-inline: #e5e4de;
+  --c-hover: rgba(57, 55, 47, 0.06);
+  --c-active: color-mix(in srgb, var(--c-accent) 10%, transparent);
+  --c-field: rgba(57, 55, 47, 0.07);
+  --c-chip: rgba(57, 55, 47, 0.08);
+  --c-chip-hover: rgba(57, 55, 47, 0.14);
+  --c-pop: #f8f7f3;
+  --c-pop-shadow: 0 2px 6px rgba(57, 55, 47, 0.025), 0 8px 24px rgba(57, 55, 47, 0.045);
   color-scheme: light;
 }
 
@@ -165,29 +156,74 @@ body[data-theme="dark"] {
   --c-code-bg: #292929;
   --c-code-inline: #303030;
   --c-hover: rgba(255, 255, 255, 0.05);
-  --c-active: rgb(var(--accent-rgb-dark, 224 224 224) / .12);
+  --c-active: color-mix(in srgb, var(--c-accent) 12%, transparent);
   --c-field: rgba(255, 255, 255, 0.07);
   --c-chip: rgba(255, 255, 255, 0.08);
   --c-chip-hover: rgba(255, 255, 255, 0.14);
   --c-pop: #2d2d2d;
   --c-pop-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.18);
   --c-overlay: rgba(0, 0, 0, 0.20);
-  --c-accent: var(--accent-dark, #e0e0e0);
+  --c-accent: #e0e0e0;
   --color-accent: var(--c-accent);
   --c-accent-hover: color-mix(in srgb,var(--c-accent) 84%,white);
   --c-on-accent: #202020;
-  --c-selection: rgb(var(--accent-rgb-dark, 224 224 224) / .27);
+  --c-danger: #f39890;
+  --c-selection: color-mix(in srgb, var(--c-accent) 27%, transparent);
   --c-focus: var(--c-accent);
   color-scheme: dark;
 }
 
-/* 顶栏浮层：左右组块、标签和操作按钮共用同一块半透玻璃。 */
+/* Resolve elevation on the themed body, including overlays teleported to it. */
 body {
-  --topbar-glass-color: color-mix(in srgb, var(--c-ink) 1.5%, var(--c-pop));
-  --topbar-glass-bg: color-mix(in srgb, var(--c-ink) 1.5%, color-mix(in srgb, var(--c-pop) 60%, transparent));
-  --topbar-glass-bg-hover: color-mix(in srgb, var(--c-ink) 3%, color-mix(in srgb, var(--c-pop) 66%, transparent));
-  --topbar-chip-bg: var(--topbar-glass-bg);
-  --topbar-chip-bg-hover: var(--topbar-glass-bg-hover);
-  --topbar-glass-alpha: .60;
-  --topbar-glass-shadow: 0 0 0 1px rgb(0 0 0 / .02), 0 2px 8px rgb(0 0 0 / .035), 0 1px 2px rgb(0 0 0 / .02), 0 -1px 2px rgb(0 0 0 / .012), inset 0 1px 0 rgb(255 255 255 / .34), inset 0 -1px 0 rgb(0 0 0 / .012);
+  --surface-rim: inset 0 1px 0 rgb(255 255 255 / .54);
+  --surface-menu-border: color-mix(in srgb, var(--c-ink) 11%, transparent);
+  --surface-tool-shadow: var(--surface-rim), 0 1px 2px rgb(0 0 0 / .055), 0 3px 8px rgb(0 0 0 / .045);
+  --surface-menu-shadow: var(--surface-rim), 0 2px 5px rgb(0 0 0 / .045), 0 7px 20px rgb(0 0 0 / .065);
+  --surface-dialog-shadow: var(--surface-rim), 0 3px 8px rgb(0 0 0 / .06), 0 14px 40px rgb(0 0 0 / .13);
+  /* Floating navigation catches light at the top and rests close to the cover. */
+  --topbar-glass-shadow:
+    0 0 0 1px rgb(0 0 0 / .02),
+    0 2px 8px rgb(0 0 0 / .035),
+    0 1px 2px rgb(0 0 0 / .02),
+    0 -1px 2px rgb(0 0 0 / .012),
+    inset 0 1px 0 rgb(255 255 255 / .34),
+    inset 0 -1px 0 rgb(0 0 0 / .012);
+  --surface-tool-bg: var(--c-pop);
+  --surface-tool-filter: none;
+  --topbar-chip-opacity: 100%;
+  --topbar-chip-opacity-hover: 100%;
+  --topbar-chip-bg: var(--c-pop);
+  --topbar-chip-bg-hover: color-mix(in srgb, var(--c-ink) 5%, var(--c-pop));
+  --topbar-glass-filter: none;
+}
+body[data-theme="dark"] {
+  --surface-rim: inset 0 1px 0 rgb(255 255 255 / .12);
+  --surface-menu-border: color-mix(in srgb, var(--c-ink) 15%, transparent);
+  --surface-tool-shadow: var(--surface-rim), 0 2px 6px rgb(0 0 0 / .23);
+  --surface-menu-shadow: var(--surface-rim), 0 2px 6px rgb(0 0 0 / .18), 0 8px 24px rgb(0 0 0 / .24);
+  --surface-dialog-shadow: var(--surface-rim), 0 4px 10px rgb(0 0 0 / .22), 0 16px 44px rgb(0 0 0 / .34);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @media screen {
+    body {
+      --surface-tool-bg: color-mix(in srgb, var(--c-pop) 92%, transparent);
+      --surface-tool-filter: blur(6px);
+      --topbar-chip-opacity: 34%;
+      --topbar-chip-opacity-hover: 53%;
+      --topbar-chip-bg: color-mix(in srgb, var(--c-pop) var(--topbar-chip-opacity), transparent);
+      --topbar-chip-bg-hover: color-mix(in srgb, var(--c-pop) var(--topbar-chip-opacity-hover), transparent);
+      --topbar-glass-filter: blur(4px);
+    }
+  }
+}
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  body {
+    --surface-tool-bg: var(--c-pop);
+    --surface-tool-filter: none;
+    --topbar-chip-opacity: 100%;
+    --topbar-chip-opacity-hover: 100%;
+    --topbar-chip-bg: var(--c-pop);
+    --topbar-chip-bg-hover: var(--c-pop);
+    --topbar-glass-filter: none;
+  }
 }

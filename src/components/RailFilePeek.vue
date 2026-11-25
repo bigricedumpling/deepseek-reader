@@ -198,24 +198,13 @@ onBeforeUnmount(() => clearTimeout(expandTimer))
   width: max-content;
   max-width: min(240px, calc(100vw - 16px));
   overflow: hidden;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  box-shadow: none;
+  border: 1px solid var(--surface-menu-border);
+  border-radius: var(--radius-tool);
   color: var(--c-ink);
-  isolation: isolate;
-}
-.rail-peek::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--c-pop) 70%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(1.04);
-  backdrop-filter: blur(14px) saturate(1.04);
-  -webkit-mask: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
-  mask: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
+  background: var(--surface-tool-bg);
+  -webkit-backdrop-filter: var(--surface-tool-filter);
+  backdrop-filter: var(--surface-tool-filter);
+  box-shadow: var(--surface-tool-shadow);
 }
 .rail-peek-head {
   display: flex;
@@ -251,7 +240,7 @@ onBeforeUnmount(() => clearTimeout(expandTimer))
   width: 100%;
   min-height: 24px;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   color: var(--c-sub);
   font-size: 11.5px;
   line-height: 1.35;

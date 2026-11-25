@@ -1,5 +1,5 @@
 <template>
-  <div class="editor-shell">
+  <div class="editor-shell" :data-copy-result="copyResult || undefined">
     <p v-if="uploadError" class="lossy-note ui-font flex items-start gap-2" role="alert">
       <span class="flex-1">图片未保存：{{ uploadError }}</span>
       <button class="lossy-btn" aria-label="关闭图片错误提示" @click="uploadError = ''">×</button>
@@ -19,38 +19,47 @@
       </details>
       <input ref="replacementInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="replaceImage" />
     </div>
-    <textarea
-      v-if="lossy && !readonly"
-      ref="srcEl"
-      class="src-editor"
-      aria-label="Markdown 内容"
-      :value="value"
-      :readonly="readonly"
-      spellcheck="false"
-      @input="onSourceInput"
-    />
-    <MarkdownReading v-if="lossy && readonly" :value="value" />
-    <div v-show="!lossy" ref="host" class="crepe-host"></div>
+    <template v-if="editorUnavailable">
+      <p v-if="!readonly" class="lossy-note ui-font flex items-center gap-2" role="status">
+        编辑器未能打开
+        <button type="button" class="lossy-btn" @click="emit('rebuild')">重试</button>
+      </p>
+      <MarkdownReading :value="value" @click="openReadingReference" />
+    </template>
+    <div v-show="!editorUnavailable" ref="host" class="crepe-host" @click="onToolbarCopy"></div>
 
-    <FormulaEditor v-if="formula" :value="formula.node.attrs.value" @close="formula=null" @save="saveFormula" />
+    <FormulaEditor v-if="formula" :value="formula.value" :display="formula.display" @close="formula=null" @save="saveFormula" />
     <RawBlockEditor v-if="rawBlock" :value="rawBlock.node.attrs.value" @close="rawBlock=null" @save="saveRawBlock" />
-    <!-- 块左侧那个六点手柄，点一下弹出来的转为菜单 -->
-    <Transition name="editor-pop">
-      <BlockTypeMenu
-        v-if="menu"
-        :x="menu.x"
-        :y="menu.y"
-        :groups="menu.groups"
-        @pick="onMenuPick"
-      />
-    </Transition>
     <IconPicker v-if="calloutPicker" :anchor="calloutPicker.anchor" :save="saveCalloutIcon" @close="calloutPicker=null" />
-    <Transition name="editor-pop"><TextStyleMenu v-if="styleMenu" :x="styleMenu.x" :y="styleMenu.y" :color="styleMenu.color" :highlight="styleMenu.highlight" @pick="onStylePick" /></Transition>
-    <EditorContextMenu v-if="contextMenu" :x="contextMenu.x" :y="contextMenu.y" :label="contextMenu.kind === 'image' ? '图片操作' : '编辑操作'" :items="contextItems" @select="onContextPick" @close="closeContextMenu(true)" />
+    <Teleport to="body">
+      <Transition name="pop">
+        <BlockTypeMenu
+          v-if="menu"
+          :x="menu.x"
+          :y="menu.y"
+          :groups="menu.groups"
+          @pick="onMenuPick"
+        />
+      </Transition>
+      <Transition name="pop"><TextStyleMenu v-if="styleMenu" :anchor="styleMenu.anchor" :color="styleMenu.color" :highlight="styleMenu.highlight" @pick="onStylePick" /></Transition>
+      <Transition name="pop">
+        <EditorContextMenu v-if="contextMenu" :x="contextMenu.x" :y="contextMenu.y" :label="contextMenu.kind === 'image' ? '图片操作' : '编辑操作'" :items="contextItems" @select="onContextPick" @close="closeContextMenu(true)" />
+      </Transition>
+    </Teleport>
+    <Teleport to="body">
+      <div role="status" aria-atomic="true">
+        <Transition name="copy-hint">
+          <div v-if="copyResult" ref="copyHint" class="reader-tooltip is-visible is-long">{{ copyMessages[copyResult] }}</div>
+        </Transition>
+      </div>
+    </Teleport>
     <input ref="imageReplaceInput" type="file" accept="image/*" class="hidden" @change="onImageReplace" />
     <Teleport to="body">
-      <Transition name="editor-pop">
-        <div v-if="imageTools" class="reader-image-tools" :style="{ left: imageTools.x + 'px', top: imageTools.y + 'px' }" @pointerenter="cancelImageHide" @pointerleave="scheduleImageHide" @mousedown.stop.prevent>
+      <Transition name="pop">
+        <div v-if="imageTools" ref="imageToolsPanel" class="reader-image-tools" role="group" aria-label="图片操作"
+          :style="{ left: imageTools.x + 'px', top: imageTools.y + 'px' }"
+          @pointerenter="cancelImageHide" @pointerleave="onImageToolsLeave"
+          @focusin="cancelImageHide" @focusout="scheduleImageHide" @mousedown.stop.prevent>
           <button type="button" title="查看大图" aria-label="查看大图" @click="imageAction('preview')"><PhArrowsOutSimple :size="16" /></button>
           <button v-if="!readonly" type="button" title="添加图注" aria-label="添加图注" @click="imageAction('caption')"><PhPencilLine :size="16" /></button>
           <button v-if="!readonly" type="button" title="替换图片" aria-label="替换图片" @click="imageAction('replace')"><PhArrowClockwise :size="16" /></button>
@@ -62,7 +71,7 @@
       </Transition>
     </Teleport>
     <Teleport to="body">
-      <Transition name="editor-pop">
+      <Transition name="pop">
         <div v-if="docLinkCard" class="reader-doc-card" :style="{ left: docLinkCard.x + 'px', top: docLinkCard.y + 'px' }" role="status">
           <component :is="docLinkCard.kind === 'pdf' ? PhFilePdf : docLinkCard.kind === 'h5' ? PhFileHtml : PhFileText" :size="19" class="reader-doc-card-icon" />
           <div class="reader-doc-card-copy">
@@ -73,7 +82,7 @@
       </Transition>
     </Teleport>
     <Teleport to="body">
-      <div v-if="imagePreview" class="reader-image-lightbox" @click.self="closeImagePreview">
+      <div v-if="imagePreview" ref="lightboxDialog" role="dialog" aria-modal="true" aria-label="图片预览" class="reader-image-lightbox" @click.self="closeImagePreview">
         <button type="button" class="reader-lightbox-close" aria-label="关闭大图" @click="closeImagePreview"><PhX :size="20" /></button>
         <figure>
           <img :src="imagePreview.src" :alt="imagePreview.caption || ''" />
@@ -85,30 +94,38 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
+import { copySelection, readEditorClipboard, selectionHandoff } from '../utils/editor-clipboard.js'
+import { captureHistory, restoreHistory, withRestorableHistory } from '../utils/editor-history.js'
+import { copyText } from '../utils/clipboard.js'
 import { Crepe } from '@milkdown/crepe'
+import { ParserState } from '@milkdown/kit/transformer'
+import MarkdownReading from './MarkdownReading.vue'
+import { trailingConfig } from '@milkdown/kit/plugin/trailing'
+import { editorMathRemark, inlineMathNode, blockMathNode, inlineMathInput, configureEditorMath } from '../utils/editor-math.js'
 import { renderMermaidSvg } from '../utils/mermaid'
-import { normalizeMarkdown, isCosmeticOnly } from '../utils/markdown-normalize'
-import { editorShortcuts, applyBlockKind, blockKindOf, resolveDocHref } from '../utils/editor-shortcuts'
+import { normalizeMarkdown } from '../utils/markdown-normalize'
+import { editorShortcuts, applyBlockKind, blockKindOf, resolveDocHref, resolveDocReference } from '../utils/editor-shortcuts'
 import { editorFold, bindFoldView, refreshFolds } from '../utils/editor-fold'
 import { foldKey, isFolded, isFoldable, setFoldable, toggleFold, foldState, foldDoc } from '../utils/toc-fold'
 import BlockTypeMenu from './BlockTypeMenu.vue'
 import TextStyleMenu from './TextStyleMenu.vue'
 import EditorContextMenu from './EditorContextMenu.vue'
 import IconPicker from './IconPicker.vue'
-import MarkdownReading from './MarkdownReading.vue'
+import { sourceBackedDocument, restoreSourceBlocks } from '../utils/editor-source-blocks.js'
 import RawBlockEditor from './RawBlockEditor.vue'
 import FormulaEditor from './FormulaEditor.vue'
-import { PhArrowsOutSimple, PhArrowClockwise, PhArrowSquareOut, PhClipboard, PhCopy, PhExport, PhFileHtml, PhFilePdf, PhFileText, PhPencilLine, PhScissors, PhSquaresFour, PhTrash, PhX } from '../icons/remix'
+import { PhChatCircle, PhArrowsOutSimple, PhArrowClockwise, PhArrowSquareOut, PhClipboard, PhCopy, PhExport, PhFileHtml, PhFilePdf, PhFileText, PhPencilLine, PhScissors, PhSquaresFour, PhTrash, PhX } from '../icons/remix'
 import { remixIcons } from '../icons/remix-data'
+import { isFrontmatterBlock } from '../utils/preserved-markdown.js'
 import { preservedRemark, preservedSchema, editableHtmlSchema, configurePreservedMarkdown } from '../utils/editor-preserved'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
-import { columnsRemark, columnSchema, columnsSchema, columnsDrag } from '../utils/editor-columns'
+import { columnsRemark, columnSchema, columnsSchema, columnsDrag, configureColumnMarkdown } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
 import { workspaceImages, rewriteWorkspaceImages } from '../../server/services/workspace-images.js'
 import { richBlockRemark, richBlockSchema, calloutSchema, calloutKeys, calloutValue, richMarkdown } from '../utils/rich-blocks'
-import { editorViewCtx, parserCtx } from '@milkdown/kit/core'
-import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
+import { editorStateOptionsCtx, editorViewCtx, parserCtx, serializerCtx, remarkCtx } from '@milkdown/kit/core'
+import { AllSelection, TextSelection, Selection } from '@milkdown/kit/prose/state'
 import { API_BASE, assetUrl } from '../utils/api'
 
 /*
@@ -118,6 +135,7 @@ import { API_BASE, assetUrl } from '../utils/api'
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload())
 }
+import { useDialogFocus } from '../composables/useDialogFocus'
 import { useMermaidPreview } from '../composables/useMermaidPreview'
 import { useTableColumnWidths } from '../composables/useTableColumnWidths'
 import { languages as cmLanguages } from '@codemirror/language-data'
@@ -131,13 +149,17 @@ const props = defineProps({
   /** 访客只读：编辑器不接收输入 */
   readonly: { type: Boolean, default: false },
   docId: { type: String, default: '' },
+  agentDocumentId: { type: String, default: '' },
+  workspaceName: { type: String, default: '' },
+  resumeCache: { type: Object, default: null },
+  resumeScope: { type: String, default: '' },
   /** 文档在仓库里的相对路径，列宽旁路文件用它做键 */
   docFile: { type: String, default: '' }
 })
-const emit = defineEmits(['update:value', 'lossy', 'canonize', 'restore', 'pick-doc', 'open-doc', 'rebuild'])
+const emit = defineEmits(['update:value', 'restore', 'pick-doc', 'open-doc', 'rebuild'])
 
 const host = ref(null)
-const srcEl = ref(null)
+const editorUnavailable = ref(false)
 
 const mermaid = useMermaidPreview({ host, renderSvg: renderMermaidSvg })
 const colw = useTableColumnWidths({
@@ -145,26 +167,34 @@ const colw = useTableColumnWidths({
   docId: computed(() => props.docId),
   docFile: computed(() => props.docFile)
 })
-/** 这篇有没有编辑器表达不了的结构，有就走源码编辑 */
-const lossy = ref(false)
-/** 有损时：还原后的文本（用户点"按编辑器规范重排"就写它）与差异行 */
 const uploadError = ref('')
 /** 非图片操作（折叠设置、内容块）失败时的提示，别混进“图片未保存”里 */
 const actionError = ref('')
+const copyHint = ref(null)
+const copyResult = ref('')
+const copyMessages = {
+  pending: '正在复制…',
+  copied: '已复制，可粘贴给 Agent',
+  denied: '复制失败，请允许访问剪贴板后重试',
+  empty: '请重新选中要复制的文字'
+}
+let copyAttempt = 0
+let copyTimer
+let copyButton
 const replacementInput = ref(null)
-const newImageInput = ref(null)
 const imageReplaceInput = ref(null)
 const contextMenu = ref(null)
 const contextItems = ref([])
 const imageTools = ref(null)
+const imageToolsPanel = ref(null)
 const imagePreview = ref(null)
+const lightboxDialog = ref(null)
+useDialogFocus(() => !!imagePreview.value, lightboxDialog, closeImagePreview)
 const docLinkCard = ref(null)
 let imageHideTimer = 0
 let docCardHideTimer = 0
 let imageReplaceTarget = null
 let replacementTarget = null
-let newImagePosition = 0
-let newImageBaseline = ''
 const transientImages = computed(() => {
   const source = String(props.value)
   if (!source.includes('blob:')) return []
@@ -175,6 +205,8 @@ const transientImages = computed(() => {
 const transientImageCount = computed(() => transientImages.value.length)
 const hasTransientImages = computed(() => transientImageCount.value > 0)
 let crepe = null
+let creating = null
+let disposed = false
 let observer = null
 /**
  * 用户有没有真的动过这篇。
@@ -184,19 +216,144 @@ let observer = null
  */
 let userTyped = false
 let initialSerialized = null
+let initialDoc
+let sourceBlocks
+const trailingPlaceholders = new WeakSet()
+let publishedDoc
+let publishedRaw = props.value
+let superseded = false
+// Editor-originated input records its Markdown before emitting it. A different
+// value comes from the owner (e.g. discarding a draft or replacing an attachment).
+// Stop callbacks from the old tree before the parent mounts the replacement.
+watch(() => props.value, raw => {
+  if (!disposed && !superseded && raw !== publishedRaw) {
+    superseded = true
+    emit('rebuild')
+  }
+})
+function flushPendingEdit(event) {
+  if (superseded || event.detail !== props.docId || props.readonly) return
+  const view = viewOf()
+  if (!view || initialSerialized === null) return
+  if (view.composing) { event.preventDefault(); return }
+  if (!userTyped || view.state.doc === publishedDoc) return
+  try {
+    const markdown = markdownSnapshot()
+    publishedRaw = markdown
+    if (markdown !== props.value) emit('update:value', markdown)
+    publishedDoc = view.state.doc
+  } catch {
+    event.preventDefault()
+  }
+}
 function markdownSnapshot() {
-  if (lossy.value) return srcEl.value?.value ?? props.value
-  if (!userTyped || initialSerialized === null) return props.value
-  const markdown = crepe.getMarkdown()
+  if (superseded || !userTyped || initialSerialized === null) return props.value
+  return sourceBlocks ? sourceBlocks.markdown(viewOf().state.doc, trailingPlaceholders) : normalizedEdit(crepe.getMarkdown())
+}
+function normalizedEdit(markdown) {
+  if (sourceBlocks) return sourceBlocks.markdown(viewOf().state.doc, trailingPlaceholders)
   return markdown === initialSerialized ? baseline : normalizeMarkdown(markdown, baseline, { spacing: false })
 }
-defineExpose({ markdownSnapshot })
+defineExpose({ markdownSnapshot, captureMergeCaret })
 /**
  * 编辑器创建时原文的快照。
  * 不能拿 props.value 做比对基准——它会被父组件更新掉，
  * 而表格单元格的合并必须跟"最初的原文"比才准。
  */
 const baseline = props.value
+const { docId: openedPath, resumeScope: openedScope, resumeCache } = props
+let resume = resumeCache?.get(openedPath, openedScope, baseline)
+let historySnapshot = resumeCache?.getHistory(openedPath, openedScope, baseline)
+
+// A saved Markdown edit may parse to a slightly different node tree on reopen.
+// Only reuse its caret when both endpoints still describe the same local text.
+function selectionContext(pos) {
+  const offset = pos.parentOffset
+  const parent = pos.parent
+  return [
+    parent.type.name,
+    parent.textBetween(Math.max(0, offset - 24), offset, '\n', '\uFFFC'),
+    parent.textBetween(offset, Math.min(parent.content.size, offset + 24), '\n', '\uFFFC')
+  ].join('\u0000')
+}
+
+function resumedSelection(doc, entry) {
+  try {
+    const selection = Selection.fromJSON(doc, entry.selection)
+    if (entry.json) return selection
+    if (entry.anchors?.[0] === selectionContext(selection.$anchor) &&
+        entry.anchors[1] === selectionContext(selection.$head)) return selection
+  } catch {
+    // Parsing a newly saved revision can invalidate old ProseMirror positions.
+  }
+}
+
+// A remote edit can insert entire blocks before either endpoint. Match a complete
+// text block in both revisions before allowing a subsequent keystroke to land there.
+function mergePoint(pos) {
+  const node = pos.parent
+  return { type: node.type.name, size: node.content.size, text: node.textBetween(0, node.content.size, '\n', '\uFFFC'), offset: pos.parentOffset }
+}
+function locateMergePoint(doc, point) {
+  let match = null
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return
+    if (match !== -1 && node.type.name === point.type && node.content.size === point.size &&
+        node.textBetween(0, node.content.size, '\n', '\uFFFC') === point.text) {
+      match = match === null ? pos + 1 + point.offset : -1
+    }
+    return false
+  })
+  return match
+}
+function locateMergeCaret(doc, caret) {
+  const anchor = locateMergePoint(doc, caret.anchor)
+  const head = caret.head ? locateMergePoint(doc, caret.head) : anchor
+  if (!(anchor > 0 && head > 0)) return
+  const selection = TextSelection.create(doc, anchor, head)
+  if (!caret.head || (anchor < head) === caret.forward &&
+      doc.textBetween(selection.from, selection.to, '\n', '\uFFFC') === caret.text) return selection
+}
+function captureMergeCaret() {
+  const view = viewOf()
+  if (!view || view.composing || props.readonly || document.activeElement !== view.dom) return
+  const { doc, selection } = view.state
+  if (!(selection instanceof TextSelection)) return
+  const caret = { path: openedPath, anchor: mergePoint(selection.$anchor) }
+  if (!selection.empty) {
+    caret.head = mergePoint(selection.$head)
+    caret.forward = selection.anchor < selection.head
+    caret.text = doc.textBetween(selection.from, selection.to, '\n', '\uFFFC')
+  }
+  if (locateMergeCaret(doc, caret)) return caret
+}
+const mergeCaret = resumeCache?.takeMergeCaret(openedPath)
+let refocusMergedEditor = false
+
+function rememberEditor() {
+  const view = viewOf()
+  if (superseded || publishedRaw !== props.value || !view || !initialDoc || view.state.doc !== publishedDoc ||
+      !resumeCache?.accepts(openedPath, publishedRaw)) return
+  const { doc, selection } = view.state
+  if (!props.readonly && (userTyped || historySnapshot)) {
+    const history = userTyped ? captureHistory(view.state) : historySnapshot
+    resumeCache.putHistory(openedPath, openedScope, publishedRaw, history)
+  }
+  let snapshot
+  if (doc === initialDoc && publishedRaw === baseline && (!sourceBlocks || sourceBlocks.spans.length === doc.childCount)) {
+    snapshot = { json: resume?.json ?? doc.toJSON(), serialized: initialSerialized, spans: sourceBlocks?.spans }
+  } else if (!sourceBlocks && userTyped) {
+    // Preserve the exact saved editor tree (including trailing empty paragraphs)
+    // so undo positions refer to the same document when this tab is restored.
+    snapshot = { json: doc.toJSON(), serialized: crepe.getMarkdown() }
+  } else if (selection instanceof TextSelection) {
+    snapshot = { anchors: [selectionContext(selection.$anchor), selectionContext(selection.$head)] }
+  } else {
+    return
+  }
+  snapshot.selection = selection.toJSON()
+  resumeCache.put(openedPath, openedScope, publishedRaw, snapshot)
+}
 
 
 /** 比较往返结果时忽略空白差异，只看内容有没有实质变化 */
@@ -248,29 +405,6 @@ async function replaceImage(event) {
     emit('update:value', rewriteWorkspaceImages(target.markdown, [target.span], () => url))
   } catch (error) {
     uploadError.value = error.message || '替换失败'
-  }
-}
-
-function chooseNewImage() {
-  newImageBaseline = String(props.value)
-  newImagePosition = srcEl.value?.selectionStart ?? newImageBaseline.length
-  if (newImageInput.value) {
-    newImageInput.value.value = ''
-    newImageInput.value.click()
-  }
-}
-
-async function insertNewImage(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
-  try {
-    const url = await uploadImage(file)
-    if (String(props.value) !== newImageBaseline) throw new Error('正文已变化，请重新选择插入位置')
-    const label = file.name.replace(/\.[^.]+$/, '').replace(/[\[\]()\r\n]/g, '').slice(0, 80) || '图片'
-    const image = `\n![${label}](${url})\n`
-    emit('update:value', newImageBaseline.slice(0, newImagePosition) + image + newImageBaseline.slice(newImagePosition))
-  } catch (error) {
-    uploadError.value = error.message || '插入失败'
   }
 }
 
@@ -328,11 +462,15 @@ function decorateSlashMenu() {
   }
 }
 
-onMounted(async () => {
+onMounted(() => window.addEventListener('reader-flush-editor', flushPendingEdit))
+function createEditor() {
   crepe = new Crepe({
     root: host.value,
-    defaultValue: props.value,
+    // The state hook below parses the source and installs the actual document before first paint.
+    defaultValue: '',
+    features: { [Crepe.Feature.Latex]: false },
     featureConfigs: {
+      [Crepe.Feature.LinkTooltip]: { inputPlaceholder: '链接地址' },
       [Crepe.Feature.ImageBlock]: {
         onUpload: uploadImage,
         proxyDomURL: assetUrl,
@@ -369,6 +507,18 @@ onMounted(async () => {
               })
             }
           }
+          builder.getGroup('function').addItem('latex', {
+            label: TOOLBAR_LABELS.latex, icon: toolbarIcon(TOOLBAR_ICONS.latex),
+            active: () => false, onRun: () => beginFormula(false)
+          })
+          if (props.agentDocumentId || props.workspaceName) {
+            builder.getGroup('function').addItem('copy-agent', {
+              label: '复制给 Agent', icon: toolbarIcon('chat-3') + toolbarIcon('check'),
+              // Crepe preserves the selection on pointerdown. Copy on the native click
+              // so keyboard activation and touch cancellation follow button semantics.
+              active: () => false, onRun: () => {}
+            })
+          }
         }
       },
       [Crepe.Feature.Placeholder]: {
@@ -395,6 +545,9 @@ onMounted(async () => {
          * "内部链接"分支接住 —— 开成工具内部的标签页，不是浏览器标签页。
          */
         buildMenu: (builder) => {
+          builder.getGroup('advanced').addItem('math', {
+            label: '公式', icon: toolbarIcon(TOOLBAR_ICONS.latex), onRun: () => beginFormula(true)
+          })
           builder.getGroup('advanced').addItem('doc-link', {
             label: '插入文档',
             icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10.75 6a.75.75 0 0 0-1.5 0v4.25H5a.75.75 0 0 0 0 1.5h4.25V16a.75.75 0 0 0 1.5 0v-4.25H15a.75.75 0 0 0 0-1.5h-4.25V6Z"/><path d="M6.75 3h10.5A2.75 2.75 0 0 1 20 5.75v12.5A2.75 2.75 0 0 1 17.25 21H6.75A2.75 2.75 0 0 1 4 18.25V5.75A2.75 2.75 0 0 1 6.75 3Zm0 1.5c-.69 0-1.25.56-1.25 1.25v12.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25V5.75c0-.69-.56-1.25-1.25-1.25H6.75Z"/></svg>',
@@ -439,9 +592,59 @@ onMounted(async () => {
   // 编辑快捷键：改块类型、整块上移下移、列表缩进
   // 访客（旧只读链接进来的人）是只读的：编辑器层面直接关掉，不靠前端藏按钮
   if (props.readonly) crepe.setReadonly(true)
-  crepe.editor.use(editorShortcuts({ docId: props.docId, onOpenDoc: (path) => emit('open-doc', path) }))
+  crepe.editor.config(ctx => ctx.update(trailingConfig.key, previous => ({
+    ...previous,
+    getNode(state) {
+      const node = previous.getNode(state)
+      if (node) trailingPlaceholders.add(node)
+      return node
+    }
+  })))
+  crepe.editor.config(ctx => ctx.update(editorStateOptionsCtx, previous => options => {
+    const state = previous(options)
+    const { schema } = state
+    // A failed parser run can retain a half-built stack. Each recovery block
+    // starts clean, and the editor's normal parser remains available for paste.
+    const remark = ctx.get(remarkCtx)
+    const parse = source => ParserState.create(schema, remark)(source)
+    const serialize = ctx.get(serializerCtx)
+    let doc
+    if (resume?.json) {
+      try {
+        doc = schema.nodeFromJSON(resume.json)
+        doc.check()
+        if (resume.spans) sourceBlocks = restoreSourceBlocks(baseline, doc, resume.spans, serialize)
+        initialSerialized = resume.serialized
+      } catch {
+        doc = null
+        resume = undefined
+      }
+    }
+    if (!doc) {
+      try {
+        doc = parse(baseline)
+        initialSerialized = serialize(doc)
+        const roundTrip = normalizeMarkdown(initialSerialized, baseline)
+        if (roundTrip !== baseline) doc = null
+      } catch { doc = null }
+      if (!doc) {
+        sourceBlocks = sourceBackedDocument(baseline, schema, parse, serialize)
+        doc = sourceBlocks.doc
+        initialSerialized = serialize(doc)
+      }
+    }
+    const mergedSelection = mergeCaret && locateMergeCaret(doc, mergeCaret)
+    refocusMergedEditor = !!mergedSelection
+    const selection = mergedSelection || (resume?.selection && resumedSelection(doc, resume))
+    return { ...state, doc, ...(selection ? { selection } : {}),
+      ...(historySnapshot ? { plugins: withRestorableHistory(state.plugins) } : {}) }
+  }))
+  crepe.editor.use(editorShortcuts({ docId: props.docId, onOpenDoc: props.docFile ? target => emit('open-doc', target) : undefined }))
   crepe.editor.config(configureInlineStyleMarkdown)
   crepe.editor.config(configurePreservedMarkdown)
+  crepe.editor.config(configureColumnMarkdown)
+  crepe.editor.config(configureEditorMath)
+  crepe.editor.use(editorMathRemark).use(inlineMathNode).use(blockMathNode).use(inlineMathInput)
   crepe.editor.use(imagePaste(uploadImage,message=>{uploadError.value=message}))
   crepe.editor.use(columnsRemark).use(columnSchema).use(columnsSchema).use(columnsDrag)
   crepe.editor.use(richBlockRemark).use(calloutSchema).use(richBlockSchema).use(calloutKeys)
@@ -451,21 +654,41 @@ onMounted(async () => {
   crepe.editor.use(editorFold())
 
   crepe.on((listener) => {
-    listener.markdownUpdated((_ctx, md, prev) => {
-      if (!userTyped || lossy.value) return
-      if (md === prev) return
+    listener.markdownUpdated((_ctx, md) => {
+      if (disposed || superseded || !userTyped) return
+      const doc = viewOf()?.state.doc
+      if (doc === publishedDoc) return
       // 先把 Crepe 的外观改动还原掉再交出去，否则会把整篇文档重排后存回磁盘
       // spacing:false —— 保存时**不能**把原文的空行排布套回来，
       // 否则用户删掉的空行会被偷偷恢复（"删除会回退"就是这么来的）。
       // 空行还原只在下面那次往返检查里用。
-      emit('update:value', normalizeMarkdown(md, baseline, { spacing: false }))
+      const next = normalizedEdit(md)
+      publishedRaw = next
+      publishedDoc = doc
+      if (next !== props.value) emit('update:value', next)
     })
   })
 
-  await crepe.create()
+  return crepe.create()
+}
+
+onMounted(async () => {
+  try {
+    creating = createEditor()
+    await creating
+  } catch {
+    // A plugin startup failure still leaves a sanitized, formatted reading view.
+    // Rebuilding is explicit and invalidates the cached editor generation.
+    if (!disposed) editorUnavailable.value = true
+    return
+  }
+  if (disposed) return
 
   // 折叠装饰要能跟着目录那边的操作重画
   bindFoldView(viewOf())
+  if (refocusMergedEditor && document.activeElement === document.body && host.value?.checkVisibility()) {
+    viewOf().focus()
+  }
 
   /*
    * 块手柄上的委托：手柄是 Crepe 自己造的 DOM，点它不会走 Vue 的事件，
@@ -481,6 +704,7 @@ onMounted(async () => {
   document.addEventListener('pointerdown', onDocDown, true)
   document.addEventListener('keydown', onDocKey)
   window.addEventListener('scroll', onDocScroll, true)
+  window.addEventListener('resize', hideImageTools)
   window.addEventListener('reader-insert-block', insertRich)
   window.addEventListener('reader-open-document', openRichDoc)
   window.addEventListener('reader-restore-version', restoreVersion)
@@ -488,8 +712,10 @@ onMounted(async () => {
   host.value?.addEventListener('click', openCalloutIcon)
   host.value?.addEventListener('click', openRawBlock)
   host.value?.addEventListener('keydown', onCalloutIconKey, true)
+  host.value?.addEventListener('mousedown', onContextMouseDown, true)
   host.value?.addEventListener('contextmenu', openContextMenu)
   host.value?.addEventListener('pointerover', onEditorPointerOver)
+  host.value?.addEventListener('click', onEditorImageTap)
   host.value?.addEventListener('pointerout', onEditorPointerOut)
 
   // 开发期把编辑器和原文快照暴露出来，方便查往返到底差在哪
@@ -509,16 +735,9 @@ onMounted(async () => {
     }
   }
 
-  // 报告一次往返结果：解析再序列化之后跟原文差多少，差得多就提醒用户
-  // 原样过一遍编辑器再还原，如果回不到原文，说明这篇里有编辑器表达不了的结构
-  // （最典型的是表格单元格里的 <br>），这篇就不能自动保存，否则会静默损坏原文
-  initialSerialized = crepe.getMarkdown()
-  const roundTrip = normalizeMarkdown(initialSerialized, baseline)
-  const differs = roundTrip.replace(/\s+$/, '') !== String(baseline).replace(/\s+$/, '')
-  // 只有格式写法不同才让富文本继续工作；真正有内容差异时保留源码编辑。
-  // 打开文档本身绝不自动改写磁盘内容。
-  lossy.value = differs && !isCosmeticOnly(baseline, roundTrip)
-  emit('lossy', lossy.value)
+  restoreHistory(viewOf(), historySnapshot)
+  initialDoc = viewOf().state.doc
+  publishedDoc = initialDoc
 
   // 只有真的敲了键盘、粘贴或拖放，才算用户编辑过
   for (const ev of ['keydown', 'paste', 'cut', 'drop', 'beforeinput']) {
@@ -566,6 +785,14 @@ function viewOf() {
 
 function restoreVersion(e){if(!props.readonly&&e.detail.path===props.docFile)emit('restore',e.detail.content)}
 function openRichDoc(e){emit('open-doc',e.detail)}
+function openReadingReference(event) {
+  const href = event.target.closest?.('a[href]')?.getAttribute('href')
+  const reference = props.docFile && href && resolveDocReference(href, props.docFile)
+  if (reference) {
+    event.preventDefault()
+    emit('open-doc', reference)
+  }
+}
 const calloutPicker=shallowRef(null),rawBlock=shallowRef(null),formula=shallowRef(null)
 function onHeadingBoundary(event){
  if(props.readonly||event.isComposing||event.shiftKey||event.metaKey||event.ctrlKey||event.altKey||!['Backspace','Enter'].includes(event.key))return
@@ -575,7 +802,7 @@ function onHeadingBoundary(event){
  const index=$from.index(0),doc=view.state.doc
  let start=index
  while(start>0&&doc.child(start-1).type.name==='paragraph'&&doc.child(start-1).content.size===0)start--
- const title=$from.parent.attrs.level===1&&Array.from({length:start},(_,i)=>doc.child(i)).every(n=>n.type.name==='reader_raw'&&/^(---|\+\+\+)\r?\n/.test(n.attrs.value))
+ const title=$from.parent.attrs.level===1&&Array.from({length:start},(_,i)=>doc.child(i)).every(isFrontmatterBlock)
  if(event.key==='Backspace'){
   if(start<index){event.preventDefault();event.stopImmediatePropagation();const from=$from.before()-Array.from({length:index-start},(_,i)=>doc.child(start+i).nodeSize).reduce((a,b)=>a+b,0);userTyped=true;view.dispatch(view.state.tr.delete(from,$from.before()));return}
   if(title){event.preventDefault();event.stopImmediatePropagation()}
@@ -584,14 +811,82 @@ function onHeadingBoundary(event){
  }
 }
 
-function decorateFormula(){if(props.readonly)return;for(const el of host.value?.querySelectorAll('[data-type="math_inline"]')||[]){el.setAttribute('tabindex','0');el.setAttribute('role','button');el.setAttribute('aria-label','编辑公式')}}
-function openFormula(e){
- if(props.readonly||(e.type==='keydown'&&e.key!=='Enter'))return
- const el=e.target.closest('[data-type="math_inline"]'),view=viewOf();if(!el||!view)return
- e.preventDefault();e.stopImmediatePropagation()
- view.state.doc.descendants((node,pos)=>{if(node.type.name==='math_inline'&&view.nodeDOM(pos)===el){formula.value={pos,node};return false}})
+const formulaSelector = '[data-type="math_inline"],[data-type="reader_math_block"]'
+function decorateFormula() {
+  if (props.readonly) return
+  for (const el of host.value?.querySelectorAll(formulaSelector) || []) {
+    el.tabIndex = 0
+    el.setAttribute('role', 'button')
+    el.setAttribute('aria-label', '编辑公式')
+  }
 }
-function saveFormula(value){const view=viewOf(),target=formula.value;if(!view||!target||view.state.doc.nodeAt(target.pos)!==target.node)return;userTyped=true;view.dispatch(view.state.tr.setNodeMarkup(target.pos,undefined,{...target.node.attrs,value}));formula.value=null;view.focus()}
+
+function beginFormula(display) {
+  const view = viewOf()
+  if (!view?.editable) return
+  const { doc, selection } = view.state
+  const { $from, from, to } = selection
+  if (display) {
+    if ($from.parent.type.name !== 'paragraph') return
+    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uFFFC')
+    const slash = /(?:^|\s)\/[^\s/]*$/.exec(before)
+    const commandLength = slash ? before.length - before.lastIndexOf('/') : before.trim() === '$$' ? 2 : 0
+    if ($from.parentOffset === commandLength && $from.parent.content.size === commandLength) {
+      formula.value = { doc, from: $from.before(), to: $from.after(), value: '', display }
+    } else {
+      formula.value = { doc, from: from - commandLength, to, value: '', display }
+    }
+  } else if ($from.sameParent(selection.$to) && !$from.parent.type.spec.code) {
+    formula.value = { doc, from, to, value: doc.textBetween(from, to), display }
+  }
+}
+
+function openFormula(event) {
+  if (props.readonly || event.isComposing) return
+  if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return
+  if (event.type === 'pointerdown' && event.button !== 0) return
+  const el = event.target.closest(formulaSelector)
+  const view = viewOf()
+  if (!view) return
+  if (!el) {
+    if (event.type === 'keydown' && event.key === 'Enter' && !event.shiftKey && view.hasFocus() &&
+        view.state.selection.empty && view.state.selection.$from.parentOffset === 2 &&
+        view.state.selection.$from.parent.textContent === '$$') {
+      beginFormula(true)
+      if (formula.value) { event.preventDefault(); event.stopImmediatePropagation() }
+    }
+    return
+  }
+  const pos = view.posAtDOM(el, 0)
+  const node = view.state.doc.nodeAt(pos)
+  if (!node || !['math_inline','reader_math_block'].includes(node.type.name)) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  formula.value = { pos, node, value: node.attrs.value, display: node.attrs.display }
+}
+
+function saveFormula(value) {
+  const view = viewOf(), target = formula.value
+  formula.value = null
+  if (!view?.editable || !target) return
+  const { state } = view
+  let transaction = state.tr
+  if (target.node) {
+    if (state.doc.nodeAt(target.pos) !== target.node) return
+    if (value !== target.node.attrs.value) transaction.setNodeMarkup(target.pos, undefined, { ...target.node.attrs, value })
+  } else {
+    if (state.doc !== target.doc) return
+    const type = state.schema.nodes[target.display ? 'reader_math_block' : 'math_inline']
+    transaction.replaceRangeWith(target.from, target.to, type.create({ value, display: target.display }))
+    const after = transaction.mapping.map(target.to, 1)
+    transaction.setSelection(Selection.near(transaction.doc.resolve(after), 1))
+  }
+  if (transaction.docChanged) {
+    userTyped = true
+    view.dispatch(transaction.scrollIntoView())
+  }
+  view.focus()
+}
 
 function openRawBlock(e){
  if(props.readonly)return
@@ -604,11 +899,11 @@ function openRawBlock(e){
 function saveRawBlock(value){
  const view=viewOf(),target=rawBlock.value
  if(!view||!target||view.state.doc.nodeAt(target.pos)!==target.node)return
- userTyped=true;view.dispatch(view.state.tr.setNodeMarkup(target.pos,undefined,{value}));rawBlock.value=null
+ userTyped=true;view.dispatch(view.state.tr.setNodeMarkup(target.pos,undefined,{...target.node.attrs,value}));rawBlock.value=null
 }
 
 function openCalloutIcon(e){
- if(props.readonly||lossy.value)return
+ if(props.readonly)return
  const anchor=e.target.closest('.rich-callout-icon'),el=anchor?.closest('[data-reader-callout], [data-reader-block]'),view=viewOf()
  if(!el||!view)return
  const pos=view.posAtDOM(el,0)-(el.hasAttribute('data-reader-callout')?1:0),node=view.state.doc.nodeAt(pos)
@@ -639,7 +934,7 @@ function editRich(e){
  window.dispatchEvent(new CustomEvent('reader-edit-block',{detail:{path:props.docFile,pos,value:JSON.parse(raw),raw:JSON.stringify(JSON.parse(raw))}}))
 }
 function insertRich(e){
- const view=viewOf(),d=e.detail;if(!view||props.readonly||lossy.value||d.path!==props.docFile)return
+ const view=viewOf(),d=e.detail;if(!view||props.readonly||d.path!==props.docFile)return
  const replacement=crepe.editor.ctx.get(parserCtx)(richMarkdown(d.value)).firstChild
  if(!replacement)return
  let tr=view.state.tr
@@ -685,7 +980,7 @@ function selectionTone(name) {
 
 function toggleUnderline() {
   const view = viewOf()
-  if (!view || props.readonly || lossy.value) return
+  if (!view || props.readonly) return
   const { from, to } = view.state.selection
   if (from >= to) return
   const type = view.state.schema.marks.readerUnderline
@@ -700,14 +995,12 @@ function toggleUnderline() {
 
 function openStyleMenu() {
   const view = viewOf()
-  if (!view || view.state.selection.empty || props.readonly || lossy.value) return
+  if (!view || view.state.selection.empty || props.readonly) return
   const button = host.value?.querySelector('[data-toolbar-item="reader-style"]')
-  const rect = button?.getBoundingClientRect()
-  if (!rect) return
+  if (!button) return
   closeMenu()
   styleMenu.value = {
-    x: Math.max(8, Math.min(rect.left, window.innerWidth - 268)),
-    y: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 210)),
+    anchor: button,
     from: view.state.selection.from,
     to: view.state.selection.to,
     color: selectionTone('readerColor'),
@@ -772,36 +1065,10 @@ function imageContextItems() {
   ]
 }
 
-async function copyPlainText(text) {
-  const value = String(text ?? '')
-  if (!value) return false
-  try {
-    await navigator.clipboard.writeText(value)
-    return true
-  } catch {
-    /* 权限被拒时退回 execCommand，桌面端通常仍然可用 */
-  }
-  try {
-    const area = document.createElement('textarea')
-    area.value = value
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.left = '-9999px'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    const ok = document.execCommand('copy')
-    area.remove()
-    return ok
-  } catch {
-    return false
-  }
-}
-
-function selectionText(view) {
-  const { from, to } = view.state.selection
-  if (from >= to) return ''
-  return view.state.doc.textBetween(from, to, '\n', '\n')
+function onContextMouseDown(event) {
+  // ProseMirror can refocus the selected image on right mouseup and scroll the menu away.
+  if (event.button !== 2 || !event.target.closest?.('.ProseMirror')) return
+  if (!event.target.closest('input, textarea, .cm-editor')) event.stopPropagation()
 }
 
 function openContextMenu(event) {
@@ -846,12 +1113,14 @@ function openContextMenu(event) {
 
   const anchor = target.closest('a[href]')
   const href = anchor?.getAttribute('href') || ''
-  const internal = href ? resolveDocHref(href, props.docFile || props.docId) : ''
+  const internal = href && props.docFile ? resolveDocReference(href, props.docFile) : null
   const link = anchor ? { href, internal, label: anchor.textContent.trim() } : null
   const empty = view.state.selection.empty
   const items = [
     { id: 'cut', label: '剪切', icon: PhScissors, shortcut: '⌘X', disabled: empty || props.readonly },
     { id: 'copy', label: '复制', icon: PhCopy, shortcut: '⌘C', disabled: empty },
+    ...(!empty && (props.agentDocumentId || props.workspaceName)
+      ? [{ id: 'copy-agent', label: '复制给 Agent', icon: PhChatCircle }] : []),
     { id: 'paste', label: '粘贴', icon: PhClipboard, shortcut: '⌘V', disabled: props.readonly },
     { id: 'sep-1', separator: true },
     { id: 'select-all', label: '全选', icon: PhSquaresFour, shortcut: '⌘A' }
@@ -875,20 +1144,66 @@ function openContextMenu(event) {
 
 async function pasteClipboard(view) {
   if (props.readonly) return
+  const { doc, selection } = view.state
   try {
-    const text = await navigator.clipboard.readText()
-    if (!text) return
-    let tr = view.state.tr.insertText(text)
-    if (view.state.schema.marks.link) tr = tr.removeStoredMark(view.state.schema.marks.link)
-    userTyped = true
-    view.dispatch(tr.scrollIntoView())
+    const data = await readEditorClipboard()
+    if (!data.types.length) return
+    if (view.isDestroyed || view.state.doc !== doc || !view.state.selection.eq(selection)) return
     view.focus()
+    view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
   } catch {
     actionError.value = '浏览器没有允许读取剪贴板，请直接用 ⌘V 粘贴'
   }
 }
 
-async function onContextPick(id) {
+function clearCopyHint() {
+  clearTimeout(copyTimer)
+  copyAttempt++
+  copyButton?.removeAttribute('data-feedback-active')
+  copyButton = null
+  copyResult.value = ''
+}
+
+async function copyForAgent(view, rect) {
+  if (!view || !rect) return
+  clearCopyHint()
+  const attempt = copyAttempt
+  copyButton = host.value?.querySelector('[data-toolbar-item="copy-agent"]')
+  copyButton?.setAttribute('data-feedback-active', '')
+  async function show(result) {
+    if (attempt !== copyAttempt) return
+    copyResult.value = result
+    await nextTick()
+    const hint = copyHint.value
+    if (!hint || attempt !== copyAttempt) return
+    const width = hint.offsetWidth, height = hint.offsetHeight
+    const viewport = window.visualViewport
+    const x = viewport?.offsetLeft || 0, y = viewport?.offsetTop || 0
+    const right = x + (viewport?.width || innerWidth), bottom = y + (viewport?.height || innerHeight)
+    hint.style.left = Math.max(x + 8, Math.min(rect.left + (rect.width - width) / 2, right - width - 8)) + 'px'
+    const top = rect.top - height - 8
+    hint.style.top = Math.max(y + 8, Math.min(top >= y + 8 ? top : rect.bottom + 8, bottom - height - 8)) + 'px'
+  }
+
+  const text = selectionHandoff(view, props.agentDocumentId, props.docFile, props.workspaceName)
+  view.focus()
+  let result = 'empty'
+  if (text) {
+    copyTimer = setTimeout(() => show('pending'), 250)
+    result = await copyText(text) ? 'copied' : 'denied'
+  }
+  if (disposed || attempt !== copyAttempt) return
+  clearTimeout(copyTimer)
+  show(result)
+  copyTimer = setTimeout(clearCopyHint, result === 'copied' ? 1800 : 5000)
+}
+
+function onToolbarCopy(event) {
+  const button = event.target.closest?.('[data-toolbar-item="copy-agent"]')
+  if (button) copyForAgent(viewOf(), button.getBoundingClientRect())
+}
+
+async function onContextPick(id, rect) {
   const menu = contextMenu.value
   closeContextMenu()
   if (!menu) return
@@ -898,21 +1213,20 @@ async function onContextPick(id) {
   }
   const view = viewOf()
   if (!view) return
+  if (id === 'copy-agent') return copyForAgent(view, rect)
   if (id === 'cut' || id === 'copy') {
-    const text = selectionText(view)
-    if (!text) return
-    const ok = await copyPlainText(text)
-    if (!ok) {
+    const { doc, selection } = view.state
+    if (selection.empty || (id === 'cut' && props.readonly)) return
+    if (!(await copySelection(view))) {
       actionError.value = '复制失败，请用 ⌘C / ⌘X 重试'
       return
     }
+    if (view.isDestroyed || view.state.doc !== doc || !view.state.selection.eq(selection)) return
     if (id === 'cut') {
       userTyped = true
-      view.dispatch(view.state.tr.deleteSelection().scrollIntoView())
-      view.focus()
-    } else {
-      view.focus()
+      view.dispatch(view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut'))
     }
+    view.focus()
     return
   }
   if (id === 'paste') return pasteClipboard(view)
@@ -933,7 +1247,7 @@ async function onContextPick(id) {
   }
   if (id === 'copy-link') {
     const value = menu.link.internal ? menu.link.href : imageAbsolute(menu.link.href)
-    const ok = await copyPlainText(value)
+    const ok = await copyText(value)
     if (!ok) actionError.value = '复制链接失败'
   }
 }
@@ -1008,7 +1322,7 @@ async function imageAction(action, info) {
     return
   }
   if (action === 'copy') {
-    const ok = await copyPlainText(imageAbsolute(node.attrs.src))
+    const ok = await copyText(imageAbsolute(node.attrs.src))
     if (!ok) actionError.value = '复制图片地址失败'
     return
   }
@@ -1045,8 +1359,9 @@ async function onImageReplace(event) {
   }
 }
 
-function showImageTools(block) {
+async function showImageTools(block) {
   if (!block) return
+  cancelImageHide()
   const view = viewOf()
   if (!view) return
   let pos
@@ -1054,15 +1369,25 @@ function showImageTools(block) {
   const node = imageNodeAt(pos)
   if (!node) return
   if (imageTools.value?.pos === pos) return
-  const rect = block.getBoundingClientRect()
-  const width = props.readonly ? 110 : 210
-  imageTools.value = {
-    pos,
-    src: node.attrs.src,
-    caption: node.attrs.caption || '',
-    x: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
-    y: Math.max(8, rect.top + 8)
+  imageTools.value = { pos, src: node.attrs.src, caption: node.attrs.caption || '', x: 0, y: 0 }
+  await nextTick()
+  const panel = imageToolsPanel.value
+  if (!panel || imageTools.value?.pos !== pos || !block.isConnected) return
+
+  // Centered or resized images can be much narrower than their editor row.
+  const img = block.querySelector('img')
+  const rect = (img?.naturalWidth ? img : block).getBoundingClientRect()
+  const width = panel.offsetWidth, height = panel.offsetHeight
+  const gap = 8
+  const fits = rect.width >= width + gap * 2 && rect.height >= height + gap * 2
+  const x = fits ? rect.right - width - gap : rect.left + (rect.width - width) / 2
+  let y = rect.top + gap
+  if (!fits) {
+    y = rect.bottom + gap + height <= window.innerHeight - gap
+      ? rect.bottom + gap : rect.top - height - gap
   }
+  imageTools.value.x = Math.max(gap, Math.min(x, window.innerWidth - width - gap))
+  imageTools.value.y = Math.max(gap, Math.min(y, window.innerHeight - height - gap))
 }
 
 function cancelImageHide() {
@@ -1072,9 +1397,14 @@ function hideImageTools() {
   clearTimeout(imageHideTimer)
   imageTools.value = null
 }
+function onImageToolsLeave(event) {
+  if (event.pointerType !== 'touch') scheduleImageHide()
+}
 function scheduleImageHide() {
   clearTimeout(imageHideTimer)
-  imageHideTimer = window.setTimeout(() => { imageTools.value = null }, 220)
+  imageHideTimer = window.setTimeout(() => {
+    if (!imageToolsPanel.value?.contains(document.activeElement)) hideImageTools()
+  }, 220)
 }
 
 function showDocLinkCard(anchor) {
@@ -1100,12 +1430,17 @@ function scheduleDocCardHide() {
   docCardHideTimer = window.setTimeout(() => { docLinkCard.value = null }, 120)
 }
 
+function onEditorImageTap(event) {
+  const touch = event.pointerType ? event.pointerType === 'touch' : matchMedia('(hover:none)').matches
+  const image = touch && event.target.closest?.('.milkdown-image-block img')
+  if (image) showImageTools(image.closest('.milkdown-image-block'))
+}
 function onEditorPointerOver(event) {
   const target = event.target
   if (!(target instanceof Element)) return
   const image = target.closest('.milkdown-image-block')
   if (image) {
-    showImageTools(image)
+    if (event.pointerType !== 'touch') showImageTools(image)
     return
   }
   const anchor = target.closest('.ProseMirror a[href]')
@@ -1115,7 +1450,7 @@ function onEditorPointerOut(event) {
   const target = event.target
   if (!(target instanceof Element)) return
   const image = target.closest('.milkdown-image-block')
-  if (image && !image.contains(event.relatedTarget)) scheduleImageHide()
+  if (image && !image.contains(event.relatedTarget)) onImageToolsLeave(event)
   const anchor = target.closest('.ProseMirror a[href]')
   if (anchor && !anchor.contains(event.relatedTarget)) scheduleDocCardHide()
 }
@@ -1215,11 +1550,9 @@ function openBlockMenu(handleEl) {
     return
   }
   const foldInfo = foldInfoOf(el)
-  const W = 196
-  const H = 400
   menu.value = {
-    x: Math.max(8, Math.min(hr.right + 10, window.innerWidth - W - 8)),
-    y: Math.max(8, Math.min(hr.top, window.innerHeight - H)),
+    x: hr.right + 10,
+    y: hr.top,
     groups: menuGroups(blockKindOf(view.state), foldInfo),
     el,
     foldInfo
@@ -1229,7 +1562,7 @@ function openBlockMenu(handleEl) {
 function onHandleDown(e) {
   if (props.readonly) return
   const toolbarItem = e.target?.closest?.('[data-toolbar-item]')
-  if (toolbarItem) userTyped = true
+  if (toolbarItem && toolbarItem.dataset.toolbarItem !== 'copy-agent') userTyped = true
   const handle = e.target?.closest?.('.milkdown-block-handle')
   if (!handle) return
   const items = handle.querySelectorAll('.operation-item')
@@ -1266,6 +1599,7 @@ function onHeadingClick(e) {
 }
 
 function onDocDown(e) {
+  clearCopyHint()
   const target = e.target
   if (target?.closest?.('.bt-menu, .text-style-menu, .editor-context-menu, .reader-image-tools, [data-toolbar-item="reader-style"]')) return
   if (menu.value) closeMenu()
@@ -1282,6 +1616,7 @@ function onDocDown(e) {
  */
 function onDocScroll(e) {
   if (e.target?.closest?.('.editor-context-menu')) return
+  if (copyResult.value) clearCopyHint()
   if (styleMenu.value && !e.target?.closest?.('.text-style-menu')) styleMenu.value = null
   closeContextMenu()
   hideImageTools()
@@ -1294,6 +1629,7 @@ function onDocScroll(e) {
 
 function onDocKey(e) {
   if (e.key === 'Escape') {
+    clearCopyHint()
     const hadMenu = !!menu.value || !!styleMenu.value || !!contextMenu.value || !!imageTools.value || !!imagePreview.value || !!docLinkCard.value
     closeMenu()
     styleMenu.value = null
@@ -1328,11 +1664,17 @@ async function onMenuPick(kind) {
   applyBlockKind(view, kind)
 }
 
-function onSourceInput(e) {
-  emit('update:value', e.target.value)
-}
-
 onBeforeUnmount(async () => {
+  disposed = true
+  clearCopyHint()
+  try {
+    rememberEditor()
+  } catch {
+    // A snapshot can exceed the serializer's nesting limit. Always finish teardown.
+  }
+  resume = undefined
+  historySnapshot = undefined
+  window.removeEventListener('reader-flush-editor', flushPendingEdit)
   window.removeEventListener('reader-insert-block', insertRich)
   window.removeEventListener('reader-open-document', openRichDoc)
   window.removeEventListener('reader-restore-version', restoreVersion)
@@ -1340,8 +1682,10 @@ onBeforeUnmount(async () => {
   host.value?.removeEventListener('click', openCalloutIcon)
   host.value?.removeEventListener('click', openRawBlock)
   host.value?.removeEventListener('keydown', onCalloutIconKey, true)
+  host.value?.removeEventListener('mousedown', onContextMouseDown, true)
   host.value?.removeEventListener('contextmenu', openContextMenu)
   host.value?.removeEventListener('pointerover', onEditorPointerOver)
+  host.value?.removeEventListener('click', onEditorImageTap)
   host.value?.removeEventListener('pointerout', onEditorPointerOut)
   clearTimeout(imageHideTimer)
   clearTimeout(docCardHideTimer)
@@ -1354,9 +1698,12 @@ onBeforeUnmount(async () => {
   document.removeEventListener('pointerdown', onDocDown, true)
   document.removeEventListener('keydown', onDocKey)
   window.removeEventListener('scroll', onDocScroll, true)
+  window.removeEventListener('resize', hideImageTools)
   observer?.disconnect()
   mermaid.stop()
   colw.detach()
+  // An editor replaced during initialization must finish creating before teardown.
+  await creating?.catch(() => {})
   try {
     await crepe?.destroy()
   } catch {
@@ -1365,7 +1712,3 @@ onBeforeUnmount(async () => {
   crepe = null
 })
 </script>
-
-<style scoped>.source-mode-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.source-mode-bar>span{flex:1;min-width:0;font-size:12px}.source-mode-bar button{white-space:nowrap}</style>
-
-<style scoped>.source-mode-note{max-width:var(--measure,960px);margin:12px auto 0;padding:8px 14px;color:var(--c-sub);font-size:12px}.source-mode-note .lossy-btn{background:var(--c-field);border:0;color:var(--c-sub)}.source-mode-note .lossy-btn:hover{background:var(--c-hover)}.source-mode-note .source-mode-bar{gap:8px;justify-content:flex-end}.source-mode-note .source-mode-bar>span{margin-right:auto}</style>

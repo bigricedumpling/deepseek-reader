@@ -5,6 +5,7 @@
  * 换端口：`APP_PORT=8103 node scripts/e2e/controls.mjs`
  * 需要无头 Chrome 能连上 CDP；端口自动挑，冲突时用 CDP_PORT 指定。
  */
+import { openReadingSettings, chooseReadingSetting } from './reading-settings.mjs'
 import { spawn } from 'node:child_process'
 const APP_PORT = process.env.APP_PORT || 8090
 const PORT=Number(process.env.CDP_PORT||0) || (9500 + Math.floor(Math.random()*400))
@@ -27,17 +28,11 @@ try{
   await sleep(2500)
   const md0 = await ev(`return window.__crepe.getMarkdown().length`)
 
-  const openMenu=async(title,marker)=>{ if(await ev(`const p=document.querySelector('.pop-menu'); return !!(p&&p.textContent.includes(${JSON.stringify(marker)}))`))return true
-    const r=await ev(`const b=[...document.querySelectorAll('button.btn-icon')].find(x=>x.title===${JSON.stringify(title)}); if(!b)return '缺按钮'; b.click(); return 'ok'`); await sleep(400); return r==='ok' }
-  const chip=async(sec,txt)=>{ const menu=(sec==='主题'||sec==='缩放')?'外观':'排版'; await openMenu(menu,sec); const r=await ev(`
-      const p=document.querySelector('.pop-menu'); if(!p)return '没菜单';
-      const lab=[...p.querySelectorAll('.type-label')].find(l=>l.textContent.trim().startsWith(${JSON.stringify(sec)}));
-      if(!lab)return '没分区 '+${JSON.stringify(sec)};
-      let el=lab.nextElementSibling; while(el&&!el.classList.contains('type-row'))el=el.nextElementSibling;
-      if(!el)return '没选项行';
-      const b=[...el.querySelectorAll('button')].find(x=>x.textContent.trim()===${JSON.stringify(txt)});
-      if(!b)return '没选项 '+${JSON.stringify(txt)};
-      b.click(); return 'ok';`); await sleep(430); return r }
+  const chip = async (group, label) => {
+    await chooseReadingSetting(ev, group, label)
+    await sleep(430)
+    return 'ok'
+  }
   const P=()=>ev(`
     const sc=document.getElementById('main-scroll-container');
     const pm=document.querySelector('.crepe-host .ProseMirror');
@@ -62,35 +57,35 @@ try{
     ck('三档宽度递增且互不相同', w['窄']<w['中'] && w['中']<w['宽'], `窄=${w['窄']} 中=${w['中']} 宽=${w['宽']}`)
   }
   console.log('=== 正文字号 ===')
-  for(const [l,e] of [['小','14px'],['特大','18.5px'],['大','17px'],['中','15.5px']]){const r=await chip('正文字号',l);const p=await P();ck(`字号 ${l}`,p.pSize===e,`${r==='ok'?'':r} ${p.pSize} 期望 ${e}`)}
+  for(const [l,e] of [['小','14px'],['特大','18.5px'],['大','17px'],['中','15.5px']]){const r=await chip('字号',l);const p=await P();ck(`字号 ${l}`,p.pSize===e,`${r==='ok'?'':r} ${p.pSize} 期望 ${e}`)}
   console.log('=== 正文字体 ===')
   for(const [l,e] of [['无衬线','sans'],['楷体','kai'],['苹方','ping'],['衬线','serif']]){const r=await chip('正文字体',l);const p=await P();ck(`字体 ${l}`,p.dataFont===e,`${r==='ok'?'':r} dataFont=${p.dataFont} 期望 ${e}`)}
   console.log('=== 中文加粗 ===')
-  for(const [l,e] of [['加粗','600'],['特黑','900']]){const r=await chip('中文加粗',l);const p=await P();ck(`加粗 ${l}`,p.stW===e,`${r==='ok'?'':r} ${p.stW} 期望 ${e}`)}
+  for(const [l,e] of [['标准加粗','600'],['特黑','900']]){const r=await chip('中文加粗',l);const p=await P();ck(`加粗 ${l}`,p.stW===e,`${r==='ok'?'':r} ${p.stW} 期望 ${e}`)}
   console.log('=== 中文斜体 ===')
-  for(const [l,e] of [['不替换','inherit'],['楷体','ChillKai']]){const r=await chip('中文斜体',l);const p=await P();ck(`斜体 ${l}`,p.emFam.includes(e)||(e==='inherit'&&!p.emFam.includes('ChillKai')),`${r==='ok'?'':r} ${p.emFam}/${p.emSty}`)}
+  for(const [l,e] of [['保留字形','inherit'],['楷体替代','ChillKai']]){const r=await chip('中文斜体',l);const p=await P();ck(`斜体 ${l}`,p.emFam.includes(e)||(e==='inherit'&&!p.emFam.includes('ChillKai')),`${r==='ok'?'':r} ${p.emFam}/${p.emSty}`)}
   console.log('=== 段落 ===')
-  for(const [l,ei] of [['缩进式','31px'],['段距式','0px']]){const r=await chip('段落',l);const p=await P();ck(`段落 ${l}`,p.pIndent===ei,`${r==='ok'?'':r} indent=${p.pIndent} 期望 ${ei}`)}
+  for(const [l,ei] of [['首行缩进','31px'],['段间距','0px']]){const r=await chip('段落样式',l);const p=await P();ck(`段落 ${l}`,p.pIndent===ei,`${r==='ok'?'':r} indent=${p.pIndent} 期望 ${ei}`)}
   console.log('=== 字间距 ===')
   const s0=(await P()).pTrack
-  await openMenu('排版','字间距')
-  await ev(`const p=document.querySelector('.pop-menu'); const i=p.querySelector('input[type=range]'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(i,'0.06'); i.dispatchEvent(new Event('input',{bubbles:true})); return true`)
+  await openReadingSettings(ev, true)
+  await ev(`const p=document.querySelector('.pop-menu'); const i=p.querySelector('input[aria-label=字间距]'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(i,'0.06'); i.dispatchEvent(new Event('input',{bubbles:true})); return true`)
   await sleep(450)
   const s1=(await P()).pTrack
   ck('字间距可调', s0!==s1, `${s0} → ${s1}`)
-  await openMenu('排版','字间距')
-  await ev(`const p=document.querySelector('.pop-menu'); const i=p.querySelector('input[type=range]'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(i,'0'); i.dispatchEvent(new Event('input',{bubbles:true})); return true`)
+  await openReadingSettings(ev, true)
+  await ev(`const p=document.querySelector('.pop-menu'); const i=p.querySelector('input[aria-label=字间距]'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(i,'0'); i.dispatchEvent(new Event('input',{bubbles:true})); return true`)
   await sleep(300)
   console.log('=== 表格 ===')
-  for(const [l,e] of [['同正文','measure'],['铺满','full']]){const r=await chip('表格宽度',l);const p=await P();ck(`表格宽 ${l}`,p.dataTable===e,`${r==='ok'?'':r} ${p.dataTable} 期望 ${e}`)}
+  for(const [l,e] of [['跟随正文','measure'],['铺满页面','full']]){const r=await chip('表格宽度',l);const p=await P();ck(`表格宽 ${l}`,p.dataTable===e,`${r==='ok'?'':r} ${p.dataTable} 期望 ${e}`)}
   for(const [l,e] of [['中','center'],['右','right'],['左','left']]){const r=await chip('表格对齐',l);const p=await P();ck(`表格对齐 ${l}`,p.tdAlign===e,`${r==='ok'?'':r} ${p.tdAlign} 期望 ${e}`)}
   console.log('=== 外观 ===')
-  for(const [l,e,de] of [['深色','dark','dark'],['浅色','light','light'],['跟随系统','auto','light']]){const r=await chip('主题',l);const p=await P();ck(`主题 ${l}`,p.lsTheme===e&&p.dataTheme===de,`${r==='ok'?'':r} ls=${p.lsTheme}/${e} 解析=${p.dataTheme}/${de}`)}
-  await openMenu('外观','缩放')
+  for(const [l,e,de] of [['深色','dark','dark'],['浅色','light','light'],['柔和','sepia','sepia']]){const r=await chip('外观',l);const p=await P();ck(`主题 ${l}`,p.lsTheme===e&&p.dataTheme===de,`${r==='ok'?'':r} ls=${p.lsTheme}/${e} 解析=${p.dataTheme}/${de}`)}
+  await openReadingSettings(ev, true)
   {
     // --measure 现在是 min(绝对, 比例)，断绝对值没意义，直接看正文实测宽度
     const m={}
-    for(const l of ['80','100','150']){ const r=await chip('缩放',l); await sleep(500); m[l]={w:await ev(`return Math.round(document.querySelector('.crepe-host .ProseMirror > p').getBoundingClientRect().width)`), fs:await ev(`return getComputedStyle(document.querySelector('.crepe-host .ProseMirror > p')).fontSize`)}; if(r!=='ok') console.log('   点击失败:',r) }
+    for(const l of ['80','100','150']){ const r=await chip('阅读缩放',l); await sleep(500); m[l]={w:await ev(`return Math.round(document.querySelector('.crepe-host .ProseMirror > p').getBoundingClientRect().width)`), fs:await ev(`return getComputedStyle(document.querySelector('.crepe-host .ProseMirror > p')).fontSize`)}; if(r!=='ok') console.log('   点击失败:',r) }
     console.log('   实测:', JSON.stringify(m))
     ck('缩放等比改变字号与行宽', parseFloat(m['80'].fs)<parseFloat(m['100'].fs) && parseFloat(m['100'].fs)<parseFloat(m['150'].fs) && m['80'].w<=m['100'].w && m['100'].w<=m['150'].w, `80=${m['80'].fs}/${m['80'].w} 100=${m['100'].fs}/${m['100'].w} 150=${m['150'].fs}/${m['150'].w}`)
   }

@@ -57,7 +57,7 @@ function htmlChanges(html, resolve, add) {
           while (pos < value.length && !/\s/.test(value[pos])) pos++
           const rawUrl = value.slice(from, pos).replace(/,+$/, '')
           if (!rawUrl) continue
-          const replacement = resolve(rawUrl.replace(/&amp;/gi, '&'))
+          const replacement = resolve(rawUrl.replace(/&amp;/gi, '&'), 'image')
           if (replacement) add(start + from, start + from + rawUrl.length, replacement.replaceAll('&', '&amp;'))
           if (from + rawUrl.length < pos) continue
           // Commas inside a URL (including data: URLs) are part of the resource.
@@ -70,7 +70,7 @@ function htmlChanges(html, resolve, add) {
           }
         }
       } else {
-        const replacement = resolve(attr.value)
+        const replacement = resolve(attr.value, node.tagName === 'a' ? 'link' : 'image')
         if (replacement) add(start, end, replacement.replaceAll('&', '&amp;'))
       }
     }
@@ -109,7 +109,7 @@ function richChanges(node, resolve, add) {
     const offsets = jsonOffsets(json, field)
     const inner = (start, end, value) => add(offsets[start], offsets[end], JSON.stringify(value).slice(1, -1))
     if (path[0] === 'src' || path[0] === 'icon') {
-      const url = resolve(field.value)
+      const url = resolve(field.value, 'image')
       if (url) inner(0, field.value.length, url)
     } else {
       // Legacy rich-block text uses inline Markdown with raw HTML disabled.
@@ -120,9 +120,17 @@ function richChanges(node, resolve, add) {
 
 function markdownChanges(source, resolve, add, richFormats = true) {
   const { tree, prefix } = parseDocumentMarkdown(source)
+  const imageDefinitions = new Set()
+  function collectImageDefinitions(node) {
+    if (node.type === 'imageReference') imageDefinitions.add(node.identifier)
+    node.children?.forEach(collectImageDefinitions)
+  }
+  collectImageDefinitions(tree)
   function visit(node) {
     if (node.destination) {
-      const url = resolve(node.url)
+      const kind = node.type === 'image' || (node.type === 'definition' && imageDefinitions.has(node.identifier))
+        ? 'image' : node.type
+      const url = resolve(node.url, kind)
       if (url) {
         let start = node.destination.start.offset + prefix, end = node.destination.end.offset + prefix
         if (source[start] === '<') { start++; end-- }
@@ -150,9 +158,13 @@ function markdownChanges(source, resolve, add, richFormats = true) {
 }
 
 export function rewriteCopiedAttachments(source, isHtml, resolve) {
+  if (!source.includes('/api/file') && !source.includes('reader-')) return source
+  return rewriteDocumentUrls(source, isHtml, resolve)
+}
+
+export function rewriteDocumentUrls(source, isHtml, resolve) {
   const changes = []
   const add = (start, end, value) => changes.push({ start, end, value })
-  if (!source.includes('/api/file') && !source.includes('reader-')) return source
   if (isHtml) htmlChanges(source, resolve, add)
   else markdownChanges(source, resolve, add)
   let cursor = 0

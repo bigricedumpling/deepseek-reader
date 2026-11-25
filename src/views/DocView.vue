@@ -1,20 +1,19 @@
 <template>
   <div class="document-shell h-full flex flex-col overflow-hidden" :class="{ 'chrome-collapsed': chromeCollapsed }">
     <Teleport to="#app-topbar-main" :disabled="!chromeCollapsed">
-    <div class="doc-topbar" :class="{ 'in-topbar': chromeCollapsed }" :style="docTopbarStyle">
+    <div ref="topbar" class="doc-topbar" :class="{ 'in-topbar': chromeCollapsed, 'over-cover': coverAtBar }" :data-cover-tone="coverTone" :data-image-cover="store.pageMeta.cover?.type === 'image' || undefined" :style="docTopbarStyle">
       <!-- 多篇打开时显示标签；只看一篇时省去没有关闭按钮的孤立标签。 -->
-      <div v-if="docId || tabItems.length || store.libSwitch.active || libraryEmpty" class="topbar-left mr-auto flex min-w-0 items-center gap-2" :class="{ 'is-lib-hidden': !tabsShown }">
-        <DocTabs v-if="tabItems.length" :key="'tabs-' + store.libSwitchKey" :items="tabItems" :active="docId" :class="{ 'is-topbar-tabs': chromeCollapsed }" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" @reorder="emit('reorder',$event)" />
-        <span v-if="tabItems.length && docId" class="tab-plus-sep" aria-hidden="true" />
-        <button v-if="docId || tabItems.length || libraryEmpty" ref="quickButton" class="doc-quick" :class="{ 'is-on': quickOpen }" :disabled="store.libSwitch.phase === 'out' || store.libSwitch.phase === 'loading'" title="最近文档 / 新建文档" aria-label="最近文档 / 新建文档" :aria-expanded="quickOpen" @click.stop="toggleQuick"><PhPlus :size="15" /></button>
+      <div v-if="docId || tabItems.length || store.switchingLibrary || libraryEmpty" class="topbar-left mr-auto flex min-w-0 items-center gap-2">
+        <DocTabs v-if="tabItems.length" :items="tabItems" :active="docId" :class="{ 'is-topbar-tabs': chromeCollapsed }" @select="emit('select',$event)" @close="onCloseTab" @close-many="emit('close-tabs',$event)" @reorder="emit('reorder',$event)" />
+        <button v-if="docId || tabItems.length || libraryEmpty" ref="quickButton" class="doc-quick" :class="{ 'is-on': quickOpen }" :disabled="store.switchingLibrary" title="最近文档 / 新建文档" aria-label="最近文档 / 新建文档" :aria-expanded="quickOpen" @click.stop="toggleQuick"><PhPlus :size="15" /></button>
       </div>
-      <span v-if="store.restoredCopy" class="guest-access-note" title="独立恢复副本，修改不会影响原抽屉"><PhClockCounterClockwise :size="12" />恢复副本</span>
-      <span v-if="store.isGuest && docId" class="guest-access-note" :title="isPreview ? '此文件提供预览' : store.currentReadonly ? '这篇文档仅供阅读' : '这篇文档允许访客编辑'"><component :is="isPreview?PhEye:store.currentReadonly?PhLock:PhPencilSimple" :size="12" />{{ isPreview ? '预览' : store.currentReadonly ? '只读' : '可编辑' }}</span>
-
-      <span v-if="transientSaveText" class="doc-save-state ui-font" :class="saveStateClass">
-        <PhSpinnerGap v-if="saving" :size="12" class="spin" />
-        {{ transientSaveText }}
-      </span>
+      <div v-if="store.restoredCopy || (store.isGuest && docId)" class="doc-context">
+        <span v-if="store.restoredCopy" class="guest-access-note" title="修改只会保存在此副本中"><PhClockCounterClockwise :size="13" aria-hidden="true" />恢复副本</span>
+        <span v-if="store.isGuest && docId" class="guest-access-note">
+          <component :is="isPreview ? PhEye : store.currentReadonly ? PhLock : PhPencilSimple" :size="13" aria-hidden="true" />
+          {{ accessLabel }}
+        </span>
+      </div>
 
       <button v-if="showTranslate" class="doc-translate ui-font" :class="{ 'is-running': store.pdfTranslate.status === 'running', 'is-done': store.pdfTranslate.status === 'done' }" :title="translateTip" :aria-label="translateTip" @click="onTranslate">
         <PhSpinnerGap v-if="store.pdfTranslate.status === 'running'" :size="14" class="spin" />
@@ -24,13 +23,13 @@
         <span v-if="store.pdfTranslate.status === 'running'" class="doc-translate-pct tabular-nums">{{ translatePercent }}%</span>
       </button>
 
-      <div v-if="docId" class="doc-tools" :class="{ 'is-embedded': reader.tocOpen }">
+      <div v-if="docId" class="doc-tools" :class="{ 'over-outline': reader.tocOpen }">
       <!-- 阅读设置常用，单独放在三点左侧 -->
       <div v-if="!isPreview" class="doc-reading">
-        <button ref="readingButton" class="btn-icon" title="阅读设置" aria-label="阅读设置" :aria-expanded="open === 'reading'" :class="{ 'is-active': open === 'reading' }" @click="toggle('reading')"><svg class="reading-aa" viewBox="0 0 256 256" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M87.24,52.59a8,8,0,0,0-14.48,0l-64,136a8,8,0,1,0,14.48,6.81L39.9,160h80.2l16.66,35.4a8,8,0,1,0,14.48-6.81ZM47.43,144,80,74.79,112.57,144ZM200,96c-12.76,0-22.73,3.47-29.63,10.32a8,8,0,0,0,11.26,11.36c3.8-3.77,10-5.68,18.37-5.68,13.23,0,24,9,24,20v3.22A42.76,42.76,0,0,0,200,128c-22.06,0-40,16.15-40,36s17.94,36,40,36a42.73,42.73,0,0,0,24-7.25,8,8,0,0,0,16-.75V132C240,112.15,222.06,96,200,96Zm0,88c-13.23,0-24-9-24-20s10.77-20,24-20,24,9,24,20S213.23,184,200,184Z"/></svg></button>
+        <button ref="readingButton" class="btn-icon" title="阅读设置" aria-haspopup="dialog" aria-label="阅读设置" :aria-expanded="open === 'reading'" :class="{ 'is-active': open === 'reading' }" @click="toggle('reading')"><svg class="reading-aa" viewBox="0 0 256 256" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M87.24,52.59a8,8,0,0,0-14.48,0l-64,136a8,8,0,1,0,14.48,6.81L39.9,160h80.2l16.66,35.4a8,8,0,1,0,14.48-6.81ZM47.43,144,80,74.79,112.57,144ZM200,96c-12.76,0-22.73,3.47-29.63,10.32a8,8,0,0,0,11.26,11.36c3.8-3.77,10-5.68,18.37-5.68,13.23,0,24,9,24,20v3.22A42.76,42.76,0,0,0,200,128c-22.06,0-40,16.15-40,36s17.94,36,40,36a42.73,42.73,0,0,0,24-7.25,8,8,0,0,0,16-.75V132C240,112.15,222.06,96,200,96Zm0,88c-13.23,0-24-9-24-20s10.77-20,24-20,24,9,24,20S213.23,184,200,184Z"/></svg></button>
         <Teleport to="body">
           <transition name="pop">
-            <div v-if="open === 'reading'" class="pop-menu is-panel reading-panel reading-pop" :style="readingPopStyle">
+            <div v-if="open === 'reading'" ref="readingPanel" role="dialog" aria-label="阅读设置" class="pop-menu is-panel reading-panel reading-pop" @keydown.tab="exitPanelOnTab($event, readingButton)" :style="readingPopStyle">
               <ReadingSettings @close="closeReading" />
             </div>
           </transition>
@@ -42,28 +41,32 @@
         <button ref="moreButton" class="btn-icon" title="更多" aria-label="更多" :aria-expanded="open === 'more' || open === 'export'" :class="{ 'is-active': open === 'more' || open === 'export' }" @click="toggle('more')"><PhDotsThree :size="18" weight="bold" /></button>
         <Teleport to="body">
         <transition name="pop">
-          <div v-if="open === 'more'" class="pop-menu is-panel document-actions more-menu actions-pop" :style="actionsPopStyle">
+          <div v-if="open === 'more'" ref="actionsPanel" @keydown.tab="exitPanelOnTab($event, moreButton)" class="pop-menu is-panel document-actions more-menu actions-pop" :style="actionsPopStyle">
             <button v-if="!isH5" class="pop-item" @click.stop="openSearch"><PhMagnifyingGlass :size="15" /><span>查找当前文档</span><kbd class="menu-shortcut">⌘F</kbd></button>
+            <button v-if="!isH5 && (isPdf ? store.pdfToc.length : toc.length)" class="pop-item mobile-outline-item" aria-controls="document-outline" @click="open = ''; emit('open-outline')"><PhListDashes :size="15" />文档目录</button>
             <div class="doc-options-divider" />
             <button v-if="canRevealInFinder" class="pop-item" @click="showInFinder"><PhFolderSimple :size="15" /> {{ fileManagerLabel() }}</button>
             <button v-if="!store.isGuest" class="pop-item" @click="open = ''; infoOpen = true"><PhInfo :size="15" /> 文档信息</button>
             <button v-if="!store.isGuest && !isPreview" class="pop-item" @click="open = ''; historyOpen = true"><PhClockCounterClockwise :size="15" /> 历史版本</button>
             <div class="doc-options-divider" />
-            <button class="pop-item" @click="open = 'export'"><PhExport :size="15" /><span>导出</span><PhCaretRight :size="13" class="menu-tail" /></button>
+            <button ref="exportButton" class="pop-item" @click="showActionsPage('export')"><PhExport :size="15" /><span>导出</span><PhCaretRight :size="13" class="menu-tail" /></button>
             <a v-if="embedded" class="pop-item" :href="browserUrl" target="_blank" rel="noopener noreferrer" @click="open = ''"><PhArrowSquareOut :size="15" /> 在浏览器打开</a>
             <div class="doc-options-divider" />
             <div class="more-stats ui-font">
+              <span v-if="store.isGuest" class="compact-access">{{ accessLabel }}</span>
+              <span v-if="store.restoredCopy" class="compact-access">恢复副本</span>
               <template v-if="isH5"><span>H5</span><span v-if="meta.size">{{ (meta.size / 1024).toFixed(0) }} KB</span></template>
               <template v-else-if="isPdf"><span>{{ pdfPages ? pdfPages + ' 页' : 'PDF' }}</span><span v-if="meta.size">{{ (meta.size / 1024 / 1024).toFixed(1) }} MB</span></template>
               <template v-else><span>{{ stats.total }} 字</span><span>{{ stats.lines }} 行</span></template>
             </div>
             <p v-if="saveStateText && !error" class="more-save ui-font">{{ saveStateText }}</p>
           </div>
-          <div v-else-if="open === 'export'" class="pop-menu is-panel document-actions export-menu actions-pop" :style="actionsPopStyle">
-            <button class="pop-item" @click="open = 'more'"><PhCaretLeft :size="15" />导出</button>
+          <div v-else-if="open === 'export'" ref="actionsPanel" @keydown.tab="exitPanelOnTab($event, moreButton)" class="pop-menu is-panel document-actions export-menu actions-pop" :style="actionsPopStyle">
+            <button class="pop-item" @click="showActionsPage('more')"><PhCaretLeft :size="15" />导出</button>
             <div class="doc-options-divider" />
             <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="15" /> Markdown 文件</button>
-            <button v-if="!isPreview" class="pop-item" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
+            <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('package')"><PhFileText :size="15" /> Markdown 和附件（ZIP）</button>
+            <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
             <button v-if="!isPreview" class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
             <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener" @click="open = ''"><PhArrowSquareOut :size="15" />打开原文件</a>
           </div>
@@ -75,7 +78,7 @@
 
       <Teleport to="body">
         <Transition name="pop">
-          <div v-if="quickOpen" class="pop-menu quick-open-menu ui-font" :style="quickOpenStyle" @mousedown.stop>
+          <div v-if="quickOpen && (!quickPending || quickSlow)" class="pop-menu quick-open-menu ui-font" :style="quickOpenStyle" @mousedown.stop>
             <p class="quick-open-label">最近打开</p>
             <button v-for="item in quickRecent" :key="item.file" type="button" class="quick-open-doc" @click="openRecent(item)">
               <ContentIcon v-if="item.icon" :value="item.icon" :size="16" class="quick-open-icon" />
@@ -83,7 +86,7 @@
               <span class="quick-open-copy"><span class="quick-open-name">{{ item.name }}</span><small>{{ item.folder }}</small></span>
               <time>{{ item.time }}</time>
             </button>
-            <p v-if="!quickRecent.length" class="quick-open-empty">还没有最近文档</p>
+            <p v-if="!quickRecent.length" class="quick-open-empty" role="status">{{ quickPending ? '正在读取…' : quickUnavailable ? '最近文档暂时无法读取' : '还没有最近文档' }}</p>
             <div class="quick-open-sep" />
             <button type="button" class="quick-open-new" :disabled="store.isGuest" @click="createFromQuick"><PhPlus :size="15" />新建文档</button>
           </div>
@@ -93,13 +96,7 @@
       <Teleport to="body">
         <transition name="pop">
           <div v-if="searchOpen" class="doc-search-wrap doc-search-floating" @mousedown.stop>
-            <div class="doc-search-panel ui-font" role="search" aria-label="查找当前文档">
-              <div class="doc-search-field"><PhMagnifyingGlass :size="14" /><input ref="searchInput" :value="keyword" placeholder="查找当前文档" @input="emit('update:keyword', $event.target.value)" @keydown.enter.prevent="results[0]?.hits[0] && onResultClick(results[0], results[0].hits[0])" @keydown.esc="closeSearch" /><button title="关闭查找" aria-label="关闭查找" @click="closeSearch"><PhX :size="16" /></button></div>
-              <div v-if="keyword.trim()" class="doc-search-results">
-                <p v-if="!results.length" class="search-scope">没有匹配</p>
-                <template v-for="r in results" :key="r.id"><button v-for="(h,i) in r.hits.slice(0,20)" :key="i" class="search-hit" @click="onResultClick(r, h)"><span v-html="highlight(h.text, keyword)" /><small>第 {{ h.line }} 行{{ h.occurrence > 1 ? `，本行第 ${h.occurrence} 处` : '' }}</small></button></template>
-              </div>
-            </div>
+            <DocumentFind :scroller="scroller" @pick="pickFindHit" @close="closeSearch" />
           </div>
         </transition>
       </Teleport>
@@ -117,8 +114,9 @@
           <PhWarningCircle :size="16" class="doc-notice-icon" />
           <div class="doc-notice-copy">
             <p>{{ error }}</p>
-            <div v-if="store.errorKind === 'save' || store.errorKind === 'load'" class="doc-notice-actions">
+            <div v-if="['save', 'load', 'navigation'].includes(store.errorKind)" class="doc-notice-actions">
               <button v-if="store.errorKind === 'save'" @click="store.save()">重试保存</button>
+              <button v-else-if="store.errorKind === 'navigation'" @click="store.retryNavigation()">重试打开</button>
               <button v-else @click="emit('reload')">重新读取</button>
             </div>
           </div>
@@ -128,10 +126,15 @@
     </Teleport>
 
     <!-- 正文：永远可编辑，没有阅读态和编辑态之分 -->
-    <div class="doc-body relative flex-1 min-h-0 flex flex-col">
+    <div class="doc-body relative flex-1 min-h-0 flex flex-col" :class="{ 'is-web-preview': isH5 }"
+      :data-cover-size="coverSize">
+      <span v-if="slowDestination" class="doc-opening-status ui-font" role="status">正在打开《{{ slowDestination }}》</span>
+      <span v-else-if="exportStatus" class="doc-opening-status ui-font" role="status">{{ exportStatus }}</span>
+      <div v-if="coverSize" ref="coverPlane" class="cover-plane" aria-hidden="true" @load.capture="readCoverImage()"></div>
       <div
       id="main-scroll-container"
       ref="scroller"
+      @scroll.passive="syncCoverPosition"
       class="flex-1 min-h-0 overflow-y-auto no-scrollbar print-area"
       :style="pageStyle"
     >
@@ -143,7 +146,8 @@
       <div
         class="doc-content"
         :class="{ 'is-ready': loaded }"
-        :key="String(docId) + ':' + (loaded ? '1' : '0')"
+        :key="docId"
+        :aria-busy="!!store.pendingDestination || !!docId && !loaded && !error"
       >
       <PdfPreview ref="pdfPreview" v-if="isPdf" :url="pdfSrc" :page="effectivePdfPage" @page="onPdfPageChange" @loaded="store.pdfPages=$event" @outline="store.pdfToc=$event.toc;store.pdfTocSource=$event.source" />
       <iframe
@@ -154,26 +158,28 @@
         :src="pdfSrc"
         :title="meta.name || (isPdf ? 'PDF' : 'H5')"
       />
-      <PageHeader v-if="loaded && !isPreview" />
+      <PageHeader v-if="loaded && !isPreview" :cover-plane="coverPlane" :active="active" />
       <MarkdownEditor
         ref="editor"
         v-if="loaded && !isPreview"
-        :key="String(store.currentReadonly) + docId + ':' + epoch + ':' + store.contentEpoch + ':' + restoredEpoch"
+        :key="docId + resumeScope + editorGeneration"
+        :resume-scope="resumeScope"
+        :resume-cache="resumeCache"
         :readonly="store.currentReadonly"
         @pick-doc="pickDoc = true"
-        @open-doc="emit('select', $event)"
+        @open-doc="followReference"
         :value="raw"
         :doc-id="docId"
         :doc-file="meta.file || ''"
+        :agent-document-id="agentDocumentId"
         :style="pageStyle"
-        @update:value="emit('input', $event)"
-        @canonize="emit('canonize', $event)"
+        :onUpdate:value="publishEditorInput"
         @restore="restoreContent"
         @rebuild="restoredEpoch++"
       />
       <div v-else-if="!isPreview && !docId && !store.loading" class="ui-font text-center pt-24 text-[var(--c-sub)]">
-        <p class="text-[14px]">这个抽屉还没有文档</p>
-        <button v-if="!store.isGuest" class="mt-4 text-[12px] text-ds hover:underline" @click="emit('create-doc')">新建第一篇文档</button>
+        <p class="text-[14px]">{{ libraryEmpty ? '还没有文档' : '未打开文档' }}</p>
+        <button v-if="!store.isGuest" class="mt-4 text-[12px] text-ds hover:underline" @click="emit('create-doc')">新建文档</button>
       </div>
       <p v-else-if="!isPreview && error" class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">读取失败，请点击上方重新读取</p>
       <p v-else-if="!isPreview" class="ui-font text-[13px] text-[var(--c-faint)] text-center pt-24">正在读取…</p>
@@ -183,13 +189,13 @@
 
 
   </div>
-  <DocumentInfo :open="infoOpen" :path="docId" @close="infoOpen=false" />
+  <DocumentInfo :open="infoOpen" :path="docId" @close="closeDocumentInfo" />
   <VersionHistory :open="historyOpen" :path="docId" :current-content="raw" :preserve-current="() => store.save()" @close="closeHistory" @restore="restoreContent" />
 </template>
 
 <script setup>
 import {layoutText} from '../utils/column-format'
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 // 弹层里那些小图标：宽度 / 加粗斜体 / 段落 / 表格 / 主题 / 缩放 / 导出 / pdf 翻译
 import {
   PhMagnifyingGlass, PhArrowsOutLineHorizontal,
@@ -198,14 +204,16 @@ import {
   PhArrowsInLineHorizontal, PhArrowsHorizontal, PhArrowsVertical, PhTextB, PhTextItalic,
   PhParagraph, PhTextIndent, PhTable, PhTextAlignLeft, PhTextAlignCenter, PhTextAlignRight,
   PhArrowsOutSimple, PhArrowsInSimple, PhSun, PhCoffee, PhMoon,
-  PhFileText, PhTranslate, PhPencilSimple, PhLock, PhEye, PhDotsThree, PhFolderSimple, PhPlus
+  PhListDashes, PhFileText, PhTranslate, PhPencilSimple, PhLock, PhEye, PhDotsThree, PhFolderSimple, PhPlus
 } from '../icons/remix'
-import { highlight } from '../utils/markdown'
+import DocumentFind from '../components/DocumentFind.vue'
+import { findText, showFindHit, clearFindHighlight } from '../utils/find-text.js'
 import PdfPreview from '../components/PdfPreview.vue'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { useReaderStore } from '../stores/reader'
 import { useDocsStore } from '../stores/docs'
 import DocTabs from '../components/DocTabs.vue'
+import { documentRoutePath } from '../utils/routes.js'
 import ContentIcon from '../components/ContentIcon.vue'
 import ReadingSettings from '../components/ReadingSettings.vue'
 import ConflictDialog from '../components/ConflictDialog.vue'
@@ -214,16 +222,20 @@ import DocumentInfo from '../components/DocumentInfo.vue'
 import PageHeader from '../components/PageHeader.vue'
 import DocPicker from '../components/DocPicker.vue'
 import { insertDocLink } from '../utils/editor-shortcuts'
+import { createEditorResumeCache } from '../utils/editor-resume.js'
 import { useDocScroll } from '../composables/useDocScroll'
+import { useReferenceNavigation } from '../composables/useReferenceNavigation.js'
 import { useExport } from '../composables/useExport'
 import { API_BASE } from '../utils/api'
 import { fileManagerAvailable, fileManagerLabel, revealInFileManager } from '../utils/reveal'
 
 const reader = useReaderStore()
 // pdf 翻译任务的状态住在 docs store 里，不必再经 App 转一手
+const readingPanel = ref(null), actionsPanel = ref(null), exportButton = ref(null)
 const infoOpen=ref(false)
 const historyOpen=ref(false),moreButton=ref(null),readingButton=ref(null)
 async function closeReading(){open.value='';await nextTick();readingButton.value?.focus()}
+async function closeDocumentInfo(){infoOpen.value=false;await nextTick();moreButton.value?.focus()}
 async function closeHistory(){historyOpen.value=false;await nextTick();moreButton.value?.focus()}
 const restoredEpoch=ref(0)
 function restoreContent(text){emit('input',text);restoredEpoch.value++}
@@ -235,14 +247,18 @@ async function showInFinder() {
   catch (error) { store.setError(error.message || error) }
 }
 const docTopbarStyle=computed(()=>({
-  paddingRight: reader.tocOpen ? Math.max(0, reader.tocWidth - 73) + 'px' : '0px',
-  transition: reader.tocDragging ? 'none' : 'padding-right 380ms cubic-bezier(0.22,1,0.36,1) 70ms'
+  '--toc-tools-space': reader.tocOpen ? Math.max(0, reader.tocWidth - 73) + 'px' : '0px',
+  transition: reader.tocDragging ? 'none' : undefined
 }))
 const pageStyle=computed(()=>({...reader.readingStyle,...({narrow:{'--measure':'min(720px, 100%)'},wide:{'--measure':'min(1120px, 100%)'},full:{'--measure':'100%'}}[store.pageMeta.layout]||{})}))
 /** 斜杠菜单里插入文档打开的选择器 */
 const pickDoc = ref(false)
 const editor = ref(null)
-const { exportMarkdown, exportPdf, exportHtml } = useExport(() => props.meta, () => editor.value?.markdownSnapshot() ?? props.raw)
+const { exportMarkdown, exportPackage, exportPdf, exportHtml } = useExport(
+  () => props.meta,
+  () => editor.value?.markdownSnapshot() ?? props.raw,
+  () => store.pageMeta.cover
+)
 
 /*
  * 只接文档本身的东西。
@@ -250,13 +266,12 @@ const { exportMarkdown, exportPdf, exportHtml } = useExport(() => props.meta, ()
  * 结果 size 漏发了，四档字号全渲染成默认值，还不报错。
  */
 const props = defineProps({
+  active: { type: Boolean, default: true },
   docId: { type: String, default: '' },
   meta: { type: Object, required: true },
   raw: { type: String, default: '' },
   loaded: { type: Boolean, default: false },
   toc: { type: Array, default: () => [] },
-  keyword: { type: String, default: '' },
-  results: { type: Array, default: () => [] },
   dirty: { type: Boolean, default: false },
   saving: { type: Boolean, default: false },
   savedAt: { type: Number, default: 0 },
@@ -265,24 +280,53 @@ const props = defineProps({
   /** 这篇 pdf 共几页（底栏显示） */
   pdfPages: { type: Number, default: 0 },
   /** 重新挂载编辑器的信号（重排正文之后用） */
-  epoch: { type: Number, default: 0 },
   error: { type: String, default: '' },
   /** header + 标签是否在顶栏；展开动画结束前会短暂保持 true */
   chromeCollapsed: { type: Boolean, default: false }
 })
+// Rebuilds and access changes also invalidate callbacks from the outgoing editor.
+const editorGeneration = computed(() => JSON.stringify([
+  store.role, store.contentEpoch, restoredEpoch.value
+]))
+const agentDocumentId = computed(() => store.isGuest || window.__readerPublicView ? '' : store.currentSourceId)
+const resumeScope = computed(() => JSON.stringify([
+  store.role, store.currentSourceId, store.currentReadonly, !!window.__readerPublicView
+]))
+const isTabOpen = path => store.tabs.includes(path)
+const resumeCache = shallowRef(createEditorResumeCache(isTabOpen))
+watch([() => store.contentEpoch, () => store.role, restoredEpoch], ([epoch, role], [previous, previousRole]) => {
+  const autoMerge = epoch !== previous && epoch === store.autoMergeEpoch
+  const caret = autoMerge && props.active && !store.pendingDestination ? editor.value?.captureMergeCaret() : null
+  if (role !== previousRole) {
+    resumeCache.value.dispose()
+    resumeCache.value = createEditorResumeCache(isTabOpen)
+  } else {
+    resumeCache.value = resumeCache.value.restart(props.docId, caret)
+  }
+}, { flush: 'sync' })
+watch(() => store.tabs.slice(), () => resumeCache.value.prune())
 const embedded = window.self !== window.top
 const browserUrl = computed(() => {
-  const path = String(props.docId || '').replace(/\.(md|pdf|html?)$/i, '')
+  const path = documentRoutePath(props.docId)
   const url = new URL(API_BASE + '/' + (window.__readerPublicView ? 'onlyread' : 'doc') + (path ? '/' + path.split('/').map(encodeURIComponent).join('/') : '/'), location.origin)
   const lib = path.split('/')[0] || new URLSearchParams(location.search).get('lib')
   if (lib) url.searchParams.set('lib', lib)
   return url.toString()
 })
-const emit = defineEmits(['update:keyword', 'jump', 'input', 'reload', 'select', 'canonize', 'close-tab', 'close-tabs', 'create-doc', 'reorder'])
-watch(() => props.chromeCollapsed, () => {
-  if (!open.value) return
-  nextTick(placePopovers)
-  setTimeout(placePopovers, 260)
+const emit = defineEmits(['input', 'reload', 'select', 'close-tab', 'close-tabs', 'create-doc', 'reorder', 'open-outline'])
+const publishEditorInput = computed(() => {
+  const path = props.docId, generation = editorGeneration.value
+  return text => {
+    if (path === store.currentPath && generation === editorGeneration.value) emit('input', text)
+  }
+})
+const slowDestination = ref('')
+watch(() => store.pendingDestination, (target, _, cleanup) => {
+  slowDestination.value = ''
+  if (!target) return
+  const name = target.file ? target.file.split('/').at(-1).replace(/\.md$/i, '') : target.library
+  const timer = setTimeout(() => { slowDestination.value = name }, 350)
+  cleanup(() => clearTimeout(timer))
 })
 
 /** 当前这篇是不是 pdf：是就不挂编辑器，改挂浏览器自带的 pdf 阅读器 */
@@ -290,33 +334,39 @@ watch(() => props.chromeCollapsed, () => {
 const isPdf = computed(() => props.meta?.type === 'pdf')
 const isH5 = computed(() => props.meta?.type === 'h5')
 const isPreview = computed(() => isPdf.value || isH5.value)
-/*
- * 换库转场：数据层给出 out/loading/in 阶段，这里只控制标签的可见性和
- * 外层玻璃条的宽度过渡，所以不会在 0ms 把整组标签硬切掉。
- */
-const tabsShown = ref(true)
-
-watch(
-  () => [store.libSwitch.phase, store.libSwitch.animated],
-  ([phase, animated]) => {
-    if (!animated) { tabsShown.value = true; return }
-    if (phase === 'out' || phase === 'loading') { tabsShown.value = false; return }
-    if (phase === 'in') { nextTick(() => { tabsShown.value = true }); return }
-    tabsShown.value = true
-  }
-)
-
-/** 标签条要显示的东西：文件名（跟侧栏、磁盘一致）、有没有没落盘的改动 */
+const accessLabel = computed(() => isPreview.value ? '预览' : store.currentReadonly ? '只读' : '可编辑')
 const libraryEmpty = computed(() => !store.loading && !store.allFiles.length)
-
-const tabItems = computed(() =>
-  store.tabs.map((file) => ({
+const tabItems = computed(() => {
+  const items = store.tabs.filter(file => store.tabIcons.has(file)).map(file => ({
     file,
-    name: store.allFiles.find((f) => f.file === file)?.name || file.split('/').pop().replace(/\.(md|pdf|html?)$/i, ''),
-    icon: store.allFiles.find(f=>f.file===file)?.meta?.icon || '',
-    dirty: file === props.docId && props.dirty
+    name: file.split('/').pop().replace(/\.(md|pdf|html?)$/i, ''),
+    icon: store.tabIcons.get(file),
+    dirty: file === props.docId && props.dirty,
+    context: ''
   }))
-)
+  const groups = new Map()
+  for (const item of items) {
+    if (!groups.has(item.name)) groups.set(item.name, [])
+    groups.get(item.name).push(item)
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    for (const item of group) {
+      const folders = item.file.split('/').slice(0, -1)
+      const others = group.filter(other => other !== item).map(other => other.file.split('/').slice(0, -1))
+      const distinctDrawer = folders.length && others.every(path => path[0] !== folders[0])
+      if (distinctDrawer) item.context = folders[0]
+      else {
+        for (let depth = 1; depth <= folders.length; depth++) {
+          const suffix = folders.slice(-depth).join('/')
+          if (others.every(path => path.slice(-depth).join('/') !== suffix)) { item.context = suffix; break }
+        }
+        if (!item.context) item.context = [...folders, item.file.split('.').pop().toUpperCase()].join(' / ')
+      }
+    }
+  }
+  return items
+})
 
 /*
  * 关标签交给 App 做，这里只上报"要关哪个"。
@@ -403,7 +453,78 @@ function onPdfPageChange(page) {
 }
 
 const scroller = ref(null)
-const searchInput = ref(null)
+const coverPlane = ref(null)
+const coverAtBar = ref(false)
+const imageSample = ref(null)
+function readCoverImage() {
+  const image = coverPlane.value?.querySelector('img')
+  if (!(image instanceof HTMLImageElement) || !image.naturalWidth) return
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  // Downsample the visible crop, accounting for the user's vertical positioning.
+  const scale = Math.max(image.clientWidth / image.naturalWidth, image.clientHeight / image.naturalHeight)
+  if (!scale) return
+  const width = image.clientWidth / scale
+  const height = image.clientHeight / scale
+  const y = (image.naturalHeight - height) * (store.pageMeta.cover?.position ?? 50) / 100
+  try {
+    ctx.drawImage(image, (image.naturalWidth - width) / 2, y, width, height, 0, 0, 1, 1)
+    const [r, g, b, alpha] = ctx.getImageData(0, 0, 1, 1).data
+    imageSample.value = alpha > 200 ? { asset: store.pageMeta.cover?.asset, color: [r, g, b] } : null
+  } catch {
+    // A cross-origin image may display even when the browser restricts pixel access.
+    imageSample.value = null
+  }
+}
+watch(() => store.pageMeta.cover?.position, readCoverImage, { flush: 'post' })
+const coverTone = computed(() => {
+  const cover = store.pageMeta.cover
+  if (!cover) return undefined
+  const colors = cover.type === 'image'
+    ? (cover.asset === imageSample.value?.asset && imageSample.value ? [imageSample.value.color] : [])
+    : (cover.colors || []).filter(c => /^#[a-f0-9]{6}$/i.test(c))
+      .map(c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)))
+  if (!colors.length) return 'unknown'
+  let luminance = 0
+  for (const color of colors) {
+    const [r, g, b] = color.map(value => {
+      const s = value / 255
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    })
+    luminance += 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  return luminance / colors.length > 0.19 ? 'light' : 'dark'
+})
+const coverSize = computed(() => {
+  const cover = store.pageMeta.cover
+  return props.chromeCollapsed && props.loaded && !isPreview.value && cover ? cover.height || 'medium' : null
+})
+function syncCoverPosition() {
+  const plane = coverPlane.value
+  if (!plane || !scroller.value) {
+    coverAtBar.value = false
+    return
+  }
+  const height = plane.offsetHeight
+  const distance = Math.min(Math.max(0, scroller.value.scrollTop), height)
+  const transform = `translateY(${-distance}px)`
+  coverAtBar.value = height > distance && height - distance > scroller.value.getBoundingClientRect().top / 2
+  if (plane.style.transform !== transform) plane.style.transform = transform
+}
+watch(coverPlane, (plane, _, onCleanup) => {
+  syncCoverPosition()
+  if (!plane) return
+  const observer = new ResizeObserver(() => {
+    syncCoverPosition()
+    readCoverImage()
+  })
+  observer.observe(plane)
+  onCleanup(() => observer.disconnect())
+}, { flush: 'post' })
+let findRequest = 0, findTimer
 const pdfPreview = ref(null)
 const quickButton = ref(null)
 const quickOpen = ref(false)
@@ -411,6 +532,7 @@ const quickOpenStyle = ref({})
 const open = ref('')
 const searchOpen = ref(false)
 const narrow = ref(false)
+const topbar = ref(null)
 const readingPopStyle = ref(null)
 const actionsPopStyle = ref(null)
 let narrowQuery = null
@@ -423,6 +545,16 @@ function syncNarrow(event) { narrow.value = event.matches }
  * 再用按钮的屏幕坐标定位，既保持贴住按钮，也永远压在最上面。
  */
 function placePopovers() {
+  if (quickOpen.value) {
+    const r = quickButton.value?.getBoundingClientRect()
+    if (!r) return
+    quickOpenStyle.value = {
+      top: Math.round(r.bottom + 6) + 'px',
+      left: Math.max(8, Math.min(r.left, window.innerWidth - 292)) + 'px'
+    }
+    return
+  }
+  if (!open.value) return
   if (narrow.value) {
     readingPopStyle.value = null
     actionsPopStyle.value = null
@@ -445,6 +577,17 @@ function placePopovers() {
   }
 }
 
+
+// Teleported menus need to follow both the tab group and the space yielded
+// to the outline. Observe layout only while an anchored menu is open.
+watch([open, quickOpen], ([panel, quick], _, cleanup) => {
+  if ((!panel && !quick) || !topbar.value) return
+  const observer = new ResizeObserver(placePopovers)
+  observer.observe(topbar.value)
+  const tabGroup = quickButton.value?.parentElement
+  if (quick && tabGroup) observer.observe(tabGroup)
+  cleanup(() => observer.disconnect())
+}, { flush: 'post' })
 
 /* ---------- 保存状态 ---------- */
 
@@ -477,14 +620,9 @@ const stats = computed(() => {
   }
 })
 
-const transientSaveText = computed(() => {
-  if (props.error) return { save: '保存失败', load: '打开失败' }[store.errorKind] || '操作失败'
+const saveStateText = computed(() => {
   if (props.saving) return '保存中'
   if (props.dirty) return '待保存'
-  return ''
-})
-const saveStateText = computed(() => {
-  if (transientSaveText.value) return transientSaveText.value
   if (props.savedAt) {
     const d = new Date(props.savedAt)
     const hh = String(d.getHours()).padStart(2, '0')
@@ -493,15 +631,9 @@ const saveStateText = computed(() => {
   }
   return ''
 })
-const saveStateClass = computed(() =>
-  props.error ? 'is-error' : props.saving ? 'is-saving' : props.dirty ? 'is-dirty' : 'is-saved'
-)
 
 /* ---------- 工具条 ---------- */
 
-const currentLibName = computed(() => {
-  try { return new URLSearchParams(location.search).get('lib') || '' } catch { return '' }
-})
 function quickTime(at) {
   const diff = Math.max(0, Date.now() - Number(at || 0))
   if (diff < 60_000) return '刚刚'
@@ -510,40 +642,40 @@ function quickTime(at) {
   const d = new Date(at)
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
-const quickRecent = computed(() => {
-  const lib = currentLibName.value
-  return (store.recentDocs || [])
-    .filter(item => !lib || item.file === lib || item.file.startsWith(lib + '/'))
-    .map(item => {
-      const node = store.allFiles.find(file => file.file === item.file)
-      if (!node) return null
-      const rel = lib && item.file.startsWith(lib + '/') ? item.file.slice(lib.length + 1) : item.file
-      const parts = rel.split('/')
-      parts.pop()
-      return {
-        file: item.file,
-        name: node.name || rel.split('/').pop()?.replace(/\.(md|pdf|html?)$/i, '') || item.file,
-        folder: parts.join(' / ') || '根目录',
-        icon: node.meta?.icon || '',
-        time: quickTime(item.at)
-      }
-    })
-    .filter(Boolean)
-    .slice(0, 6)
-})
-function closeQuick() { quickOpen.value = false }
-function toggleQuick() {
+const quickRecent = ref([])
+const quickPending = ref(false)
+const quickSlow = ref(false)
+const quickUnavailable = ref(false)
+let quickRequest = 0
+
+function closeQuick() { quickRequest++; quickOpen.value = false }
+async function toggleQuick() {
   if (quickOpen.value) { closeQuick(); return }
   open.value = ''
   closeSearch()
-  const rect = quickButton.value?.getBoundingClientRect()
-  if (rect) {
-    quickOpenStyle.value = {
-      top: Math.round(rect.bottom + 6) + 'px',
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - 292)) + 'px'
-    }
-  }
   quickOpen.value = true
+  placePopovers()
+  quickRecent.value = []
+  quickPending.value = true
+  quickSlow.value = false
+  quickUnavailable.value = false
+  const request = ++quickRequest
+  const delay = setTimeout(() => { if (request === quickRequest) quickSlow.value = true }, 180)
+  try {
+    const { items, unavailable } = await store.resolveRecentDocs()
+    if (request !== quickRequest) return
+    quickUnavailable.value = unavailable
+    const names = items.map(item => item.file.replace(/\.(md|pdf|html?)$/i, ''))
+    quickRecent.value = items.map((item, index) => {
+      const parts = item.file.split('/')
+      const filename = parts.pop()
+      const sameStem = names.indexOf(names[index]) !== names.lastIndexOf(names[index])
+      return { ...item, name: sameStem ? filename : names[index].split('/').pop(), folder: parts.join(' / '), time: quickTime(item.at) }
+    })
+  } finally {
+    clearTimeout(delay)
+    if (request === quickRequest) quickPending.value = false
+  }
 }
 function openRecent(item) {
   closeQuick()
@@ -563,11 +695,31 @@ function openSearch() {
   }
   if (isH5.value) return
   searchOpen.value = true
-  nextTick(() => searchInput.value?.focus())
+  nextTick(() => document.querySelector('.doc-search-panel input')?.focus())
 }
-function toggle(name) {
+async function toggle(name) {
   open.value = open.value === name ? '' : name
-  if (open.value) nextTick(placePopovers)
+  if (!open.value) return
+  await nextTick()
+  placePopovers()
+  const first = name === 'reading'
+    ? readingPanel.value?.querySelector('input[type="radio"]:checked')
+    : actionsPanel.value?.querySelector('button')
+  first?.focus({ preventScroll: true })
+}
+async function showActionsPage(name) {
+  open.value = name
+  await nextTick()
+  const first = name === 'more' ? exportButton.value : actionsPanel.value?.querySelector('button')
+  first?.focus({ preventScroll: true })
+}
+function exitPanelOnTab(event, trigger) {
+  const controls = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href]')]
+    .filter(el => el.tabIndex >= 0 && (el.type !== 'radio' || el.checked) && el.getClientRects().length)
+  const boundary = event.shiftKey ? controls[0] : controls.at(-1)
+  if (document.activeElement !== boundary) return
+  open.value = ''
+  trigger?.focus({ preventScroll: true })
 }
 function pickWidth(v) {
   reader.measure = v
@@ -577,37 +729,81 @@ function pickSize(v) {
   reader.size = v
   open.value = ''
 }
-function pickExport(kind) {
+const exportStatus = ref(''), exporting = ref(false)
+async function pickExport(kind) {
   open.value = ''
-  if (kind === 'md') exportMarkdown()
-  else if(kind==='html')exportHtml().catch(e=>{store.setError(e.message)})
-  else exportPdf()
+  if (kind === 'md') return exportMarkdown()
+  if (kind === 'pdf') return exportPdf()
+  if (exporting.value) return
+  exporting.value = true
+  const title = props.meta.name
+  const timer = setTimeout(() => { exportStatus.value = '正在导出《' + title + '》…' }, 400)
+  try {
+    if (kind === 'package') await exportPackage()
+    else await exportHtml()
+  } catch (error) {
+    store.setError(error.message)
+  } finally {
+    clearTimeout(timer)
+    exporting.value = false
+    exportStatus.value = ''
+  }
+}
+function resetFind() {
+  findRequest++
+  clearTimeout(findTimer)
+  clearFindHighlight()
 }
 function closeSearch() {
   searchOpen.value = false
-  searchInput.value?.blur()
+  resetFind()
 }
-function clearSearch() {
-  emit('update:keyword', '')
-  searchInput.value?.focus()
+function findArticle() {
+  return scroller.value?.querySelector('.source-reading .ProseMirror') || scroller.value?.querySelector('.editor-shell .ProseMirror')
 }
-function onResultClick(r, hit) {
-  searchOpen.value = false
-  emit('jump', { id: r.id, keyword: props.keyword, hit })
+async function pickFindHit(hit, close = false) {
+  resetFind()
+  const request = findRequest
+  if (close) searchOpen.value = false
+  stopRestore()
+  const painted = await showFindHit(scroller.value, findArticle(), hit, () => findRequest === request)
+  if (painted && close) findTimer = setTimeout(clearFindHighlight, 2800)
 }
+async function showLibraryHit(result) {
+  await nextTick()
+  const request = ++findRequest
+  const start = performance.now()
+  while (props.docId === result.file && request === findRequest && performance.now() - start < 4000) {
+    const article = findArticle()
+    if (article?.childElementCount) {
+      const matches = findText(article, result.keyword)
+      const match = matches.find(hit => result.text.trim().includes(hit.group.text.trim()) || hit.group.text.includes(result.text.trim())) || matches[0]
+      if (match) return pickFindHit(match, true)
+      // An editor widget may still be mounting. A source-only match has no DOM range.
+      if (performance.now() - start > 700) break
+    }
+    await new Promise(requestAnimationFrame)
+  }
+  if (props.docId === result.file && request === findRequest) store.setError('已打开文档，当前排版中未找到这段文字。')
+}
+defineExpose({ showLibraryHit })
 
 /* ---------- 滚动 ---------- */
 /*
  * 切文档记住读到哪，在 useDocScroll 里。
  * 它会在正文异步渲染期间逐帧重试，这里只负责把目标位置落到容器上。
  */
-useDocScroll({
+const { stopRestore, restorePosition } = useDocScroll({
   scroller,
+  refreshEpoch: computed(() => store.autoMergeEpoch),
   docId: computed(() => props.docId),
+  sourceId: computed(() => store.currentSourceId),
   onRestore: (pos) => {
     if (scroller.value) scroller.value.scrollTop = pos
   }
 })
+
+const followReference = useReferenceNavigation(store, scroller, { stopRestore, restorePosition })
 
 /* 点空白处收起弹层与搜索下拉 */
 function onDocClick(e) {
@@ -616,10 +812,12 @@ function onDocClick(e) {
   if (quickOpen.value && !e.target.closest('.quick-open-menu, .doc-quick')) closeQuick()
 }
 function onFindKey(e) {
+  if (!props.active) return
   if (e.key === 'Escape' && quickOpen.value) { e.preventDefault(); closeQuick(); return }
   if(e.key==='Escape' && open.value){
     e.preventDefault()
     if(open.value==='reading')closeReading()
+    else if(open.value==='export')showActionsPage('more')
     else{open.value='';moreButton.value?.focus()}
     return
   }
@@ -628,7 +826,7 @@ function onFindKey(e) {
   openSearch()
 }
 function onOverlayOpen() { open.value = ''; closeSearch(); closeQuick() }
-watch(() => props.docId, () => { open.value=''; closeSearch(); closeQuick(); emit('update:keyword', '') })
+watch(() => props.docId, () => { open.value=''; closeSearch(); closeQuick() })
 onMounted(() => {
   document.addEventListener('click', onDocClick)
   document.addEventListener('keydown', onFindKey)
@@ -640,6 +838,8 @@ onMounted(() => {
   window.addEventListener('resize', closeQuick)
 })
 onBeforeUnmount(() => {
+  resetFind()
+  resumeCache.value.dispose()
   document.removeEventListener('click', onDocClick)
   document.removeEventListener('keydown', onFindKey)
   window.removeEventListener('reader-overlay-open', onOverlayOpen)
@@ -846,40 +1046,175 @@ onBeforeUnmount(() => {
 .document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}
 .document-actions.more-menu{width:min(300px,calc(100vw - 24px))}
 .doc-topbar{pointer-events:none;height:40px;flex-shrink:0;display:flex;align-items:center;gap:6px;min-width:0;padding:0 12px;background:transparent}
-.doc-topbar.in-topbar{flex:1 1 auto;padding:0}
+.doc-topbar.in-topbar {
+  flex: 1 1 auto;
+  padding: 0 var(--toc-tools-space, 0px) 0 0;
+  transition: padding-right 380ms var(--motion-ease) 70ms;
+}
+@media (max-width: 720px) {
+  .doc-topbar.in-topbar { padding-right: 0; }
+}
+.doc-context {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  margin-inline-end: 8px;
+}
+.guest-access-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--c-sub);
+  font: 400 11.5px/1.4 var(--font-sans);
+}
+@media (max-width: 480px) {
+  .doc-context { flex-direction: column; align-items: flex-end; gap: 0; }
+  .guest-access-note svg { display: none; }
+}
+.compact-access { display: none; }
+@media (max-width: 380px) {
+  .doc-context { display: none; }
+  .compact-access { display: inline; color: var(--c-sub); }
+}
 .doc-topbar > *{pointer-events:auto}
-.doc-tools{position:relative;isolation:isolate;display:flex;align-items:center;gap:1px;flex:none;height:32px;padding:3px;border:0;border-radius:18px;corner-shape:superellipse(2)}
-.doc-tools::before{content:'';position:absolute;inset:0;z-index:0;border-radius:inherit;corner-shape:inherit;background-color:var(--topbar-glass-bg);box-shadow:var(--topbar-glass-shadow);pointer-events:none;transition:background-color 180ms cubic-bezier(.22,1,.36,1) 140ms,box-shadow 180ms cubic-bezier(.22,1,.36,1) 140ms}
-/* 模糊单独一层：只淡不透明度，避免 backdrop-filter 在 Safari 里直接跳变，也不影响外框边界。 */
-.doc-tools::after{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;corner-shape:inherit;background:transparent;-webkit-backdrop-filter:blur(12px) saturate(1.04);backdrop-filter:blur(12px) saturate(1.04);pointer-events:none;opacity:1;transition:opacity 180ms cubic-bezier(.22,1,.36,1) 140ms}
-.doc-tools>*{position:relative;z-index:1}
-.doc-tools:hover::before{background-color:var(--topbar-glass-bg-hover)}
-/* 目录展开后 Aa/… 落进面板，玻璃外壳最后溶掉；收起时先回壳。 */
-.doc-tools.is-embedded::before{background-color:transparent;box-shadow:0 2px 8px rgb(0 0 0 / 0),0 1px 2px rgb(0 0 0 / 0),inset 0 1px 0 rgb(255 255 255 / 0),inset 0 -1px 0 rgb(0 0 0 / 0);transition:background-color 200ms cubic-bezier(.4,0,.2,1) 220ms,box-shadow 200ms cubic-bezier(.4,0,.2,1) 220ms}
-.doc-tools.is-embedded::after{opacity:0;transition:opacity 200ms cubic-bezier(.4,0,.2,1) 220ms}
-.doc-tools.is-embedded .doc-reading .btn-icon:hover,
-.doc-tools.is-embedded .doc-more .btn-icon:hover{background:color-mix(in srgb,var(--c-ink) 5%,transparent)!important;color:var(--c-ink)}
-.doc-tools .doc-reading,.doc-tools .doc-more{flex:none}
-.doc-tools .doc-reading .btn-icon,.doc-tools .doc-more .btn-icon{width:26px;height:26px;border-radius:7px}
-.doc-tools .doc-reading .btn-icon:hover,.doc-tools .doc-more .btn-icon:hover{background:transparent!important;color:var(--c-ink)}
-.doc-tools .doc-reading .btn-icon.is-active,.doc-tools .doc-more .btn-icon.is-active{background:transparent;color:var(--c-accent)}
-.doc-tools .doc-more .btn-icon{opacity:1}
-.tab-plus-sep{flex:none;width:1px;height:10px;border-radius:1px;background:color-mix(in srgb,var(--c-ink) 14%,transparent)}
-.doc-quick{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:12px;corner-shape:superellipse(2);color:var(--c-sub);opacity:.58;transition:transform 160ms var(--motion-snap),color 140ms ease,opacity 140ms ease}
-.doc-quick:hover,.doc-quick.is-on{color:var(--c-ink);opacity:1;transform:translateY(-1px)}
-.doc-quick:disabled{pointer-events:none;transform:none}
-.doc-topbar .topbar-left{transition:transform 280ms var(--motion-ease),opacity 280ms ease;will-change:transform,opacity}
-.doc-topbar .topbar-left.is-lib-hidden{transform:translateY(-10px);opacity:0;pointer-events:none;transition:transform 200ms var(--motion-snap),opacity 200ms ease}
-.doc-content.is-ready{animation:doc-content-in 240ms var(--motion-ease) both}
-@keyframes doc-content-in{from{opacity:0}to{opacity:1}}
+.doc-tools {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  height: 32px;
+  padding: 2px;
+}
+.doc-tools .btn-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-tool);
+  color: var(--c-sub);
+  opacity: 1;
+}
+@media (hover: hover) {
+  .doc-tools .btn-icon:hover {
+    color: var(--c-ink);
+    background: var(--c-hover);
+    box-shadow: inset 0 0 0 1px var(--surface-menu-border);
+    transform: none;
+  }
+}
+.doc-tools .btn-icon:is(:active,.is-active) { background: var(--c-active); color: var(--c-ink); transform:none; }
+.doc-tools .btn-icon:focus-visible,.doc-quick:focus-visible {
+  color: var(--c-ink);
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
+}
+@media (pointer: coarse) {
+  .doc-tools { gap: 0; height: 44px; padding: 0; }
+  .doc-tools .btn-icon { width: 44px; height: 44px; }
+}
+.doc-quick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-control);
+  color: var(--c-sub);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.doc-quick.is-on { background: var(--c-active); color: var(--c-ink); }
+@media (hover: hover) {
+  .doc-quick:hover { background: var(--c-hover); color: var(--c-ink); }
+}
+.doc-quick:disabled { pointer-events: none; }
+.doc-opening-status {
+  position: absolute;
+  inset: auto 12px 12px auto;
+  z-index: 2;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
+  color: var(--c-sub);
+  background: var(--c-surface);
+  font-size: 12px;
+  pointer-events: none;
+}
+.doc-content.is-ready{animation:doc-content-in 150ms var(--motion-ease) both}
+@keyframes doc-content-in{from{opacity:.88}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.doc-content.is-ready{animation:none}}
-@media(prefers-reduced-motion:reduce){.doc-topbar .topbar-left,.doc-topbar .topbar-left.is-lib-hidden{transition:none!important;transform:none!important;opacity:1!important}}
-.document-shell.chrome-collapsed :deep(.page-header:not(.has-cover)){padding-top:56px}
-.doc-topbar.in-topbar .topbar-left{height:32px;padding:2px 4px;border-radius:18px;corner-shape:superellipse(2);background:var(--topbar-glass-bg);-webkit-backdrop-filter:blur(12px) saturate(1.04);backdrop-filter:blur(12px) saturate(1.04);box-shadow:var(--topbar-glass-shadow);gap:6px}
-.doc-topbar.in-topbar .doc-tabs{flex:1 1 auto;min-width:0}
-.doc-topbar.in-topbar .doc-quick{width:28px;height:28px;border-radius:12px;corner-shape:superellipse(2);background:transparent;box-shadow:none;color:color-mix(in srgb,var(--c-ink) 55%,transparent);opacity:1;transition:transform 160ms var(--motion-snap),color 140ms ease}
-.doc-topbar.in-topbar .doc-quick:hover,.doc-topbar.in-topbar .doc-quick.is-on{color:var(--c-ink);transform:translateY(-1px)}
-.doc-topbar.in-topbar .doc-quick:disabled{pointer-events:none;transform:none}
+/* Text always scrolls below the controls. Only the cover artwork extends behind them. */
+@media screen {
+  .document-shell.chrome-collapsed .doc-body {
+    margin-block-start: var(--workspace-topbar-height);
+  }
+  .doc-body[data-cover-size] { --cover-height: 240px; }
+  .doc-body[data-cover-size="small"] { --cover-height: 160px; }
+  .doc-body[data-cover-size="large"] { --cover-height: 330px; }
+  .doc-body[data-cover-size] :deep(.page-cover) { height: var(--cover-height); }
+  .cover-plane {
+    position: absolute;
+    inset: calc(-1 * var(--workspace-topbar-height)) 0 auto;
+    height: calc(var(--cover-height) + var(--workspace-topbar-height));
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .doc-body[data-cover-size] > #main-scroll-container { position: relative; }
+  /* Both teleported groups inherit the palette; open panels keep their own surface. */
+  :global(.app-topbar:has(.doc-topbar.over-cover)) {
+    --nav-cover-ink: #151515;
+    --nav-cover-paper: #e4e5e7;
+    --nav-cover-halo: rgb(255 255 255 / .94);
+  }
+  :global(.app-topbar:has(.doc-topbar.over-cover[data-cover-tone="dark"])) {
+    --nav-cover-ink: #fff;
+    --nav-cover-paper: #35383c;
+    --nav-cover-halo: rgb(12 13 14 / .94);
+  }
+  :global(.app-topbar:has(.doc-topbar.over-cover[data-cover-tone="unknown"])) {
+    --topbar-chip-opacity: 100%;
+    --topbar-chip-opacity-hover: 100%;
+  }
+  .doc-topbar.over-cover > :is(.topbar-left, .doc-context, .doc-tools:not(.over-outline)) {
+    --c-ink: var(--nav-cover-ink);
+    --c-sub: var(--c-ink);
+    --c-focus: var(--c-ink);
+  }
+  .doc-topbar.over-cover > .topbar-left {
+    --tab-marker-color: var(--nav-cover-paper);
+    --tab-marker-opacity: .54;
+    --tab-hover-opacity: .26;
+  }
+  .doc-topbar.over-cover[data-cover-tone="unknown"] > .topbar-left {
+    --tab-marker-opacity: 1;
+  }
+  /* Photos may have light and dark details within the same title. Shield the ink locally. */
+  .doc-topbar.over-cover[data-image-cover] > :is(.topbar-left, .doc-context, .doc-tools:not(.over-outline)) {
+    text-shadow: 0 0 2px var(--nav-cover-halo), 0 1px 2px var(--nav-cover-halo);
+  }
+  .doc-topbar.over-cover[data-image-cover] :is(.doc-quick, .doc-tools:not(.over-outline) .btn-icon) svg {
+    filter: drop-shadow(0 0 1px var(--nav-cover-halo));
+  }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .doc-topbar.over-cover > .topbar-left { --tab-marker-opacity: 1; }
+  }
+  .document-shell.chrome-collapsed :deep(.page-header:not(.has-cover)) { padding-top: 8px; }
+  .doc-body.is-web-preview .doc-content,
+  .doc-body.is-web-preview .pdf-frame { height: 100%; }
+}
+@media screen and (max-width:720px) {
+  .doc-body[data-cover-size] { --cover-height: 180px; }
+  .doc-body[data-cover-size="small"] { --cover-height: 160px; }
+  .doc-body[data-cover-size="large"] { --cover-height: 250px; }
+}
+.doc-topbar.in-topbar .topbar-left {
+  height: 32px;
+  padding: 2px 4px;
+  gap: 6px;
+}
+.doc-topbar.in-topbar .doc-tabs { flex: 1 1 auto; min-width: 0; }
 .quick-open-menu{position:fixed;z-index:180;width:284px;padding:6px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:12px;box-shadow:var(--c-pop-shadow)}
 .quick-open-label{margin:4px 8px 5px;color:var(--c-faint);font-size:10.5px;letter-spacing:.02em}
 .quick-open-doc{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:7px;text-align:left;color:var(--c-text)}
@@ -898,20 +1233,10 @@ onBeforeUnmount(() => {
 .doc-reading{position:relative;flex:none}
 .reading-aa{display:block;flex:none}
 .doc-more{position:relative;flex:none}
-.doc-more .btn-icon{color:var(--c-faint);opacity:.75}
-.doc-more .btn-icon:hover,.doc-more .btn-icon.is-active{opacity:1;background:var(--c-hover)}
+@media (width > 720px) { .document-actions .mobile-outline-item { display:none; } }
 .reading-panel{width:min(344px,calc(100vw - 24px));max-height:calc(100dvh - 68px);overflow-y:auto;scrollbar-width:thin;z-index:var(--layer-dialog-menu)!important}
 .reading-pop,.actions-pop{position:fixed;transform-origin:top right}
-.reading-pop.pop-enter-active,.actions-pop.pop-enter-active{transition:opacity 240ms ease,transform 460ms var(--motion-pop),filter 280ms ease!important}
-.reading-pop.pop-leave-active,.actions-pop.pop-leave-active{transition:opacity 220ms ease,transform 300ms var(--motion-snap),filter 200ms ease!important}
-.reading-pop.pop-enter-from,.actions-pop.pop-enter-from{opacity:0;transform:translateY(-14px) scale(.93,.86);filter:blur(1.5px)}
-.reading-pop.pop-leave-to,.actions-pop.pop-leave-to{opacity:0;transform:translateY(-10px) scale(.96,.92);filter:blur(1px)}
 .document-actions{z-index:var(--layer-dialog-menu)!important}
-.doc-save-state{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;white-space:nowrap;padding:0 4px;color:var(--c-sub);transition:color 160ms ease}
-.doc-save-state.is-dirty{color:var(--c-sub)}
-.doc-save-state.is-dirty::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--c-accent);flex:none}
-.doc-save-state.is-saving{color:var(--c-accent)}
-.doc-save-state.is-error{color:#a55752}
 .doc-translate{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;border-radius:8px;border:1px solid transparent;color:var(--c-sub);font-size:11.5px;white-space:nowrap;flex:none;transition:background 140ms ease,color 140ms ease}
 .doc-translate:hover{background:var(--c-hover);color:var(--c-ink)}
 .doc-translate.is-running{color:var(--c-accent);background:var(--c-active)}
@@ -931,7 +1256,7 @@ onBeforeUnmount(() => {
 .doc-notice-enter-active,.doc-notice-leave-active{transition:opacity 160ms ease,transform 200ms var(--motion-snap)}
 .doc-notice-enter-from,.doc-notice-leave-to{opacity:0;transform:translate(-50%,8px) scale(.985)}
 @media(max-width:640px){.doc-translate{padding:0 6px}.doc-translate-label,.doc-translate-meter{display:none}}
-.more-stats{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:10px 11px 3px;font-size:11px;color:var(--c-faint)}
+.more-stats{display:flex;flex-wrap:wrap;align-items:center;gap:3px 10px;padding:10px 11px 3px;font-size:11px;color:var(--c-faint)}
 .more-save{margin:0;padding:1px 11px 8px;font-size:11px;color:var(--c-faint)}
 .menu-shortcut{margin-left:auto;font:11px var(--font-sans);color:var(--c-faint)}
 .doc-search-wrap.doc-search-floating{position:fixed;top:44px;right:14px;left:auto;z-index:140;width:min(330px,calc(100vw - 28px))}
@@ -942,10 +1267,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .doc-search-wrap { position:relative }
 .doc-search-panel { position:absolute;right:0;top:38px;width:min(330px,var(--search-available));padding:6px 7px;background:var(--c-pop);border:1px solid var(--surface-menu-border);border-radius:12px;box-shadow:var(--surface-menu-shadow);z-index:80 }
-.doc-search-field { display:flex;align-items:center;gap:6px;min-height:32px;padding:0 3px }.doc-search-field input { min-width:0;flex:1;outline:none;background:transparent;font-size:12px;padding:5px 0 }.doc-search-field button{width:24px;height:24px;display:grid;place-items:center;border-radius:6px;color:var(--c-faint)}.doc-search-field button:hover{background:var(--c-hover);color:var(--c-ink)}
-.search-scope { font-size:10.5px;line-height:1.6;color:var(--c-faint);padding:6px 4px }
-.doc-search-results { max-height:45vh;overflow:auto }.search-hit { display:block;width:100%;text-align:left;font-size:11.5px;line-height:1.65;padding:6px;border-radius:6px }.search-hit:hover{background:var(--c-hover)}
-.search-hit small { display:block; font-size:9.5px; color:var(--c-faint) }
+:global(::highlight(typocket-find)){background:Highlight;color:HighlightText}
 .pop-item:disabled { opacity:.5;cursor:default }
 @media(max-width:640px){ .reader-topbar{padding-left:8px!important;padding-right:8px!important;gap:2px!important}.single-doc-title{max-width:25vw} }
 .document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
@@ -956,7 +1278,7 @@ onBeforeUnmount(() => {
 .document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
-<style scoped>.guest-access-note{gap:4px;flex-shrink:0;display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:var(--radius-control);corner-shape:superellipse(2);background:var(--c-field);color:var(--c-sub);font:11px var(--font-sans)}@media(max-width:640px){.guest-access-note{padding-inline:6px}}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
+<style scoped>.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}
 </style>
 
 <style scoped>.open-in-browser{flex:none;margin-left:3px;color:var(--c-faint)}.open-in-browser:hover{background:var(--c-hover);color:var(--c-ink);text-decoration:none}.open-in-browser:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}.document-actions{width:min(260px,calc(100vw - 24px))}.document-actions .pop-item svg{flex:none}.menu-tail{margin-left:auto}.menu-section-label,.settings-scope{font-size:11px;color:var(--c-sub);line-height:1.6;margin:4px 10px 10px}.menu-section-label{margin:10px 11px 3px}.document-actions .doc-state{width:100%;padding:10px 11px;font-size:12px}

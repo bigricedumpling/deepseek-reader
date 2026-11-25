@@ -74,7 +74,7 @@ for (let attempt = 0; attempt < 40; attempt++) {
     if (instance.ok) {
       const libs = await (await fetch(`http://127.0.0.1:${PORT}/api/libs`, { signal: AbortSignal.timeout(800) })).json()
       const list = libs.data?.libs || []
-      console.log(`已就绪：${instance.data.name}，${list.length} 个抽屉，${list.reduce((sum, lib) => sum + lib.docs, 0)} 篇文档`)
+      console.log(`已就绪：${instance.data.name}，${list.length} 个知识库，${list.reduce((sum, lib) => sum + lib.docs, 0)} 篇文档`)
       process.exit(0)
     }
     lastError = instance.error || '服务返回失败'

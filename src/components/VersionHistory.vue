@@ -2,16 +2,16 @@
   <Teleport to="body"><Transition name="overlay">
     <div v-if="open" class="reader-modal-shade" @mousedown.self="close">
       <section ref="dialog" tabindex="-1" class="reader-dialog version-history" role="dialog" aria-modal="true" aria-label="历史版本">
-        <header><h2>历史版本</h2><button class="btn-icon" title="关闭" @click="close"><PhX :size="18" /></button></header>
+        <header><h2>历史版本</h2><button class="btn-icon" aria-label="关闭" :disabled="busy" @click="close"><PhX :size="18" /></button></header>
 
         <p v-if="error" role="alert" class="reader-error">{{ error }}</p>
         <p v-if="loading" role="status">正在读取…</p>
-        <p v-else-if="!items.length">这篇文档还没有历史版本。</p>
-        <div v-else class="version-content">
-          <nav aria-label="版本列表"><button v-for="item in items" :key="item.id" :aria-pressed="selected === item.id" @click="select(item.id)">{{ new Date(item.at).toLocaleString() }}</button></nav>
-          <TextComparison v-if="content!==null" :before="content" :after="currentContent" /><p v-else class="version-hint">选择一个版本查看差异</p>
+        <p v-else-if="!items.length && !error">这篇文档还没有历史版本。</p>
+        <div v-if="items.length" class="version-content">
+          <nav aria-label="版本列表"><button v-for="item in items" :key="item.id" :aria-pressed="selected === item.id" :disabled="busy" @click="select(item.id)">{{ new Date(item.at).toLocaleString() }}</button></nav>
+          <TextComparison v-if="content!==null" :before="content" :after="currentContent" /><p v-else-if="fetching" class="version-hint" role="status">正在读取版本…</p>
         </div>
-        <footer><button :disabled="content === null || fetching || busy" class="reader-button" @click="restore">{{ busy ? '正在保存当前修改…' : '恢复此版本' }}</button></footer>
+        <footer v-if="items.length"><button :disabled="content === null || fetching || busy" class="reader-button" @click="restore">{{ busy ? '正在保存当前修改…' : '恢复此版本' }}</button></footer>
       </section>
     </div>
   </Transition></Teleport>
@@ -33,7 +33,12 @@ watch(() => [props.open, props.path], async () => {
   items.value = []; content.value = null; selected.value = ''; error.value = ''; fetching.value = false
   if (!props.open) return
   loading.value = true
-  try { const result = await getHistory(props.path); if (current === generation) items.value = result.items }
+  try {
+    const result = await getHistory(props.path)
+    if (current !== generation) return
+    items.value = result.items
+    if (items.value.length) select(items.value[0].id)
+  }
   catch (e) { if (current === generation) error.value = e.message }
   finally { if (current === generation) loading.value = false }
 })
@@ -60,5 +65,7 @@ async function restore() {
 </script>
 <style scoped>
 .version-history{width:min(780px,calc(100vw - 32px));max-height:calc(100dvh - 32px);display:flex;flex-direction:column;gap:12px;padding:18px;overflow:auto}
-header,footer{display:flex;align-items:center;justify-content:space-between;gap:12px}h2{font-size:13px;margin:0}.version-hint,footer span{font-size:12px;color:var(--c-sub);margin:0}.version-content{display:grid;grid-template-columns:185px 1fr;gap:16px;min-height:0;height:360px}nav{overflow:auto;display:flex;flex-direction:column;gap:4px}nav button{text-align:left;padding:10px;border-radius:8px;font-size:12px}nav button[aria-pressed=true]{background:var(--c-field);color:var(--c-accent)}textarea{resize:none;width:100%;height:100%;padding:12px;border:0;border-radius:10px;background:var(--c-field);color:var(--c-ink);font:12px/1.7 monospace}button:disabled{opacity:.45;cursor:default}@media(max-width:560px){.version-history{padding:18px}.version-content{grid-template-columns:1fr;grid-template-rows:100px minmax(140px,1fr);height:50dvh}footer{align-items:flex-end}footer span{max-width:130px}}
+header,footer{display:flex;align-items:center;justify-content:space-between;gap:12px}h2{font-size:13px;margin:0}.version-hint,footer span{font-size:12px;color:var(--c-sub);margin:0}.version-content{display:grid;grid-template-columns:175px minmax(0,1fr);gap:16px;min-height:0;height:360px}nav{overflow:auto;display:flex;flex-direction:column;gap:4px}nav button{text-align:left;padding:10px;border-radius:8px;font-size:12px}nav button[aria-pressed=true]{background:var(--c-field);color:var(--c-accent)}textarea{resize:none;width:100%;height:100%;padding:12px;border:0;border-radius:10px;background:var(--c-field);color:var(--c-ink);font:12px/1.7 monospace}button:disabled{opacity:.45;cursor:default}@media(max-width:560px){.version-history{padding:18px}.version-content{grid-template-columns:1fr;grid-template-rows:100px minmax(140px,1fr);height:50dvh}footer{align-items:flex-end}footer span{max-width:130px}}
+.version-history footer { justify-content:flex-end; margin:0; }
+@media(pointer:coarse){.version-history nav button,.version-history footer button { min-height:44px; }}
 </style>

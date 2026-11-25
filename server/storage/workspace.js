@@ -25,18 +25,20 @@ export function workspace(root) {
   fs.mkdirSync(home, { recursive: true, mode:0o700 })
   const db = new DatabaseSync(path.join(home, 'state.sqlite'))
   const schemaVersion = db.prepare('PRAGMA user_version').get().user_version
-  if (schemaVersion > 2) throw fault('SCHEMA_TOO_NEW', '抽屉由更新版本的阅读器管理，请先升级阅读器', 500)
+  if (schemaVersion > 2) throw fault('SCHEMA_TOO_NEW', '这份数据由较新版本创建，请先更新插件', 500)
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, kind TEXT NOT NULL, meta TEXT NOT NULL DEFAULT '{}', fingerprint TEXT, missing INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS aliases (path TEXT PRIMARY KEY, id TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, owner TEXT NOT NULL, mime TEXT);
     CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, action TEXT, actor TEXT, at INTEGER, details TEXT);
+    CREATE TABLE IF NOT EXISTS activity_versions (operation TEXT PRIMARY KEY, node TEXT NOT NULL, revision TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS activity_versions_by_node ON activity_versions(node,revision);
     CREATE TABLE IF NOT EXISTS operation_reviews (operation TEXT PRIMARY KEY, reviewedAt INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS retries (key TEXT PRIMARY KEY, fingerprint TEXT, result TEXT);
     CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, hash TEXT UNIQUE, name TEXT, scopes TEXT, permissions TEXT, expires INTEGER, revoked INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS versions (id TEXT PRIMARY KEY, node TEXT, revision TEXT, path TEXT, at INTEGER);
-    /* 旧版工作区预览缓存。新版在预览页直接收进抽屉，不再写入；保留表以兼容旧备份和旧数据。 */
+    /* 旧版工作区预览缓存。新版在预览页直接保存到知识库，不再写入；保留表以兼容旧备份和旧数据。 */
     CREATE TABLE IF NOT EXISTS workspace_previews (id TEXT PRIMARY KEY, reference TEXT UNIQUE NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, updated INTEGER NOT NULL, incomplete INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0);
     CREATE INDEX IF NOT EXISTS workspace_previews_updated ON workspace_previews(updated DESC);
     CREATE TABLE IF NOT EXISTS workspace_preview_assets (preview TEXT NOT NULL, id TEXT NOT NULL, mime TEXT NOT NULL, PRIMARY KEY(preview,id));`)
@@ -102,7 +104,7 @@ export function workspace(root) {
   function operationPath(file) {
     return file && path.relative(root, file).split(path.sep).join('/')
   }
-  async function mutate(action, actor, fn, subject) {
+  async function mutate(action, actor, fn, subject, replay) {
     if (active) throw fault('BUSY', '另一个修改正在进行，请稍后重试', 409)
     const id = randomUUID(), dir = path.join(journalRoot, id)
     fs.mkdirSync(dir)
@@ -110,13 +112,17 @@ export function workspace(root) {
     try { db.exec('BEGIN IMMEDIATE') } catch(error) { fs.rmSync(dir,{recursive:true,force:true}); throw error }
     active = j
     try {
-      atomicWrite(path.join(dir, 'journal.json'), JSON.stringify(j))
-      const out = await fn()
-      const details = { files: j.files.map(file => ({
-        type: file.type, path: operationPath(file.path), from: operationPath(file.from), to: operationPath(file.to)
-      })) }
-      if (subject && typeof subject === 'object' && Object.keys(subject).length) details.subject = subject
-      db.prepare('INSERT INTO operations VALUES (?,?,?,?,?)').run(id, action, actor, Date.now(), JSON.stringify(details))
+      // Check under the same SQLite lock as the write. A replay is not a second user-visible change.
+      let out = replay?.()
+      if (out === undefined) {
+        atomicWrite(path.join(dir, 'journal.json'), JSON.stringify(j))
+        out = await fn(id)
+        const details = { files: j.files.map(file => ({
+          type: file.type, path: operationPath(file.path), from: operationPath(file.from), to: operationPath(file.to)
+        })) }
+        if (subject && typeof subject === 'object' && Object.keys(subject).length) details.subject = subject
+        db.prepare('INSERT INTO operations VALUES (?,?,?,?,?)').run(id, action, actor, Date.now(), JSON.stringify(details))
+      }
       db.exec('COMMIT'); active = null
       try{fs.rmSync(dir, { recursive: true, force: true })}catch{}; return out
     } catch (error) {

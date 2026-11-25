@@ -6,7 +6,7 @@
  */
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
-export function useDocScroll({ scroller, docId, onRestore }) {
+export function useDocScroll({ scroller, docId, sourceId, refreshEpoch, onRestore }) {
   /** 每篇文档读到哪。存一份到 localStorage：硬刷新（改完代码要刷新）之后还能接上 */
   const POS_KEY = 'reader.pos'
   const positions = ref(loadPositions())
@@ -32,13 +32,25 @@ export function useDocScroll({ scroller, docId, onRestore }) {
     }, 600)
   }
 
+  function remember(path, id, top) {
+    if (!path) return
+    // The path may arrive before its identity. Keep an identified record until then.
+    if (!id && typeof positions.value[path] === 'object') return
+    positions.value[path] = id ? { id, top } : top
+    savePositions()
+  }
+
+  function restoreDocument(path, id) {
+    const entry = positions.value[path]
+    const legacy = typeof entry === 'number'
+    const top = legacy ? entry : id && entry?.id === id ? entry.top : 0
+    if (id && entry != null && (legacy || entry.id !== id)) remember(path, id, top)
+    restorePosition(top)
+  }
+
   function onScroll() {
     const el = scroller.value
-    if (!el) return
-    if (docId.value) {
-      positions.value[docId.value] = el.scrollTop
-      savePositions()
-    }
+    if (el && !restoreFrame) remember(docId.value, sourceId.value, el.scrollTop)
   }
 
   /*
@@ -95,21 +107,26 @@ export function useDocScroll({ scroller, docId, onRestore }) {
   }
 
   /* 切文档：先记下上一篇读到哪，再把这一篇的位置还原回去 */
-  watch(docId, (_new, old) => {
+  watch([docId, sourceId], ([path, id], [oldPath, oldId]) => {
     const el = scroller.value
-    if (el && old) positions.value[old] = el.scrollTop
-    restorePosition(positions.value[docId.value] || 0)
+    if (el && oldPath !== path && !restoreFrame) remember(oldPath, oldId, el.scrollTop)
+    restoreDocument(path, id)
   })
+
+  // A refreshed revision remounts the editor while the document stays selected.
+  watch(refreshEpoch, () => {
+    if (!restoreFrame) restorePosition(scroller.value?.scrollTop)
+  }, { flush: 'sync' })
 
   onMounted(() => {
     scroller.value?.addEventListener('scroll', onScroll, { passive: true })
     // 刷新进来的第一篇也要接着上次的位置
-    restorePosition(positions.value[docId.value] || 0)
+    restoreDocument(docId.value, sourceId.value)
   })
   onBeforeUnmount(() => {
     stopRestore()
     scroller.value?.removeEventListener('scroll', onScroll)
   })
 
-  return { positions, onScroll }
+  return { positions, onScroll, stopRestore, restorePosition }
 }

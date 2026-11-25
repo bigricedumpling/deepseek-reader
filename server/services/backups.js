@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { workspace, fault, digest } from '../storage/workspace.js'
 import {openRestoredReader} from './restore-viewer.js'
 import { resources } from './resources.js'
-const tables = ['nodes','aliases','assets','asset_aliases','settings','operations','operation_reviews','versions','sources','workspace_previews','workspace_preview_assets']
+const tables = ['nodes','aliases','assets','asset_aliases','settings','operations','operation_reviews','activity_versions','versions','sources','workspace_previews','workspace_preview_assets']
 const excluded = new Set(['state.sqlite','state.sqlite-wal','state.sqlite-shm','.admin-password','.分享.json','restore-viewer.json'])
 export function backupCopyFilter(file) {
   if (fs.lstatSync(file).isSymbolicLink()) throw fault('SYMLINK', '备份中存在符号链接，请先处理后重试')
@@ -14,7 +14,7 @@ export function backupService(repo) {
   const realRoot = fs.realpathSync(repo.root)
   const home = path.join(path.dirname(realRoot), 'Reader备份', digest(repo.root).slice(0,12))
   function safeHome() {
-    if (home === realRoot || home.startsWith(realRoot + path.sep)) throw fault('INVALID_BACKUP_LOCATION', '备份目录不能位于当前抽屉内')
+    if (home === realRoot || home.startsWith(realRoot + path.sep)) throw fault('INVALID_BACKUP_LOCATION', '请选择知识库数据目录以外的位置保存备份')
     let dir = home
     while (dir !== path.dirname(dir)) {
       if (fs.existsSync(dir) && fs.lstatSync(dir).isSymbolicLink()) throw fault('SYMLINK', '备份位置不能是符号链接')

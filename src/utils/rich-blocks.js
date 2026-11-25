@@ -1,41 +1,12 @@
-import { iconSvg, iconPaths, ensureIconPaths } from './icon-catalog.js'
 import { $nodeSchema, $remark, $prose } from '@milkdown/kit/utils'
-import MarkdownIt from 'markdown-it'
-import { assetUrl, API_BASE } from './api.js'
 import { remarkCtx } from '@milkdown/kit/core'
 import { ParserState, SerializerState } from '@milkdown/kit/transformer'
 import { Plugin, TextSelection } from '@milkdown/kit/prose/state'
 import { parseRichBlock } from './rich-block-format.js'
 import { isCosmeticOnly } from './markdown-normalize.js'
-const inline = new MarkdownIt({html:false,linkify:true})
-export { parseRichBlock }
+import { calloutIcon, richDOM } from './rich-block-dom.js'
+export { parseRichBlock, richDOM }
 export function richMarkdown(value){return '\n```reader-block\n'+JSON.stringify(value,null,2)+'\n```\n'}
-function safeUrl(value){return /^(https?:\/\/|\/api\/file\?)/.test(value||'')?assetUrl(value):''}
-function calloutIcon(value) {
- const icon=document.createElement('span');icon.className='rich-callout-icon';icon.contentEditable='false'
- icon.title='更换提示块图标';icon.setAttribute('role','button');icon.setAttribute('aria-label','更换提示块图标');icon.tabIndex=0
- const valueIcon=value.icon??'💡'
- if(valueIcon.startsWith('icon:')){
-  const name=valueIcon.slice(5)
-  icon.insertAdjacentHTML('beforeend', iconSvg(name, 'fill', 22))
-  if(!iconPaths(name))ensureIconPaths().then(()=>{
-   const svg=icon.querySelector('svg')
-   if(svg&&icon.isConnected)svg.outerHTML=iconSvg(name,'fill',22)
-  })
- }else if(/^(data:image\/|\/|https?:\/\/)/.test(valueIcon)){
-  const img=document.createElement('img');img.src=assetUrl(valueIcon);img.alt='';img.width=img.height=22;img.style.objectFit='contain';icon.append(img)
- }else icon.textContent=valueIcon||'＋'
- return icon
-}
-export function richDOM(value){
- const root=document.createElement('div');root.className='reader-rich-block reader-rich-'+value.type;root.dataset.readerBlock=JSON.stringify(value);root.contentEditable='false'
- const text=(parent,raw)=>{const d=document.createElement('div');d.innerHTML=inline.render(String(raw||''));parent.append(d)}
- if(value.type==='callout'){root.append(calloutIcon(value));text(root,value.content)}
- if(value.type==='columns'){text(root,value.left);text(root,value.right)}
- if(value.type==='figure'){root.style.textAlign=['left','center','right'].includes(value.align)?value.align:'center';const fig=document.createElement('figure');fig.style.width=Math.max(20,Math.min(100,Number(value.width)||100))+'%';const img=document.createElement('img');img.src=safeUrl(value.src);img.alt=String(value.alt||'');img.loading='lazy';fig.append(img);const caption=document.createElement('figcaption');caption.textContent=value.caption||'';fig.append(caption);root.append(fig)}
- if(value.type==='card'){const a=document.createElement('a');a.textContent=value.title||'打开文档';a.href='#';a.onclick=async e=>{e.preventDefault();try{const res=await fetch(API_BASE+'/api/resolve?id='+encodeURIComponent(value.id));const out=await res.json();if(out.ok)window.dispatchEvent(new CustomEvent('reader-open-document',{detail:out.data.path}));else a.title=out.error}catch{a.title='暂时无法打开文档'}};root.append(a);text(root,value.description)}
- return root
-}
 function transform(parent){if(!parent.children)return;for(let i=0;i<parent.children.length;i++){const n=parent.children[i];if(n.type==='code'&&n.lang==='reader-block'&&parseRichBlock(n.value))parent.children[i]={type:'readerBlock',value:n.value};else transform(n)}}
 export const richBlockRemark=$remark('readerRichBlocks',()=>()=>transform)
 export const richBlockSchema=$nodeSchema('reader_block',ctx=>({

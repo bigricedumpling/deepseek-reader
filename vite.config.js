@@ -49,7 +49,7 @@ export default defineConfig(async ({ command }) => ({
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(__dirname, 'src') },
-      /* markdown-it-texmath 的 CJS 入口和 Crepe 的 ESM 入口会各自拉一份 KaTeX。 */
+      /* Use the same formula engine for Markdown and the editor. */
       { find: /^katex$/, replacement: path.resolve(__dirname, 'node_modules/katex/dist/katex.mjs') }
     ]
   },

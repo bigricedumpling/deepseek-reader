@@ -1,9 +1,9 @@
 import DOMPurify from 'dompurify'
 import { onMounted, onBeforeUnmount } from 'vue'
-import { renderMarkdown } from '../utils/markdown.js'
+import { readingDocument } from '../utils/safe-reading.js'
+import { renderCoverFrame } from '../utils/cover-renderer.js'
+import documentFlow from '../styles/document-flow.css?inline'
 import { assetUrl } from '../utils/api.js'
-import { parseColumns } from '../utils/column-format.js'
-import { parseRichBlock, richDOM } from '../utils/rich-blocks.js'
 import { renderMermaidSvg } from '../utils/mermaid.js'
 
 function download(filename, blob) {
@@ -19,32 +19,17 @@ function download(filename, blob) {
 
 // Render from the document snapshot. Editor widgets can contain only the visible code lines.
 function articleFragment(raw) {
-  const fragment = DOMPurify.sanitize(renderMarkdown(raw, { gaps: false }), {
-    RETURN_DOM_FRAGMENT: true,
-    FORBID_TAGS: ['style', 'link', 'form', 'button', 'textarea', 'iframe', 'video', 'audio', 'object', 'embed'],
-  })
-  for (const code of fragment.querySelectorAll('pre > code.language-reader-block, pre > code.language-reader-columns')) {
-    if (code.classList.contains('language-reader-columns')) {
-      const columns = parseColumns(code.textContent)
-      if (!columns) continue
-      const row = document.createElement('div')
-      row.className = 'reader-columns'
-      row.style.setProperty('--column-count', String(columns.length))
-      for (const markdown of columns) {
-        const column = document.createElement('div')
-        column.append(articleFragment(markdown))
-        row.append(column)
-      }
-      code.parentElement.replaceWith(row)
-    } else {
-      const value = parseRichBlock(code.textContent)
-      if (value) code.parentElement.replaceWith(richDOM(value))
-    }
-  }
-  for (const math of fragment.querySelectorAll('.katex')) {
-    // Native MathML works offline without shipping KaTeX fonts or its duplicated visual tree.
-    const expression = math.querySelector('math')
-    if (expression) math.replaceWith(expression)
+  const purifyOptions = { FORBID_TAGS: ['style', 'link', 'form', 'button', 'textarea', 'iframe', 'video', 'audio', 'object', 'embed'] }
+  const fragment = readingDocument(raw, { gaps: false, links: false, purifyOptions })
+  for (const katex of fragment.querySelectorAll('.katex')) {
+    // Keep the accessible expression. The native tree needs no script, remote font or duplicate visual layer.
+    const math = katex.querySelector('.katex-mathml > math')
+    if (!math) continue
+    const wrapper = document.createElement('span')
+    wrapper.className = math.getAttribute('display') === 'block' ? 'export-math-block' : 'export-math-inline'
+    const visual = katex.parentElement?.classList.contains('katex-display') ? katex.parentElement : katex
+    wrapper.append(math)
+    visual.replaceWith(wrapper)
   }
   for (const element of fragment.querySelectorAll('[style]')) {
     // Preserve document typography and layout without carrying positioning or resource URLs into print.
@@ -63,16 +48,59 @@ function articleFragment(raw) {
   return fragment
 }
 
-function exportedHeader(original) {
+// A formula can scroll on screen. On paper it has to fit the available column.
+function measurePrintMath(article) {
+  const formulas = [...article.querySelectorAll('.export-math-block, .export-math-inline')]
+  if (!formulas.length) return
+  const probe = document.createElement('div')
+  probe.className = 'typocket-math-probe'
+  probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;inset:0 auto auto 0;font-size:16px;width:max-content'
+  for (const wrapper of formulas) {
+    const row = document.createElement('div')
+    row.style.width = 'max-content'
+    row.append(wrapper.firstElementChild.cloneNode(true))
+    probe.append(row)
+  }
+  document.body.append(probe)
+  try {
+    Array.from(probe.children).forEach((row, i) => {
+      const width = row.getBoundingClientRect().width
+      if (width > 0) formulas[i].style.setProperty('--export-math-fit', (99 * 16 / width).toFixed(4) + 'cqi')
+    })
+  } finally {
+    probe.remove()
+  }
+}
+
+function exportedHeader(original, cover) {
   const header = original.querySelector('.page-header')
   if (!header) return document.createDocumentFragment()
   const copy = header.cloneNode(true)
-  const originalCanvases = header.querySelectorAll('canvas')
-  for (const [i, canvas] of Array.from(copy.querySelectorAll('canvas')).entries()) {
-    const image = document.createElement('img')
-    image.src = originalCanvases[i].toDataURL('image/png')
-    image.alt = ''
-    canvas.replaceWith(image)
+  const coverBox = copy.querySelector('.page-cover')
+  const artwork = original.parentElement.querySelector('.cover-plane')?.firstElementChild
+    || header.querySelector('.page-cover > .gradient-cover, .page-cover > img')
+  if (coverBox && artwork) {
+    coverBox.querySelector('.gradient-cover, img.document-cover-image')?.remove()
+    if (cover?.type === 'gradient') {
+      // Print and offline HTML share a deterministic frame, including when the live cover is offscreen.
+      const bitmap = document.createElement('canvas')
+      const naturalHeight = { small: 160, medium: 240, large: 330 }[cover.height] || 240
+      const width = artwork.clientWidth || 960
+      const height = artwork.clientHeight || naturalHeight
+      bitmap.width = Math.min(1600, Math.round(width * 1.5))
+      bitmap.height = Math.max(1, Math.round(bitmap.width * height / width))
+      if (renderCoverFrame(bitmap, cover, 0) !== false) {
+        const still = document.createElement('img')
+        still.className = 'document-cover-image'
+        still.alt = ''
+        still.src = bitmap.toDataURL('image/png')
+        coverBox.prepend(still)
+      } else {
+        coverBox.style.backgroundImage = getComputedStyle(artwork).backgroundImage
+      }
+    } else {
+      coverBox.prepend(artwork.cloneNode(true))
+    }
   }
   for (const icon of copy.querySelectorAll('button.page-icon')) {
     const span = document.createElement('span')
@@ -140,8 +168,8 @@ const exportStyles = `
   body{max-width:960px;margin:40px auto;padding:0 24px;font:16px/1.8 system-ui,sans-serif;color:#252525;overflow-wrap:anywhere}
   h1,h2,h3{line-height:1.4} img,svg{max-width:100%;height:auto} figure{margin-inline:0}
   table{border-collapse:collapse;max-width:100%} td,th{border:1px solid #ddd;padding:6px 10px}
-  pre{white-space:pre-wrap;background:#f5f5f5;padding:16px;font-size:13px} blockquote{border-left:3px solid #ddd;margin-left:0;padding-left:20px;color:#666}
-  .page-cover{height:240px;overflow:hidden}.gradient-cover,.page-cover img{width:100%;height:100%;object-fit:cover}
+  pre{white-space:pre-wrap;background:#f5f5f5;padding:16px} pre > code{font-size:.8125em} blockquote{border-left:3px solid #ddd;margin-left:0;padding-left:20px;color:#666}
+  .page-cover{height:240px;overflow:hidden}.page-cover.small{height:160px}.page-cover.large{height:330px}.page-cover img{display:block;width:100%;height:100%;object-fit:cover}
   .page-icon{font-size:40px}.page-description,figcaption{color:#666}
   .reader-rich-callout{display:flex;gap:12px;background:#f5f5f5;border-radius:8px;padding:18px}
   .reader-columns,.reader-rich-columns{display:grid;grid-template-columns:repeat(var(--column-count,2),minmax(0,1fr));gap:24px}
@@ -150,10 +178,18 @@ const exportStyles = `
   @media(max-width:600px){.reader-columns,.reader-rich-columns{display:block}}
 `
 
-export function useExport(getDoc, getRaw) {
+export function useExport(getDoc, getRaw, getCover) {
   function exportMarkdown() {
     const doc = getDoc()
     if (doc) download(doc.name + '.md', new Blob([getRaw()], { type: 'text/markdown;charset=utf-8' }))
+  }
+
+  async function exportPackage() {
+    const doc = getDoc()
+    if (!doc?.file) throw Error('正文尚未加载')
+    const raw = getRaw()
+    const { markdownPackage } = await import('../utils/markdown-package.js')
+    download(doc.name + '.zip', await markdownPackage(doc, raw))
   }
 
   let printed = null
@@ -168,7 +204,7 @@ export function useExport(getDoc, getRaw) {
     if (!original?.querySelector('.editor-shell')) return
     const sheet = document.createElement('article')
     sheet.className = 'typocket-print'
-    sheet.append(exportedHeader(original), articleFragment(getRaw()))
+    sheet.append(exportedHeader(original, getCover()), articleFragment(getRaw()))
     // Reuse a rendered diagram only when its source still matches this code block.
     const diagrams = Array.from(original.querySelectorAll('.mermaid-preview'))
     for (const code of sheet.querySelectorAll('pre > code.language-mermaid')) {
@@ -177,6 +213,7 @@ export function useExport(getDoc, getRaw) {
       if (svg) code.parentElement.replaceWith(svg.cloneNode(true))
     }
     for (const image of sheet.querySelectorAll('img')) image.loading = 'eager'
+    measurePrintMath(sheet)
     document.body.append(sheet)
     printed = sheet
   }
@@ -210,10 +247,11 @@ export function useExport(getDoc, getRaw) {
     viewport.name = 'viewport'
     viewport.content = 'width=device-width,initial-scale=1'
     const style = output.createElement('style')
-    style.textContent = exportStyles
+    style.textContent = exportStyles + documentFlow
     output.head.prepend(charset, policy, viewport)
     output.head.append(style)
-    output.body.append(exportedHeader(original), articleFragment(getRaw()))
+    output.body.className = 'typocket-export'
+    output.body.append(exportedHeader(original, getCover()), articleFragment(getRaw()))
     for (const code of output.querySelectorAll('pre > code.language-mermaid')) {
       const svg = await renderMermaidSvg(code.textContent)
       if (svg) code.parentElement.replaceWith(DOMPurify.sanitize(svg, { RETURN_DOM_FRAGMENT: true }))
@@ -223,8 +261,9 @@ export function useExport(getDoc, getRaw) {
         if (/^(?:data-reader-|on)/.test(attr.name) || ['contenteditable', 'draggable', 'tabindex'].includes(attr.name)) el.removeAttribute(attr.name)
       }
     }
+    measurePrintMath(output.body)
     await embedImages(output.body, original)
     download(title + '.html', new Blob(['<!doctype html>\n', output.documentElement.outerHTML], { type: 'text/html;charset=utf-8' }))
   }
-  return { exportMarkdown, exportPdf, exportHtml }
+  return { exportMarkdown, exportPackage, exportPdf, exportHtml }
 }

@@ -189,6 +189,7 @@ window.__ModuleLoader__.load({
       const { tab } = props.useTabInfo()
       const [loaded, setLoaded] = React.useState(false)
       const [collected, setCollected] = React.useState('')
+      const collectionReceipt = React.useRef(null)
       const [frameHeight, setFrameHeight] = React.useState(700)
       const url = React.useMemo(() => new URL('preview/', readerUrl()).toString(), [])
       const origin = React.useMemo(() => new URL(url).origin, [url])
@@ -209,9 +210,9 @@ window.__ModuleLoader__.load({
       const send = React.useCallback(() => {
         frame.current?.contentWindow?.postMessage({
           type: 'dsh-reader-preview:update', title, filePath: resourceAddress, sourcePath: absolutePath,
-          text, eof: props.content?.kind === 'text' && props.content.eof === true
+          text, version: props.content?.version, eof: props.content?.kind === 'text' && props.content.eof === true
         }, origin)
-      }, [title, absolutePath, resourceAddress, text, origin, props.content?.eof])
+      }, [title, absolutePath, resourceAddress, text, origin, props.content?.eof, props.content?.version])
       const sendRef = React.useRef(send)
       sendRef.current = send
       React.useEffect(() => { if (loaded && !collectedUrl) send() }, [loaded, send, collectedUrl])
@@ -224,7 +225,15 @@ window.__ModuleLoader__.load({
             const height = Number(event.data.height)
             if (Number.isFinite(height)) setFrameHeight(Math.min(200000, Math.max(320, Math.ceil(height))))
           }
-          if (event.data?.type === 'dsh-reader-preview:collected') setCollected(String(event.data.file || '已收录'))
+          if (event.data?.type === 'dsh-reader-preview:collected' && typeof event.data.file === 'string' && event.data.file) {
+            const { file, id } = event.data
+            collectionReceipt.current = typeof id === 'string' && id ? { file, id } : null
+            setCollected(file)
+          }
+          if (event.data?.type === 'dsh-reader:ready' && collectionReceipt.current) {
+            frame.current.contentWindow.postMessage({ type: 'dsh-reader:collection-opened', ...collectionReceipt.current }, origin)
+            collectionReceipt.current = null
+          }
           if (event.data?.type === 'dsh-reader:resolve-source') {
             workspaceSourcePath(ctx, String(event.data.reference || ''))
               .then(sourcePath => frame.current?.contentWindow?.postMessage({ type: 'dsh-reader:resolved-source', requestId: event.data.requestId, sourcePath }, origin))
@@ -289,13 +298,13 @@ window.__ModuleLoader__.load({
                   version = page.version
                   full += (full ? '\n' : '') + page.text
                   if (full.length > 5 * 1024 * 1024) throw Error('文档超过 5 MB，暂不能收录')
-                  if (page.eof) { frame.current?.contentWindow?.postMessage({ type: 'dsh-reader-preview:full-content', text: full }, origin); return }
+                  if (page.eof) { frame.current?.contentWindow?.postMessage({ type: 'dsh-reader-preview:full-content', requestId: event.data.requestId, text: full }, origin); return }
                   if (!page.lines || page.lines < 1) throw Error('工作区文件分页无效')
                   offset += page.lines
                 }
                 throw Error('文档页数过多，暂不能收录')
               } catch (error) {
-                if (!pending.signal.aborted) frame.current?.contentWindow?.postMessage({ type: 'dsh-reader-preview:full-content', error: error.message || '读取失败' }, origin)
+                if (!pending.signal.aborted) frame.current?.contentWindow?.postMessage({ type: 'dsh-reader-preview:full-content', requestId: event.data.requestId, error: error.message || '读取失败' }, origin)
               }
             })()
           }
@@ -336,7 +345,7 @@ window.__ModuleLoader__.load({
         if (connectionOpen || !configuredUrl() && !managedUrl && managedState === 'error') return React.createElement(ReaderConnection, { initialUrl: connection, firstUse: needsReaderConnection(),
           onConnect: address => { setReady(false); setConnection(address); setConnectionOpen(false); setAttempt(value => value + 1) },
           onRetry: () => { setReady(false); setConnectionOpen(false); setAttempt(value => value + 1) } })
-        return React.createElement(ReaderMarkdownPreview, { ...props, key: `${connection}:${attempt}`, onReady })
+        return React.createElement(ReaderMarkdownPreview, { ...props, key: `${connection}:${attempt}:${props.resourceAddress}`, onReady })
       }
     }
 
@@ -423,7 +432,7 @@ window.__ModuleLoader__.load({
       // before optional Markdown integration so preview issues cannot hide it.
       ctx.effect(() => ctx.sidebarRightTabs.register({
         id: 'dsh-reader-workspace', kind: 'reader', title: () => BRAND_NAME,
-        guide: [{ id: 'reader', order: 35, title: () => BRAND_NAME, description: () => '打开抽屉', icon: ReaderIcon, commandId: 'reader.open' }]
+        guide: [{ id: 'reader', order: 35, title: () => BRAND_NAME, description: () => '打开文档', icon: ReaderIcon, commandId: 'reader.open' }]
       }), 'reader guide entry')
       ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
         { name: 'sidebar.right.pane.tab', key: 'dsh-reader-workspace' }, createReaderView(ctx)
@@ -450,7 +459,7 @@ window.__ModuleLoader__.load({
             if (parts[0] !== 'session' || !parts[1]) throw Error('工作区地址无效')
             ctx.remote.workspaceFiles.read(parts[1], parts.slice(2).join('/'), { offset: 1 }, controller.signal).then(result => {
               if (!result.ok) throw Error(result.error?.message || '读取失败')
-              if (!controller.signal.aborted) setContent({ kind: 'text', text: result.value.text, eof: result.value.eof, absolutePath: result.value.absolutePath })
+              if (!controller.signal.aborted) setContent({ kind: 'text', text: result.value.text, eof: result.value.eof, version: result.value.version, absolutePath: result.value.absolutePath })
             }).catch(error => { if (!controller.signal.aborted) setError(error.message) })
           } catch (error) { setError(error.message) }
           return () => controller.abort()

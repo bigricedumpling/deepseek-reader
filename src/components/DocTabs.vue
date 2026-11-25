@@ -10,22 +10,19 @@
     ref="strip"
     v-bind="$attrs"
     class="doc-tabs"
-    :class="{ 'has-left': fadeLeft, 'has-right': fadeRight, 'single-document': items.length === 1, 'is-gooing': gooMoving }"
+    role="navigation"
+    aria-label="打开的文档"
+    :class="{ 'has-left': fadeLeft, 'has-right': fadeRight, 'single-document': items.length === 1 }"
     @wheel="onWheel"
     @scroll="updateFade"
   >
-    <div v-if="items.length > 1" class="doc-tab-goo" :class="{ 'is-moving': gooMoving }" aria-hidden="true">
-      <span class="doc-tab-goo-trail" :style="trailStyle" />
-      <span class="doc-tab-goo-main" :style="blobStyle" />
-    </div>
-    <svg class="doc-tab-goo-defs" aria-hidden="true"><defs><filter id="doc-tab-goo" x="-30%" y="-70%" width="160%" height="240%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" /><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="goo" /><feComposite in="SourceGraphic" in2="goo" operator="atop" /></filter></defs></svg>
-    <TransitionGroup name="tab" @before-leave="freezeLeaving" @after-enter="measure" @after-leave="measure">
+    <TransitionGroup name="tab" @before-leave="prepareClose" @after-enter="measure" @after-leave="measure">
       <div
         v-for="t in items"
         :key="t.file"
         :draggable="items.length > 1"
-        @contextmenu.prevent.stop="openContext($event,t.file)"
-        @keydown.shift.f10.prevent="openContext($event,t.file)"
+        @contextmenu="openContext($event,t.file)"
+        @keydown.shift.f10="openContext($event,t.file)"
         @dragstart="onDragStart($event, t.file)"
         @dragover.prevent="onDragOver($event, t.file)"
         @dragleave="onDragLeave($event, t.file)"
@@ -34,11 +31,13 @@
         class="doc-tab"
         :class="{
           'is-active': t.file === active,
+          'has-context': Boolean(t.context),
           'is-dragging': dragging === t.file,
           'is-first-tab': items[0]?.file === t.file,
           'is-last-tab': items[items.length - 1]?.file === t.file
         }"
       >
+        <span v-if="items.length > 1 && t.file === active" class="doc-tab-indicator" aria-hidden="true" />
         <span
           class="doc-drop-line"
           :class="{ 'is-visible': dropTarget?.file === t.file, 'is-after': dropTarget?.file === t.file && dropTarget.after }"
@@ -47,18 +46,23 @@
         <button
           class="doc-tab-main"
           :title="t.file"
+          :aria-current="t.file === active ? 'page' : undefined"
+          :aria-label="[t.name, t.context, t.dirty ? '有未保存的更改' : ''].filter(Boolean).join('，')"
+          @keydown="navigate($event, t.file)"
           :draggable="items.length > 1"
           @click="onTabClick(t.file)"
           @auxclick="onAux($event, t.file)"
         >
           <ContentIcon v-if="t.icon" :value="t.icon" :size="16" />
           <span class="doc-tab-name">{{ t.name }}</span>
-          <span v-if="t.dirty" class="doc-tab-dot" aria-hidden="true" />
+          <small v-if="t.context" class="doc-tab-context">{{ t.context }}</small>
+          <span class="doc-tab-dot" :class="{ 'is-pending': t.dirty }" aria-hidden="true" />
         </button>
         <button
-          v-if="items.length > 1"
           class="doc-tab-x"
-          aria-label="关闭标签页"
+          :disabled="items.length < 2"
+          :aria-hidden="items.length < 2 || undefined"
+          :aria-label="'关闭标签页，' + [t.name, t.context].filter(Boolean).join('，')"
           @click.stop="$emit('close', t.file)"
         >
           <PhX :size="11" />
@@ -76,6 +80,7 @@
 </template>
 
 <script setup>
+import { navigateMenu } from '../utils/navigate-menu'
 import { scrollBehavior } from '../utils/scroll-target.js'
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import ContentIcon from './ContentIcon.vue'
@@ -83,7 +88,7 @@ import { PhX } from '../icons/remix'
 
 defineOptions({inheritAttrs:false})
 const props = defineProps({
-  /** [{ file, name, dirty }] */
+  /** Open documents with optional icon, disambiguating context and save state. */
   items: { type: Array, default: () => [] },
   active: { type: String, default: '' }
 })
@@ -100,7 +105,7 @@ function onDragStart(event, file) {
   dropTarget.value = null
   suppressClickUntil = 0
   event.dataTransfer.effectAllowed = 'move'
-  try { event.dataTransfer.setData('text/plain', file) } catch {}
+  try { event.dataTransfer.setData('application/x-typocket-tab', '1') } catch {}
 }
 function onDragOver(event, file) {
   if (!dragging.value || dragging.value === file) { dropTarget.value = null; return }
@@ -135,17 +140,50 @@ function onTabClick(file) {
   emit('select', file)
 }
 
+function navigate(event, file) {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+  const index = props.items.findIndex(tab => tab.file === file)
+  const last = props.items.length - 1
+  let next
+  switch (event.key) {
+    case 'ArrowLeft': next = Math.max(0, index - 1); break
+    case 'ArrowRight': next = Math.min(last, index + 1); break
+    case 'Home': next = 0; break
+    case 'End': next = last; break
+    default: return
+  }
+  event.preventDefault()
+  if (next === index) return
+  strip.value?.querySelectorAll('.doc-tab:not(.tab-leave-active) .doc-tab-main')[next]?.focus({ preventScroll: true })
+  emit('select', props.items[next].file)
+}
+
 const context=ref(null),contextPanel=ref(null)
 let contextTrigger=null
-async function openContext(event,file){
- const rect=event.currentTarget.getBoundingClientRect();contextTrigger=event.currentTarget.querySelector('button')
- const menuHeight=190
- context.value={file,x:Math.max(8,Math.min(event.type==='contextmenu'?event.clientX:rect.left,innerWidth-196)),y:Math.max(8,Math.min(event.type==='contextmenu'?event.clientY:rect.bottom,innerHeight-menuHeight))}
- await nextTick();contextPanel.value?.querySelector('button:not(:disabled)')?.focus()
+async function openContext(event, file) {
+  if (props.items.length < 2) return
+  event.preventDefault()
+  event.stopPropagation()
+  const rect = event.currentTarget.getBoundingClientRect()
+  contextTrigger = event.currentTarget.querySelector('button')
+  const pointer = event.type === 'contextmenu' && (event.clientX || event.clientY)
+  const x = pointer ? event.clientX : rect.left
+  const y = pointer ? event.clientY : rect.bottom
+  context.value = { file, x:8, y:8 }
+  await nextTick()
+  const panel = contextPanel.value
+  if (!panel || !context.value) return
+  context.value.x = Math.max(8, Math.min(x, innerWidth - panel.offsetWidth - 8))
+  context.value.y = Math.max(8, Math.min(y, innerHeight - panel.offsetHeight - 8))
+  panel.querySelector('button:not(:disabled)')?.focus({ preventScroll:true })
 }
 function dismissContext(focus=false){context.value=null;if(focus)contextTrigger?.focus()}
 function contextOutside(e){if(!contextPanel.value?.contains(e.target))dismissContext()}
-function menuKey(e){if(e.key==='Escape'){e.preventDefault();dismissContext(true)}else if(e.key==='Tab')dismissContext();else if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const buttons=[...contextPanel.value.querySelectorAll('button:not(:disabled)')],i=buttons.indexOf(document.activeElement);buttons[e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus()}}
+function menuKey(event) {
+  if (event.key === 'Escape') event.preventDefault()
+  if (event.key === 'Escape' || event.key === 'Tab') dismissContext(true)
+  else navigateMenu(event)
+}
 function closeGroup(kind){const file=context.value.file,index=props.items.findIndex(t=>t.file===file);const files=props.items.filter((t,i)=>kind==='current'?t.file===file:kind==='others'?t.file!==file:i>index).map(t=>t.file);dismissContext(true);emit('close-many',files)}
 /** 键盘路径：右键菜单里左右移动，和拖拽共用同一个 reorder 事件。 */
 function canMove(delta){if(!context.value)return false;const i=props.items.findIndex(t=>t.file===context.value.file);return i>=0&&i+delta>=0&&i+delta<props.items.length}
@@ -154,54 +192,128 @@ onMounted(()=>{document.addEventListener('pointerdown',contextOutside);window.ad
 onBeforeUnmount(()=>{document.removeEventListener('pointerdown',contextOutside);window.removeEventListener('resize',contextOutside)})
 
 const strip = ref(null)
-const blobStyle = ref({ opacity: 0 })
-const trailStyle = ref({ opacity: 0 })
-const gooMoving = ref(false)
-let trailFrame = 0
-let gooTimer = 0
-async function measureBlob() {
-  await nextTick()
-  const host = strip.value
-  if (!host) return
-  const activeEl = host.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
-  if (!activeEl || props.items.length < 2) { cancelAnimationFrame(trailFrame); blobStyle.value = { opacity: 0 }; trailStyle.value = { opacity: 0 }; return }
-  const next = {
-    left: (activeEl.offsetLeft + 4) + 'px',
-    top: (activeEl.offsetTop + 1) + 'px',
-    width: (activeEl.offsetWidth - 8) + 'px',
-    height: (activeEl.offsetHeight - 2) + 'px',
-    opacity: 1
-  }
-  const prev = blobStyle.value
-  const moved = prev.left !== undefined && (prev.left !== next.left || prev.top !== next.top || prev.width !== next.width)
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    cancelAnimationFrame(trailFrame)
-    clearTimeout(gooTimer)
-    gooMoving.value = false
-    trailStyle.value = { opacity: 0 }
-  } else if (moved) {
-    // 主块先走，尾块从旧位置慢半拍追上来；两个形状被 SVG goo 连在一起，
-    // 中途就是 shwn 那种被拉长、再回弹的液滴，而不是一块灰底平移。
-    gooMoving.value = true
-    clearTimeout(gooTimer)
-    gooTimer = setTimeout(() => { gooMoving.value = false }, 560)
-    trailStyle.value = { ...prev, opacity: 1 }
-    // 尾块不主动消失：它追到目标后正好压在主块下面，形状并集不变；
-    // 下一次切换时它再从当前位置慢半拍出发。
-    cancelAnimationFrame(trailFrame)
-    trailFrame = requestAnimationFrame(() => { trailStyle.value = { ...next, opacity: 1 } })
-  }
-  blobStyle.value = next
+// The pill is attached to the selected tab so scrolling, closing a neighbor and
+// reordering carry it with its label. A selection change animates just this fill.
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+let previousPill = null
+let sourceTab = null
+let indicatorAnimation = null
+function activePill() {
+  return strip.value?.querySelector('.doc-tab.is-active:not(.tab-leave-active) .doc-tab-indicator')
 }
-watch(() => [props.active, props.items.map(t => t.file + ':' + t.name + ':' + Boolean(t.dirty)).join('|')], measureBlob, { flush: 'post' })
-onMounted(measureBlob)
-onBeforeUnmount(() => { clearTimeout(gooTimer); cancelAnimationFrame(trailFrame) })
+function stopIndicator() {
+  indicatorAnimation?.cancel()
+  indicatorAnimation = null
+  sourceTab = null
+}
+function onMotionPreference() {
+  if (reducedMotion.matches) stopIndicator()
+}
+
+watch(() => props.active, () => {
+  const pill = activePill()
+  // Read the actual rendered rectangle, including a still-running transition,
+  // before Vue moves the selection to a different tab.
+  previousPill = pill && {
+    rect: pill.getBoundingClientRect(),
+    waist: parseFloat(getComputedStyle(pill).getPropertyValue('--tab-waist')) || 0
+  }
+  stopIndicator()
+  sourceTab = pill?.parentElement
+}, { flush: 'pre' })
+
+function fadeIndicator(pill) {
+  stopIndicator()
+  indicatorAnimation = pill.animate([{ opacity: 0 }, {}], { duration: 130, easing: 'ease-out' })
+}
+
+// Closing a tab can select its successor in the same frame. Its slot is already
+// moving toward the closing tab. Let the new highlight arrive with that slot.
+function followClosingSlot() {
+  const pill = activePill()
+  if (!sourceTab || !pill || reducedMotion.matches) return false
+  const closing = [...strip.value.querySelectorAll('.tab-leave-active')]
+  const sourceLeaving = closing.includes(sourceTab)
+  if (!sourceLeaving && !closing.some(tab => tab.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING)) return false
+  if (sourceLeaving) sourceTab.classList.add('is-departing-selection')
+  fadeIndicator(pill)
+  return true
+}
+
+function moveIndicator() {
+  const from = previousPill?.rect
+  const startWaist = previousPill?.waist || 0
+  previousPill = null
+  const host = strip.value
+  const pill = activePill()
+  if (!from?.width || !pill || reducedMotion.matches || !pill.animate) return
+  const to = pill.getBoundingClientRect()
+  if (!to.width || !to.height) return
+  if (followClosingSlot()) return
+  const viewport = host.getBoundingClientRect()
+  const inView = rect => rect.right > viewport.left + 1 && rect.left < viewport.right - 1
+  if (!inView(from) || !inView(to)) {
+    fadeIndicator(pill)
+    return
+  }
+  const leftTravel = to.left - from.left
+  const rightTravel = to.right - from.right
+  const centerY = (from.top + from.bottom - to.top - to.bottom) / 2
+  const travel = Math.max(Math.abs(leftTravel), Math.abs(rightTravel))
+  if (travel + Math.abs(centerY) + Math.abs(from.height - to.height) < 0.5 && !startWaist) return
+
+  // The front extends early; the rear holds on longer. Bound each by the
+  // shortest edge journey so a reversal never sends an edge past its target.
+  const movingRight = leftTravel > 0
+  const stretch = leftTravel * rightTravel > 0
+    ? Math.min(20, Math.min(Math.abs(leftTravel), Math.abs(rightTravel)) * 0.23, Math.min(from.width, to.width) * 0.27)
+    : 0
+  const startScale = from.height / to.height
+  const frames = [0, .125, .25, .375, .5, .625, .75, .875, 1].map(progress => {
+    const remaining = 1 - progress
+    const tension = 4 * progress * remaining * stretch
+    const front = tension * remaining
+    const rear = tension * progress
+    const x = -leftTravel * remaining - (movingRight ? rear : front)
+    const width = from.width * remaining + to.width * progress + tension
+    const scaleY = 1 + (startScale - 1) * remaining - tension * 0.0017
+    return {
+      offset: progress,
+      transform: `translate(${x}px, ${centerY * remaining}px) scaleY(${scaleY})`,
+      width: progress === 1 ? 'calc(100% - 4px)' : width + 'px',
+      '--tab-waist': (startWaist * remaining + tension * 0.11) + 'px'
+    }
+  })
+  pill.classList.add('is-stretching')
+  indicatorAnimation = pill.animate(frames, {
+    duration: Math.min(350, 220 + travel * 0.35),
+    easing: getComputedStyle(host).getPropertyValue('--tab-motion-ease').trim()
+  })
+  const releaseContour = () => pill.classList.remove('is-stretching')
+  indicatorAnimation.onfinish = releaseContour
+  indicatorAnimation.oncancel = releaseContour
+}
+
+onMounted(() => reducedMotion.addEventListener('change', onMotionPreference))
+onBeforeUnmount(() => {
+  reducedMotion.removeEventListener('change', onMotionPreference)
+  stopIndicator()
+})
 
 /** 两侧还有没有看不见的标签：有就画一小段渐变，提示"这儿还能滚" */
 const fadeLeft = ref(false)
 const fadeRight = ref(false)
 
-function freezeLeaving(el){el.style.width=el.offsetWidth+'px';el.style.left=el.offsetLeft+'px';el.style.top=el.offsetTop+'px'}
+function prepareClose(tab) {
+  // Keep the closing slot in the row so its siblings and the strip's right
+  // edge travel together, including when only a single document remains.
+  tab.style.setProperty('--closing-width', tab.offsetWidth + 'px')
+  tab.style.setProperty('--closing-label-width', tab.querySelector('.doc-tab-main').offsetWidth + 'px')
+  tab.inert = true
+  nextTick(() => {
+    if (indicatorAnimation?.playState === 'running') followClosingSlot()
+  })
+}
 function measure() {
   updateFade()
   for(const el of strip.value?.querySelectorAll('.doc-tab-name')||[])el.classList.toggle('is-clipped',el.scrollWidth > el.clientWidth + 1)
@@ -209,9 +321,8 @@ function measure() {
 function updateFade() {
   const el = strip.value
   if (!el) return
-  // Measure the visible tabs' layout edge, not scrollWidth: a leaving tab is
-  // absolute-positioned and would otherwise create a phantom overflow. The
-  // 2px tolerance also absorbs fractional/Retina width rounding.
+  // Ignore the closing slot when deciding whether more documents are hidden.
+  // The 2px tolerance absorbs fractional width rounding.
   const tabs = [...el.querySelectorAll('.doc-tab:not(.tab-leave-active)')]
   const contentRight = tabs.reduce((right, tab) => Math.max(right, tab.offsetLeft + tab.offsetWidth), 0)
   const scrollable = contentRight > el.clientWidth + 2
@@ -225,37 +336,66 @@ function scrollActiveIntoView(smooth = true) {
   if (!el) return
   const tab = el.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
   if (!tab) return
-  const left = tab.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft
+  const left = tab.offsetLeft
   const right = left + tab.offsetWidth
-  const pad = 10
-  if (left - pad < el.scrollLeft) {
-    el.scrollTo({ left: Math.max(0, left - pad), behavior: scrollBehavior(smooth) })
-  } else if (right + pad > el.scrollLeft + el.clientWidth) {
-    el.scrollTo({ left: right + pad - el.clientWidth, behavior: scrollBehavior(smooth) })
+  const pad = Math.max(0, Math.min(10, (el.clientWidth - tab.offsetWidth) / 2))
+  let target = el.scrollLeft
+  if (left - pad < target) target = Math.max(0, left - pad)
+  else if (right + pad > target + el.clientWidth) target = right + pad - el.clientWidth
+  if (target !== el.scrollLeft) {
+    el.scrollTo({ left: target, behavior: scrollBehavior(smooth && Math.abs(target - el.scrollLeft) <= el.clientWidth) })
   }
 }
 
-watch(() => props.active, () => nextTick(() => scrollActiveIntoView()))
-watch(
-  () => props.items,
-  () => nextTick(measure)
-)
+watch(() => props.active, () => {
+  moveIndicator()
+  scrollActiveIntoView()
+}, { flush: 'post' })
 
-let observer = null
+let observer
+function observeLayout() {
+  if (!observer || !strip.value) return
+  observer.disconnect()
+  observer.observe(strip.value)
+  strip.value.querySelectorAll('.doc-tab:not(.tab-leave-active)').forEach(el => observer.observe(el))
+}
+watch(() => props.items, (items, previous) => {
+  const sameLayout = items.length === previous.length && items.every((tab, index) => {
+    const old = previous[index]
+    return old.file === tab.file && old.name === tab.name && old.context === tab.context && old.icon === tab.icon
+  })
+  if (sameLayout) return
+  observeLayout()
+  measure()
+  if (items.length > previous.length && previous.some(tab => tab.file === props.active)) scrollActiveIntoView(false)
+}, { flush: 'post' })
+
+let previousStripWidth = 0
+function onStripResize() {
+  const host = strip.value
+  if (!host) return
+  const width = host.clientWidth
+  if (width > 0 && (previousStripWidth === 0 || width < previousStripWidth)) {
+    const active = host.querySelector('.doc-tab.is-active:not(.tab-leave-active)')
+    if (active && !host.querySelector('.tab-leave-active')) {
+      const left = active.offsetLeft - host.scrollLeft
+      // A mobile file list hides the strip entirely. On desktop, keep a
+      // visible tab in view without overriding a user's horizontal browsing.
+      if (!previousStripWidth || (left >= -1 && left + active.offsetWidth <= previousStripWidth + 1)) {
+        scrollActiveIntoView(false)
+      }
+    }
+  }
+  previousStripWidth = width
+  measure()
+}
 
 onMounted(() => {
-  nextTick(() => {
-    scrollActiveIntoView(false)
-    measure()
-  })
-  // 窗口或侧栏变宽变窄时，遮罩要不要显示可能就变了；goo 底块也要重新对位
-  observer = new ResizeObserver(() => { measure(); measureBlob() })
-  if (strip.value) observer.observe(strip.value)
+  observer = new ResizeObserver(onStripResize)
+  observeLayout()
+  scrollActiveIntoView(false)
 })
-
-onBeforeUnmount(() => {
-  observer?.disconnect()
-})
+onBeforeUnmount(() => observer?.disconnect())
 
 /** 鼠标滚轮横着滚标签条：标签多了之后不用去够下面的滚动条 */
 function onWheel(e) {
@@ -289,11 +429,13 @@ function onAux(e, file) {
 .doc-tabs {
   --fade-l: 0px;
   --fade-r: 0px;
-  /* 关标签时那个要淡出的标签是绝对定位的，得有定位基准，不然会跳 */
+  --tab-gap: 4px;
+  --tab-motion-ease: cubic-bezier(.38,.08,.22,1);
+  isolation: isolate;
   position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--tab-gap);
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -305,65 +447,62 @@ function onAux(e, file) {
   display: none;
 }
 .doc-tabs.has-left {
-  --fade-l: 18px;
+  --fade-l: min(18px, 5%);
 }
 .doc-tabs.has-right {
-  --fade-r: 18px;
+  --fade-r: min(18px, 5%);
 }
 
-/* 开关标签、切换顺序时的过渡：位置变化靠 tab-move 平滑滑过去 */
-.tab-enter-active,
-.tab-leave-active,
-.tab-move {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-.tab-enter-from,
-.tab-leave-to {
-  opacity: 0;
-  transform: translateX(6px) scale(0.96);
-}
+/* Reordering moves existing tabs. Closing a tab releases its space in flow. */
+.doc-tab.tab-move { transition: transform 210ms var(--tab-motion-ease); }
+.doc-tab.tab-enter-active { transition: opacity 140ms ease; }
+.doc-tab.tab-enter-from { opacity: 0; }
 .doc-tab.tab-leave-active {
-  /* Must beat .doc-tab position:relative: leaving tabs stop reserving space
-     before TransitionGroup measures the remaining tabs for its FLIP move. */
-  position: absolute;
-}
-.doc-tab-goo {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+  width: var(--closing-width);
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
   pointer-events: none;
-  opacity: .14;
-  /* 静止时也保留 goo：动效结束后形状不跳回普通圆角矩形。 */
-  filter: url(#doc-tab-goo);
+  transition: width 210ms var(--tab-motion-ease), margin-inline-end 210ms var(--tab-motion-ease), opacity 95ms ease-out;
 }
-.doc-tab-goo.is-moving {
-  opacity: .14;
-  filter: url(#doc-tab-goo);
+.doc-tab.tab-leave-active .doc-tab-main { flex: 0 0 var(--closing-label-width); }
+.doc-tab.tab-leave-to { width: 0; margin-inline-end: calc(-1 * var(--tab-gap)); opacity: 0; }
+@property --tab-waist {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
 }
-.doc-tab-goo span {
+.doc-tab-indicator {
   position: absolute;
-  display: block;
-  border-radius: 10px;
-  background: var(--c-ink);
-  will-change: left, top, width, height;
+  inset: 1px 2px;
+  z-index: -1;
+  border-radius: var(--radius-row);
+  corner-shape: var(--corner-ui);
+  background: var(--tab-marker-color, var(--c-ink));
+  opacity: var(--tab-marker-opacity, .14);
+  pointer-events: none;
 }
-.doc-tab-goo-main {
-  transition: left 340ms var(--motion-pop), top 280ms var(--motion-pop), width 300ms var(--motion-pop), height 280ms var(--motion-pop), opacity 180ms ease;
+/* Resolve the curve from the animated length on each paint, including in WebKit. */
+.doc-tab-indicator.is-stretching {
+  clip-path: shape(from 0 0, hline to 12%,
+    curve to 50% var(--tab-waist) with 28% 0 / 33% var(--tab-waist),
+    curve to 88% 0 with 67% var(--tab-waist) / 72% 0,
+    hline to 100%, vline to 100%, hline to 88%,
+    curve to 50% calc(100% - var(--tab-waist)) with 72% 100% / 67% calc(100% - var(--tab-waist)),
+    curve to 12% 100% with 33% calc(100% - var(--tab-waist)) / 28% 100%,
+    hline to 0, close);
 }
-.doc-tab-goo-trail {
-  transition: left 460ms var(--motion-snap), top 400ms var(--motion-snap), width 440ms var(--motion-snap), height 400ms var(--motion-snap), opacity 220ms ease;
-}
-.doc-tab-goo-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.tab-leave-active .doc-tab-indicator { visibility: hidden; }
 .doc-tab {
-  z-index: 1;
+  isolation: auto;
   display: flex;
   align-items: center;
   flex-shrink: 0;
   height: 32px;
-  max-width: 220px;
+  max-width: min(220px, 100%);
   position: relative;
   border-radius: 16px;
-  transition: background 0.15s;
+  transition: background 0.15s, max-width 180ms var(--motion-ease);
   cursor: grab;
 }
 .doc-tab.is-dragging { cursor: grabbing; opacity: .45; }
@@ -391,31 +530,36 @@ function onAux(e, file) {
   background: var(--c-hover);
 }
 .doc-tab.is-active {
-  --smooth-fill: color-mix(in srgb, var(--c-ink) 10%, var(--c-surface));
+  --smooth-fill: transparent;
   background: transparent !important;
   box-shadow: none;
 }
-.doc-tabs:not(.single-document) .doc-tab.is-active { --smooth-fill: transparent; }
-.single-document .doc-tab.is-active {
-  background: color-mix(in srgb, var(--c-ink) 14%, transparent);
-}
-/* 浮在封面上的顶栏里，标签条整体是一块玻璃；内部仍只给当前项画选框。 */
+/* The selection pill belongs to the active document in a multi-tab strip. */
 .doc-tabs.is-topbar-tabs { height: 28px; min-height: 0; }
 .doc-tabs.is-topbar-tabs .doc-tab {
   height: 28px;
   border-radius: 14px !important;
 }
-/* hover 与选中共用同一个 goo 形状，只差透明度；这样圆角和液态边缘完全一致。 */
-.doc-tabs.is-topbar-tabs .doc-tab::before {
-  background: var(--c-ink) !important;
-  border-radius: 10px !important;
-  filter: url(#doc-tab-goo) !important;
-  corner-shape: superellipse(2);
+/* Hover belongs to the pointed tab. Selection is painted by the pill alone. */
+.doc-tabs .doc-tab::before {
+  inset: 1px 2px;
+  background: var(--tab-marker-color, var(--c-ink)) !important;
+  border-radius: var(--radius-row) !important;
+  corner-shape: var(--corner-ui);
+  filter: none;
   opacity: 0;
-  transition: opacity 140ms ease;
+  transition: opacity 120ms ease;
 }
-.doc-tabs.is-topbar-tabs .doc-tab:not(.is-active):hover::before {
-  opacity: .06;
+@supports not (corner-shape: superellipse(2)) {
+  .doc-tab-indicator, .doc-tabs .doc-tab::before { filter: url(#reader-superellipse); }
+}
+.doc-tabs .doc-tab.is-active::before { opacity: 0; transition: none; }
+.doc-tabs .tab-leave-active.is-departing-selection::before {
+  opacity: var(--tab-marker-opacity, .14);
+  transition: none;
+}
+.doc-tabs .doc-tab:not(.is-active):hover::before {
+  opacity: var(--tab-hover-opacity, .06);
 }
 .doc-tabs.is-topbar-tabs .doc-tab:hover {
   background: transparent;
@@ -424,14 +568,15 @@ function onAux(e, file) {
   background: transparent !important;
 }
 .doc-tab-main {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 5px;
   min-width: 0;
   height: 100%;
-  padding: 0 6px 0 10px;
+  padding: 0 12px 0 10px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--c-sub);
   cursor: pointer;
 }
@@ -439,17 +584,50 @@ function onAux(e, file) {
   color: var(--c-ink);
 }
 .doc-tab-name {
+  /* The label keeps its advance when the selection moves, including Latin filenames. */
+  font-weight: 500;
   overflow: hidden;
   text-overflow: clip;
   white-space: nowrap;
 }
-.doc-tab-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--c-accent);
+.doc-tab-context {
+  min-width: 0;
   flex-shrink: 0;
+  max-width: min(7em, 45%);
+  font-size: 10.5px;
+  color: var(--c-sub);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
+.has-context .doc-tab-name { min-width: min(4em, 45%); }
+.doc-tab-dot {
+  position: absolute;
+  inset-inline-end: 3px;
+  top: calc(50% - 2px);
+  pointer-events: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--c-sub);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.doc-tab-dot.is-pending {
+  opacity: 1;
+  transition-delay: 1200ms;
+}
+.doc-tab-main:focus-visible, .doc-tab-x:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
+}
+.doc-tab-main { border-radius: inherit; }
+@media (max-width:480px) {
+  .doc-tabs.is-topbar-tabs .doc-tab-main { padding-inline:6px; }
+  .doc-tabs.is-topbar-tabs .doc-tab-x { margin-inline-end:4px; }
+}
+
+.doc-tab:focus-within .doc-tab-x { opacity: 1; }
 .doc-tab-x {
   display: flex;
   align-items: center;
@@ -457,35 +635,55 @@ function onAux(e, file) {
   width: 18px;
   height: 18px;
   margin-right: 7px;
-  border-radius: var(--radius-control);
-  color: var(--c-faint);
+  border-radius: var(--radius-item);
+  color: color-mix(in srgb, var(--c-ink) 83%, transparent);
   opacity: 0;
-  transition: opacity 0.15s;
+  overflow: hidden;
+  transition: opacity 120ms ease, width 180ms var(--motion-ease), margin-inline-end 180ms var(--motion-ease);
+}
+.doc-tab-x svg { flex: none; }
+.single-document .doc-tab .doc-tab-x:disabled { opacity: 0; pointer-events: none; }
+/* Once the left slot has finished closing, release the final close-button
+   space. Removing both ends at once can clamp scrollLeft in the wrong direction. */
+.single-document:not(:has(.tab-leave-active)) .doc-tab-x:disabled {
+  width: 0;
+  margin-inline-end: 0;
 }
 .doc-tab:hover .doc-tab-x,
 .doc-tab.is-active .doc-tab-x {
   opacity: 1;
 }
-.doc-tab-x:hover {
+.doc-tab-x:is(:hover, :focus-visible) {
   background: color-mix(in srgb, var(--c-ink) 9%, transparent);
   color: var(--c-ink);
 }
 </style>
 
 <style scoped>
-.doc-tab:not(:last-child)::after{content:'';position:absolute;right:-1px;top:9px;bottom:9px;width:1px;background:color-mix(in srgb,var(--c-ink) 14%,transparent)}.doc-tab-name.is-clipped{mask-image:linear-gradient(to right,#000 calc(100% - 18px),transparent)}.doc-tab-main .content-icon{width:16px;height:16px}.doc-tab-x{flex-shrink:0}.doc-tabs:not(.has-left):not(.has-right){mask-image:none;-webkit-mask-image:none}
+.doc-tab-name.is-clipped{mask-image:linear-gradient(to right,#000 calc(100% - min(14px,12%)),transparent)}.doc-tab-main .content-icon{width:16px;height:16px}.doc-tab-x{flex-shrink:0}.doc-tabs:not(.has-left):not(.has-right){mask-image:none;-webkit-mask-image:none}
 </style>
 <style scoped>
-.doc-tabs{min-height:36px}.doc-tab.tab-move{transition:transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:opacity 180ms ease,transform 240ms cubic-bezier(.22,1,.36,1)!important}.doc-tab.tab-enter-from,.doc-tab.tab-leave-to{opacity:0;transform:translateY(5px) scale(.94)}.single-document .doc-tab{--smooth-fill:transparent!important;max-width:100%}
-@media(prefers-reduced-motion:reduce){.doc-tab.tab-move,.doc-tab.tab-enter-active,.doc-tab.tab-leave-active{transition:none!important}}
+.doc-tabs { min-height: 36px; }
+.single-document .doc-tab:not(.tab-leave-active) { max-width: 100%; }
+@media (prefers-reduced-motion: reduce) {
+  .doc-tab.tab-move, .doc-tab.tab-enter-active, .doc-tab.tab-leave-active,
+  .doc-tab, .doc-tab .doc-tab-x { transition: none; }
+  .doc-tab.tab-leave-active { display: none; }
+  .single-document .doc-tab-x:disabled { width: 0; margin-inline-end: 0; }
+}
 </style>
 
-<style scoped>.tab-context{position:fixed;z-index:180;width:188px;padding:5px;border-radius:12px}.tab-context button{display:block;width:100%;text-align:left;padding:8px 10px;font:12px var(--font-sans);color:var(--c-ink);border-radius:7px}.tab-context button:hover,.tab-context button:focus-visible{background:var(--c-hover);outline:0}.tab-context button:disabled{opacity:.35;background:none;cursor:default}</style>
+<style scoped>.tab-context{position:fixed;z-index:180;width:min(188px,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow-y:auto;padding:5px;border-radius:12px}.tab-context button{display:block;width:100%;text-align:left;padding:8px 10px;font:12px var(--font-sans);color:var(--c-ink);border-radius:7px}.tab-context button:hover,.tab-context button:focus-visible{background:var(--c-hover);outline:0}.tab-context button:disabled{opacity:.35;background:none;cursor:default}</style>
 
 <style scoped>
-/* Keep the original switchbar, but give the active pill room to breathe. */
-.doc-tabs{gap:12px}
-.doc-tabs .doc-tab::before{inset:1px 4px;border-radius:10px!important;corner-shape:superellipse(2)}
-.doc-tab-goo span{border-radius:10px}
-.doc-tab:not(:last-child)::after{right:-7px}
+@media (forced-colors: active) {
+  .doc-tabs:not(.single-document) .doc-tab.is-active {
+    outline: 1px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-tab-dot { transition-duration: 0s; }
+  .doc-tabs .doc-tab::before { transition: none; }
+}
 </style>

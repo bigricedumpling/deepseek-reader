@@ -1,6 +1,6 @@
 # Typocket
 
-Typocket is the reading, editing and organizing surface for a local Markdown tree inside DSH. The filesystem is the source of truth; the interface is a view over it.
+Typocket is a local Markdown reading and editing tool with a DSH interface and a local service for agents. For tasks inside a user's knowledge base, follow the [bundled reader-workspace skill](plugins/reader-workspace/skills/reader-workspace/SKILL.md). This file also covers work on the product itself.
 
 ## Product boundary
 
@@ -24,7 +24,7 @@ Typocket is the reading, editing and organizing surface for a local Markdown tre
 - Do not rewrite IDs, metadata, caches, generated files or `.reader/` state.
 - Do not delete assets, folders or documents unless the user explicitly asked; use the app's trash flow when available.
 - If concurrent edits are possible, re-read on conflict. Never force-overwrite the other version.
-- When the local service is running, prefer its HTTP API so revision checks, history and `Agent 改动` keep working. Direct filesystem writes bypass them.
+- Prefer the bundled Agent tools for writes. They carry the author identity or local Agent marker so the service can attribute the change. Plain local HTTP requests are attributed to the local user unless marked. Direct filesystem writes bypass revisions, service history and activity records.
 - Key API shapes: `GET /api/tree`, `GET /api/doc?path=...`, `PUT /api/doc` with the `revision` returned by the read, `GET /api/metadata`, `PUT /api/metadata`, `GET /api/search`, `POST /api/asset`.
 - After structural changes, rescan through the app or restart the service. Do not hand-edit the index to fake a rescan.
 

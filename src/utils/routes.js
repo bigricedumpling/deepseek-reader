@@ -17,3 +17,15 @@ export function resolveEntry(pathname, search = '', base = '') {
   const query = params.toString()
   return path + (query ? '?' + query : '')
 }
+
+export function documentRoutePath(file) {
+  const path = String(file || '')
+  return /\.(?:pdf|html?|md)\.md$/i.test(path) ? path : path.replace(/\.md$/i, '')
+}
+
+export function findRoutedDocument(files, path) {
+  if (!path) return undefined
+  return files.find(node => node.file === path)
+    || files.find(node => documentRoutePath(node.file) === path)
+    || files.find(node => node.file.replace(/\.(md|pdf|html?)$/i, '') === path)
+}

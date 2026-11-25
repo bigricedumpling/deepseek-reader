@@ -20,7 +20,6 @@ const KEY = {
   measure: 'reader.measure',
   zoom: 'reader.zoom',
   theme: 'reader.theme',
-  accent: 'reader.accent',
   para: 'reader.para',
   // 行距：KEY 里原来漏了这一项，setItem(undefined) 写进了名叫 undefined 的键，
   // 所以行距永远是默认值 1.95（设置面板里以前也没有这个入口，一直没暴露）
@@ -59,35 +58,6 @@ const bool = (k, fallback) => {
  * 放在 store 里而不是工具栏组件里：readingStyle 要用 ratio，工具栏要用 label，
  * 两边各写一份迟早对不上。ratio 是窄栏时的退让上限。
  */
-/**
- * 行距三档。
- *
- * 中文排版的常识：一行里没有西文那些上下伸展的小写字母，视觉高度本来就矮，
- * 同样的 1.95 放到中文里就偏松、整段发飘。三档分别是：
- * 窄（密排、看结构）、中（默认，长时间阅读）、宽（行短或需要逐行精读时）。
- */
-export const ACCENT_PRESETS = [
-  { id: 'ink', label: '墨黑', light: '#303030', dark: '#e0e0e0' },
-  { id: 'indigo', label: '靛蓝', light: '#3b5bdb', dark: '#8ea2ff' },
-  { id: 'navy', label: '藏蓝', light: '#1e3a8a', dark: '#9db4ff' },
-  { id: 'mist', label: '雾蓝', light: '#4a6fa5', dark: '#a9c6e8' },
-  { id: 'graphite', label: '石墨蓝', light: '#374151', dark: '#c7d2e0' }
-]
-
-
-/** #rrggbb -> the space-separated triplet used by rgb(var(--accent-rgb-*)). */
-function rgbTriplet(hex) {
-  const value = String(hex || '').replace('#', '')
-  if (!/^[0-9a-f]{6}$/i.test(value)) return '48 48 48'
-  return [0, 2, 4].map(i => parseInt(value.slice(i, i + 2), 16)).join(' ')
-}
-
-export const PACE_OPTIONS = [
-  { id: 'narrow', label: '窄', lh: 1.6 },
-  { id: 'normal', label: '中', lh: 1.8 },
-  { id: 'wide', label: '宽', lh: 2.05 }
-]
-
 export const WIDTH_OPTIONS = [
   { value: 720, label: '窄', ratio: 76 },
   { value: 960, label: '中', ratio: 92 },
@@ -106,8 +76,6 @@ export const useReaderStore = defineStore('reader', () => {
   const size = ref(num('size', 15.5))
   /** 阅读宽度，0 表示铺满可用宽度 */
   const measure = ref(num('measure', 960))
-  // 行距：三档预设 + 滑块微调。默认 1.8 —— 1.95 在中文里偏松（中文没有西文那种小写字母，
-  // 一行的视觉高度本来就矮，行距给大了整段就散）。窄/中/宽覆盖绝大多数场景。
   const leading = ref(num('leading', 1.8))
   const tracking = ref(num('tracking', 0))
   const paraStyle = ref(str('para', 'space'))
@@ -121,8 +89,6 @@ export const useReaderStore = defineStore('reader', () => {
     ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : (['light', 'sepia', 'dark'].includes(storedTheme) ? storedTheme : 'light')
   const theme = ref(initialTheme)
-  const storedAccent = str('accent', 'ink')
-  const accent = ref(ACCENT_PRESETS.some(item => item.id === storedAccent) ? storedAccent : 'ink')
   const zoom = ref(num('zoom', 100))
 
   /* ---------- 表格 ---------- */
@@ -178,12 +144,6 @@ export const useReaderStore = defineStore('reader', () => {
     b.dataset.table = tableWidth.value
     b.dataset.tableAlign = tableAlign.value
     b.dataset.theme = resolvedTheme.value
-    const accentPreset = ACCENT_PRESETS.find(item => item.id === accent.value) || ACCENT_PRESETS[0]
-    const rootStyle = document.documentElement.style
-    rootStyle.setProperty('--accent-light', accentPreset.light)
-    rootStyle.setProperty('--accent-rgb-light', rgbTriplet(accentPreset.light))
-    rootStyle.setProperty('--accent-dark', accentPreset.dark)
-    rootStyle.setProperty('--accent-rgb-dark', rgbTriplet(accentPreset.dark))
     b.style.setProperty('--reading-lh', String(leading.value))
     b.style.setProperty('--reading-tracking', tracking.value + 'em')
 
@@ -196,7 +156,6 @@ export const useReaderStore = defineStore('reader', () => {
     storageSet(KEY.strong, strongFace.value)
     storageSet(KEY.italic, italicFace.value)
     storageSet(KEY.theme, theme.value)
-    storageSet(KEY.accent, accent.value)
     storageSet(KEY.zoom, String(zoom.value))
     storageSet(KEY.tableWidth, tableWidth.value)
     storageSet(KEY.tableAlign, tableAlign.value)
@@ -209,7 +168,7 @@ export const useReaderStore = defineStore('reader', () => {
   watch(
     [
       font, size, measure, leading, tracking, paraStyle, strongFace, italicFace,
-      theme, accent, zoom, tableWidth, tableAlign, tocOpen, tocWidth, navCollapsed, navWidth
+      theme, zoom, tableWidth, tableAlign, tocOpen, tocWidth, navCollapsed, navWidth
     ],
     apply,
     { immediate: true }
@@ -217,7 +176,7 @@ export const useReaderStore = defineStore('reader', () => {
 
   return {
     font, size, measure, leading, tracking, paraStyle, strongFace, italicFace,
-    theme, accent, zoom, tableWidth, tableAlign,
+    theme, zoom, tableWidth, tableAlign,
     tocOpen, tocWidth, tocDragging, navCollapsed, navWidth,
     readingStyle, isDark, resolvedTheme
   }

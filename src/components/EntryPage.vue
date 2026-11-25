@@ -6,16 +6,16 @@
       <form class="entry-login" @submit.prevent="login">
         <label for="entry-password">管理密码</label>
         <div class="login-row">
-          <input id="entry-password" ref="passwordInput" v-model="password" type="password" autocomplete="current-password" required />
+          <input id="entry-password" ref="passwordInput" v-model="password" type="password" autocomplete="current-password" :aria-invalid="!!error" :aria-describedby="error ? 'login-error' : undefined" required />
           <button :disabled="busy">{{ busy ? '验证中…' : '进入工作区' }}</button>
         </div>
       </form>
-      <p v-if="error" class="entry-error" role="alert">{{ error }}</p>
+      <p v-if="error" id="login-error" class="entry-error" role="alert">{{ error }}</p>
     </section>
   </main>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { PhBooks } from '../icons/remix'
 import { API_BASE as base } from '../utils/api'
 const password = ref(''), error = ref(''), busy = ref(false), passwordInput = ref(null)
@@ -27,7 +27,14 @@ async function login() {
     if (!data.ok) throw new Error(data.error || '验证失败')
     location.replace(location.pathname + location.search)
   } catch (e) { error.value = e.message }
-  finally { password.value = ''; busy.value = false }
+  finally {
+    password.value = ''
+    busy.value = false
+    if (error.value) {
+      await nextTick()
+      passwordInput.value?.focus()
+    }
+  }
 }
 onMounted(() => passwordInput.value?.focus())
 </script>
@@ -38,6 +45,8 @@ h1{font-size:24px;font-weight:400;letter-spacing:-.025em;line-height:1.4}.intro{
 .entry-login{margin-top:28px}.entry-login label{font-size:12px;color:var(--c-sub)}.login-row{display:flex;gap:8px;margin-top:8px}
 .login-row input{min-width:0;flex:1;border:1px solid var(--c-line);border-radius:var(--radius-control);padding:9px;background:var(--c-field)}
 .login-row button{border:0;border-radius:var(--radius-control);padding:9px 12px;font-size:12px;white-space:nowrap;background:var(--c-field);cursor:pointer}
-.login-row button:hover{background:var(--c-hover)}.login-row button:focus-visible{outline:2px solid var(--c-ink);outline-offset:3px}
-.entry-error{color:#c44;font-size:12px;margin-top:12px}
+.login-row button{background:var(--c-accent);color:var(--c-on-accent)}
+.login-row button:hover{background:var(--c-accent-hover)}
+@media(pointer:coarse){.login-row input,.login-row button{min-height:44px}}.login-row button:focus-visible{outline:2px solid var(--c-ink);outline-offset:3px}
+.entry-error{color:var(--c-danger);font-size:12px;margin-top:12px}
 </style>

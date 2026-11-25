@@ -5,6 +5,7 @@
  * 换端口：`APP_PORT=8103 node scripts/e2e/theme.mjs`
  * 需要无头 Chrome 能连上 CDP；端口自动挑，冲突时用 CDP_PORT 指定。
  */
+import { openReadingSettings, chooseReadingSetting } from './reading-settings.mjs'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 const APP_PORT = process.env.APP_PORT || 8090
@@ -16,11 +17,10 @@ let ws,id=0;const pending=new Map();const errs=[]
 const send=(m,p={},ms=40000)=>{const i=++id;return new Promise((res,rej)=>{const t=setTimeout(()=>{pending.delete(i);rej(new Error('timeout '+m))},ms);pending.set(i,{res:v=>{clearTimeout(t);res(v)},rej:e=>{clearTimeout(t);rej(e)}});ws.send(JSON.stringify({id:i,method:m,params:p}))})}
 const ev=async(e,ms=40000)=>{const r=await send('Runtime.evaluate',{expression:`(async () => { ${e} })()`,awaitPromise:true,returnByValue:true},ms);if(r.exceptionDetails)throw new Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value}
 const R=[];const ck=(n,ok,d='')=>{R.push({n,ok});console.log(`${ok?'PASS':'FAIL'}  ${n}${d?'  — '+d:''}`)}
-const pick=async(label)=>{ const open=async()=>{ if(await ev(`const p=document.querySelector('.pop-menu'); return !!(p&&p.textContent.includes('缩放'))`))return
-    await ev(`[...document.querySelectorAll('button.btn-icon')].find(function(x){return x.title==='外观'}).click(); return true`); await sleep(400) }
-  await open()
-  await ev(`const p=document.querySelector('.pop-menu'); const lab=[...p.querySelectorAll('.type-label')].find(function(l){return l.textContent.trim().startsWith('主题')}); let el=lab.nextElementSibling; while(el&&!el.classList.contains('type-row'))el=el.nextElementSibling; [...el.querySelectorAll('button')].find(function(b){return b.textContent.trim()===${JSON.stringify(label)}}).click(); return true`)
-  await sleep(800) }
+const pick = async label => {
+  await chooseReadingSetting(ev, '外观', label)
+  await sleep(150)
+}
 try{
   let t=null
   for(let k=0;k<80;k++){try{const l=await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();t=l.find(x=>x.type==='page'&&x.url.startsWith(APP));if(t)break}catch{}await sleep(300)}
@@ -29,19 +29,22 @@ try{
   await send('Runtime.enable');await send('Page.enable')
   for(let k=0;k<80;k++){if(await ev(`return !!window.__crepe`))break;await sleep(300)}
   await sleep(2200)
-  ck('工具栏里有护眼一档', await ev(`[...document.querySelectorAll('.pop-menu button')].some(function(b){return b.textContent.trim()==='护眼'})||true`))
-  await pick('护眼')
+  await openReadingSettings(ev)
+  ck('工具栏有柔和模式', await ev(`return !!document.querySelector('.reading-panel input[aria-label=柔和]')`))
+  await pick('柔和')
   ck('data-theme 是 sepia，没塌回 light', await ev(`return document.body.dataset.theme`)==='sepia', await ev(`return document.body.dataset.theme`))
   console.log(await ev(`
     const g=function(s,n){const e=document.querySelector(s); return e? n+'='+getComputedStyle(e).backgroundColor : n+'=无'};
     return [g('body','body'),g('aside','侧栏'),g('.crepe-host .milkdown','编辑器'),g('.crepe-host .ProseMirror code','行内代码')].join('  ');
   `))
   const bg=await ev(`return getComputedStyle(document.body).backgroundColor`)
-  ck('底色是暖米色而不是白', bg!=='rgb(255, 255, 255)' && bg!=='rgb(28, 29, 33)', bg)
+  const [r, g, b] = bg.match(/\d+/g).map(Number)
+  ck('柔和模式使用低色差暖灰', r < 250 && r >= g && g > b && r - b <= 8, bg)
   const text=await ev(`return getComputedStyle(document.querySelector('.crepe-host .ProseMirror')).color`)
   ck('正文是暖灰不是纯黑', text!=='rgb(0, 0, 0)', text)
-  await ev(`const b=[...document.querySelectorAll('button.btn-icon')].find(function(x){return x.title==='外观'}); if(document.querySelector('.pop-menu'))b.click(); return true`); await sleep(500)
+  await ev(`const b=[...document.querySelectorAll('button.btn-icon')].find(function(x){return x.getAttribute('aria-label')==='阅读设置'}); if(document.querySelector('.pop-menu'))b.click(); return true`); await sleep(500)
   const im=await send('Page.captureScreenshot',{format:'png',scale:1})
+  fs.mkdirSync('/tmp/kbtests',{recursive:true})
   fs.writeFileSync('/tmp/kbtests/sepia.png',Buffer.from(im.data,'base64'))
   console.log('存图')
   // 切回浅色确认没影响
@@ -49,4 +52,5 @@ try{
   ck('切回浅色正常', await ev(`return document.body.dataset.theme`)==='light')
   console.log('\n运行时错误:',errs.length?errs.slice(0,2):'无')
   console.log('通过 '+R.filter(x=>x.ok).length+'/'+R.length)
-}catch(e){console.error('出错:',e.message)}finally{try{ws?.close()}catch{};chrome.kill()}
+  if (R.some(item => !item.ok) || errs.length) process.exitCode = 1
+}catch(e){process.exitCode=1;console.error('出错:',e.message)}finally{try{ws?.close()}catch{};chrome.kill()}

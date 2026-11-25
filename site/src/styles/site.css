@@ -1,18 +1,12 @@
 @font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
-  src: url('/fonts/HarmonyOS_Sans_SC_Medium.ttf') format('truetype');
-  font-weight: 500 700;
+  font-family: 'Noto Sans SC';
+  src: url('/fonts/NotoSansSC-Variable.woff2') format('woff2');
+  font-weight: 100 900;
   font-display: swap;
 }
 
 :root {
-  --font-sans: 'HarmonyOS Sans SC', 'Noto Sans SC', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Noto Sans SC', 'HarmonyOS Sans SC', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'SF Mono', 'Geist Mono', ui-monospace, Menlo, Consolas, monospace;
   --bg: #fbfbfb;
   --surface: #fff;
@@ -82,12 +76,12 @@ button:focus-visible {
 
 /* ---------- entrance ---------- */
 
-[data-reveal] {
+[data-reveal].will-reveal {
   opacity: 0;
   transform: translateY(10px);
   transition: opacity .7s var(--ease, cubic-bezier(.22, 1, .36, 1)), transform .7s var(--ease, cubic-bezier(.22, 1, .36, 1));
 }
-[data-reveal].is-inview {
+[data-reveal].is-inview, [data-reveal].will-reveal:focus-within {
   opacity: 1;
   transform: translateY(0);
 }
@@ -156,7 +150,6 @@ button:focus-visible {
 }
 .button-primary:hover {
   background: #000;
-  transform: translateY(-1px);
 }
 .button-quiet {
   color: var(--ink);
@@ -207,9 +200,15 @@ button:focus-visible {
   box-shadow: var(--shadow);
   transition: transform .6s var(--ease, cubic-bezier(.22, 1, .36, 1)), box-shadow .4s ease;
 }
-.app-frame:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 3px 8px rgb(0 0 0 / .03), 0 30px 80px rgb(0 0 0 / .10);
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .button-primary:hover { transform: translateY(-1px); }
+  .app-frame:not(.app-frame--static):hover {
+    transform: translateY(-3px);
+    box-shadow: 0 3px 8px rgb(0 0 0 / .03), 0 30px 80px rgb(0 0 0 / .10);
+  }
+}
+.app-frame--static {
+  cursor: default;
 }
 .app-frame picture,
 .app-frame img {
@@ -217,6 +216,7 @@ button:focus-visible {
   width: 100%;
 }
 .app-frame img {
+  height: auto;
   aspect-ratio: 1440 / 1000;
   object-fit: cover;
   object-position: top center;
@@ -257,17 +257,13 @@ button:focus-visible {
   width: 100%;
 }
 .triptych-card img {
+  height: auto;
   aspect-ratio: 1440 / 1000;
   object-fit: cover;
   object-position: top center;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
-  transition: transform .35s var(--ease, cubic-bezier(.22, 1, .36, 1)), box-shadow .3s ease;
-}
-.triptych-card:hover img {
-  transform: translateY(-4px);
-  box-shadow: 0 18px 45px rgb(0 0 0 / .08);
 }
 .triptych-card figcaption {
   margin-top: 13px;
@@ -392,9 +388,6 @@ button:focus-visible {
   .hero-visual {
     margin-top: 42px;
   }
-  .app-frame img {
-    aspect-ratio: 390 / 620;
-  }
   .section {
     padding: 110px 0;
   }
@@ -408,9 +401,6 @@ button:focus-visible {
     grid-template-columns: 1fr;
     gap: 34px;
     margin-top: 46px;
-  }
-  .triptych-card img {
-    aspect-ratio: 390 / 620;
   }
   .closing {
     padding-bottom: 110px;
@@ -432,6 +422,10 @@ button:focus-visible {
     gap: 12px;
     padding: 24px 0;
   }
+}
+
+@media (max-width: 800px) {
+  .app-frame img, .triptych-card img { aspect-ratio: 390 / 620; }
 }
 
 @media (max-width: 520px) {
@@ -495,7 +489,7 @@ button:focus-visible {
   html {
     scroll-behavior: auto;
   }
-  [data-reveal] {
+  [data-reveal].will-reveal {
     opacity: 1;
     transform: none;
     transition: none;

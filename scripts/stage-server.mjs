@@ -8,7 +8,7 @@ export async function stageServer(destination) {
   fs.cpSync(source, destination, { recursive: true })
   // The installed DSH runtime has no npm dependencies of its own.
   await build({
-    entryPoints: ['workspace-images.js', 'document-attachments.js'].map(name => path.join(source, 'services', name)),
+    entryPoints: ['workspace-images.js', 'document-attachments.js', 'drawer-preview.js', 'search-text.js'].map(name => path.join(source, 'services', name)),
     outdir: path.join(destination, 'services'), splitting: true, chunkNames: 'internal/[name]-[hash]',
     bundle: true, format: 'esm', platform: 'node', target: 'node24', mainFields: ['module', 'main']
   })

@@ -25,14 +25,6 @@
   font-size: 12px;
   line-height: 1.7;
 }
-/* 有损提示里的操作行与差异列表 */
-.lossy-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 7px;
-}
 .lossy-btn {
   padding: 3px 9px;
   border-radius: 8px;
@@ -45,60 +37,6 @@
 }
 .lossy-btn:hover {
   background: #fdf3dc;
-}
-.lossy-btn.is-primary {
-  border-color: #d9c58a;
-  font-weight: 600;
-}
-.lossy-hint {
-  color: #a08a4d;
-  font-size: 11px;
-}
-.lossy-diff {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top:0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.lossy-diff li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.lossy-line {
-  color: #a08a4d;
-  font-size: 11px;
-}
-.lossy-side {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.lossy-side.is-before {
-  color: #8a6d1f;
-}
-.lossy-side.is-after {
-  color: #3f7a4f;
-}
-.src-editor {
-  display: block;
-  width: 100%;
-  max-width: var(--measure, 960px);
-  margin: 12px auto 0;
-  min-height: 70vh;
-  padding: 0 40px 96px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.9;
-  color: var(--c-ink);
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  tab-size: 2;
 }
 .crepe-host {
   padding-bottom: 96px;
@@ -194,10 +132,7 @@
   widows: 2;
 }
 /* 标题后首段、列表项、引用、表格单元格里不缩进 */
-.crepe-host .milkdown .ProseMirror h1 + p,
-.crepe-host .milkdown .ProseMirror h2 + p,
-.crepe-host .milkdown .ProseMirror h3 + p,
-.crepe-host .milkdown .ProseMirror h4 + p,
+.crepe-host .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) + p,
 .crepe-host .milkdown .ProseMirror li p,
 .crepe-host .milkdown .ProseMirror blockquote p,
 .crepe-host .milkdown .ProseMirror td p,
@@ -258,7 +193,11 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   max-width: var(--measure, 960px);
 }
 
-/* 标题：字号字重递进，跟阅读态对齐 */
+/* Section headings follow the starting edge even when the body is justified. */
+.crepe-host .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  text-align: start;
+  overflow-wrap: anywhere;
+}
 .crepe-host .milkdown .ProseMirror h1 {
   font-size: 1.62em;
   line-height: 1.35;
@@ -308,6 +247,22 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   color: var(--c-sub);
   letter-spacing: 0.03em;
   margin-block: 0.95em 0.3em;
+}
+
+/* An H1 inside the document opens a chapter. Only a leading H1 is its title. */
+.crepe-host .milkdown .ProseMirror > h1 {
+  margin-block-start: 1.7em;
+}
+.crepe-host .milkdown .ProseMirror > h1.reader-document-title {
+  font-size: clamp(1.95em, 3.5vw, 2.65em);
+  font-weight: 750;
+  line-height: var(--article-title-leading);
+  letter-spacing: -.025em;
+  margin-block-start: 0;
+}
+/* A subheading that introduces its parent section's first paragraph stays close. */
+.crepe-host .milkdown .ProseMirror > :is(h1 + h2, h2 + h3, h3 + h4, h4 + h5, h5 + h6) {
+  margin-block-start: .45em;
 }
 
 /*
@@ -449,7 +404,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
  * 编辑一个样，切过去整块还要长高 90px。这里把两边钉在同一档（0.8em ≈ 12.4px）。
  */
 .crepe-host .milkdown .milkdown-code-block {
-  margin-block: 1.1em !important;
+  margin-block: var(--article-block-gap) !important;
 }
 .crepe-host .milkdown .ProseMirror .milkdown-code-block pre,
 .crepe-host .milkdown .milkdown-code-block .cm-content,
@@ -548,7 +503,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
 
 /* Crepe 默认给表格画了框线，这里去掉只留底部细线 */
 .crepe-host .milkdown .ProseMirror .table-wrapper {
-  margin-block: 1.15em;
+  margin-block: var(--article-block-gap);
   overflow-x: auto;
 }
 .crepe-host .milkdown .ProseMirror .table-wrapper table {
@@ -687,11 +642,13 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
  */
 .crepe-host .milkdown .milkdown-toolbar {
   padding: 1px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  corner-shape: superellipse(2);
-  background: var(--c-pop);
-  box-shadow: var(--c-pop-shadow);
+  border: 1px solid var(--surface-menu-border);
+  border-radius: var(--radius-tool);
+  corner-shape: var(--corner-ui);
+  background: var(--surface-tool-bg);
+  -webkit-backdrop-filter: var(--surface-tool-filter);
+  backdrop-filter: var(--surface-tool-filter);
+  box-shadow: var(--surface-tool-shadow);
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item {
   display: grid;
@@ -700,7 +657,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   height: 27px;
   margin: 1.5px;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   line-height: 1;
   color: var(--c-text);
 }
@@ -715,6 +672,18 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   display: block;
   width: 16px;
   height: 16px;
+}
+/* Swap glyphs within the same button footprint while the confirmation is visible. */
+.reader-tooltip.copy-hint-enter-from,
+.reader-tooltip.copy-hint-leave-to {
+  opacity: 0;
+}
+.crepe-host .milkdown .milkdown-toolbar [data-toolbar-item="copy-agent"] svg:last-of-type,
+.editor-shell[data-copy-result="copied"] .crepe-host .milkdown [data-toolbar-item="copy-agent"] svg:first-of-type {
+  display: none;
+}
+.editor-shell[data-copy-result="copied"] .crepe-host .milkdown [data-toolbar-item="copy-agent"] svg:last-of-type {
+  display: block;
 }
 .crepe-host .milkdown .milkdown-toolbar .toolbar-item.active {
   color: var(--c-accent);
@@ -760,21 +729,41 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   width: 24px;
   height: 24px;
   padding: 3px;
-  border-radius: 7px;
+  border-radius: var(--radius-item);
 }
 .crepe-host .milkdown .milkdown-block-handle .operation-item svg {
   width: 17px;
   height: 17px;
 }
 
+/* The URL shares its row with edit and remove. Its content may be arbitrarily long. */
+.crepe-host .milkdown :is(.milkdown-link-preview, .milkdown-link-edit) {
+  max-width: calc(100vw - 24px);
+}
+.crepe-host .milkdown :is(.link-preview, .link-edit) {
+  align-items: center;
+  max-width: 100%;
+  gap: 5px;
+  padding-inline: 6px;
+  border: 1px solid var(--surface-menu-border);
+  border-radius: var(--radius-tool);
+  background: var(--c-pop);
+  box-shadow: var(--surface-menu-shadow);
+}
+.crepe-host .milkdown .link-preview .link-display, .crepe-host .milkdown .link-edit .input-area {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.crepe-host .milkdown :is(.link-edit, .link-preview) .button { flex: none; }
+
 /* ---------- 斜杠插入菜单 ---------- */
 /* Crepe 默认条目最小宽 220、内边距 14、图标 24，又大又长，整体收紧 */
 .crepe-host .milkdown .milkdown-slash-menu {
   box-sizing: border-box;
   width: min(228px, calc(100vw - 24px));
-  border-radius: 20px;
-  corner-shape: superellipse(2);
-  border: 1px solid var(--c-line);
+  border-radius: var(--radius-tool);
+  corner-shape: var(--corner-ui);
+  border: 1px solid var(--surface-menu-border);
   padding: 5px;
   background: var(--c-pop);
   box-shadow: var(--c-pop-shadow);
@@ -800,7 +789,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   font-size: 11px;
   font-weight: 400;
   line-height: 17px;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
 }
 .crepe-host .milkdown .milkdown-slash-menu .tab-group ul li.active,
 .crepe-host .milkdown .milkdown-slash-menu .tab-group ul li[aria-selected="true"] {
@@ -821,7 +810,7 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   width: 100%;
   gap: 8px;
   padding: 5px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   line-height: 17px;
 }
 .crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
@@ -849,13 +838,6 @@ body[data-table="measure"] .crepe-host .milkdown .ProseMirror > .milkdown-table-
   display: none;
 }
 
-/*
- * 护眼下 Crepe 的变量。
- *
- * 基础那套是写死的 `#ffffff` / `#f7f7f7`，不覆盖的话编辑器内部还是白的，
- * 只有正文外面一圈变米色，会很割裂。这里把底色、面板、悬停态一起转暖，
- * 代码块和行内代码也跟着走，不然米底上嵌一块冷白很跳。
- */
 body[data-theme="sepia"] .crepe-host .milkdown {
   --crepe-color-background: var(--c-surface);
   --crepe-color-on-background: var(--c-ink);
@@ -867,15 +849,14 @@ body[data-theme="sepia"] .crepe-host .milkdown {
   --crepe-color-primary: var(--c-accent);
   --crepe-color-secondary: var(--c-active);
   --crepe-color-on-secondary: var(--c-text);
-  --crepe-color-inverse: #2b2721;
-  --crepe-color-on-inverse: #f4eedd;
+  --crepe-color-inverse: var(--c-ink);
+  --crepe-color-on-inverse: var(--c-surface);
   --crepe-color-inline-code: var(--c-text);
-  --crepe-color-error: #c0473f;
-  --crepe-color-hover: rgba(90, 74, 40, 0.07);
+  --crepe-color-error: var(--c-danger);
+  --crepe-color-hover: var(--c-hover);
   --crepe-color-selected: var(--c-selection);
-  --crepe-color-inline-area: rgba(90, 74, 40, 0.09);
+  --crepe-color-inline-area: var(--c-active);
 }
-/* 行内代码在浅色下是冷灰底，护眼里换成暖的 */
 body[data-theme="sepia"] .crepe-host .milkdown .ProseMirror code {
   background: var(--c-code-inline);
 }
@@ -935,10 +916,7 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 
 .crepe-host .milkdown .ProseMirror .reader-rich-block p:last-child{margin-bottom:0}.crepe-host .milkdown .ProseMirror .reader-rich-block h3:first-child{margin-top:0}.crepe-host .milkdown .ProseMirror .reader-rich-block{text-align:left}
 
-/* The document title has its own hierarchy; section headings stay compact. */
-.page-header + .editor-shell .crepe-host .milkdown .ProseMirror{padding-top:6px}
-.page-header + .editor-shell .crepe-host .milkdown .ProseMirror > h1:first-of-type{font-size:clamp(30px,3.5vw,44px);font-weight:750;line-height:1.22;letter-spacing:-.025em;margin-top:0;margin-bottom:.55em}
-@media(max-width:720px){.crepe-host .milkdown .ProseMirror > h1:first-of-type{font-size:30px}}
+.page-header + .editor-shell .crepe-host .milkdown .ProseMirror { padding-top: 6px; }
 
 /* Images are blocks: one rhythm for text → image → caption → following text. */
 .crepe-host .milkdown .ProseMirror .milkdown-image-block{margin-block:1.15em!important;padding-block:0}
@@ -976,10 +954,13 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .editor-shell .rich-callout-icon:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
 .editor-shell [contenteditable="false"] .rich-callout-icon{cursor:default}
 .editor-shell [contenteditable="false"] .rich-callout-icon:hover{background:none}
-.reader-raw-block{position:relative;min-height:24px;cursor:text;border-radius:6px;white-space:normal}.reader-raw-block:hover{outline:1px solid var(--c-line)}.reader-raw-block:focus-visible{outline:2px solid var(--c-accent)}.reader-raw-block pre{white-space:pre-wrap}.reader-footnote-reference{color:var(--c-accent);font-size:.75em}.reader-footnote-definition{display:flex;align-items:baseline;gap:12px;font-size:.85em;color:var(--c-sub)}.reader-footnote-definition>.footnote-label{flex-shrink:0}.reader-footnote-definition>div{min-width:0;flex:1}
-.reader-frontmatter{font:12px/1.5 var(--font-sans);color:var(--c-sub);padding:6px 10px;background:var(--c-field);width:max-content;margin:8px 0}.source-mode-bar{gap:3px!important;width:max-content;background:var(--c-field);padding:3px;border-radius:9px}.source-mode-bar .lossy-btn{border:0!important;padding:4px 10px!important}.source-mode-bar .lossy-btn[aria-pressed=true]{background:var(--c-pop);color:var(--c-ink)}
+.reader-raw-block{position:relative;min-height:24px;cursor:text;border-radius:6px;white-space:normal}.reader-raw-block:hover{outline:1px solid var(--c-line)}.reader-raw-block:focus-visible{outline:2px solid var(--c-accent)}.reader-raw-block pre{white-space:pre-wrap}
+.reader-frontmatter{font:12px/1.5 var(--font-sans);color:var(--c-sub);padding:6px 10px;background:var(--c-field);width:max-content;margin:8px 0}
 .raw-edit-button{position:absolute;right:4px;top:3px;padding:3px 7px;border-radius:6px;background:var(--c-field);font:11px/1.5 var(--font-sans);color:var(--c-sub);opacity:0}.reader-raw-block:hover>.raw-edit-button,.reader-raw-block:focus-within>.raw-edit-button{opacity:1}.reader-frontmatter{padding-right:48px}.ProseMirror[contenteditable=false] .raw-edit-button{display:none}@media(hover:none){.raw-edit-button{opacity:1;position:static;float:right}}
-.milkdown-latex-inline-edit{display:none!important}.crepe-host [data-type="math_inline"][role="button"]{cursor:pointer;border-radius:4px}.crepe-host [data-type="math_inline"]:focus-visible{outline:2px solid var(--c-accent);outline-offset:3px}
+/* Keep mathematical baselines in text. Give oversized displays their own scroll area. */
+.crepe-host [data-math-display][role="button"] { cursor: pointer; border-radius: 4px; }
+.crepe-host [data-math-display]:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
+.crepe-host span[data-type="math_inline"] { padding: 0; color: inherit; }
 
 /* File metadata is retained in serialization, outside the visible document body. */
 .crepe-host .milkdown .ProseMirror .reader-frontmatter{display:none}
@@ -1000,22 +981,63 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
   border-radius:4px;
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c-accent) 14%,transparent);
 }
-.reader-image-tools{position:fixed;z-index:970;display:flex;align-items:center;gap:2px;padding:4px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:10px;box-shadow:var(--c-pop-shadow);corner-shape:superellipse(2)}
-.reader-image-tools button{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;color:var(--c-sub);transition:background 120ms ease,color 120ms ease}
-.reader-image-tools button:hover,.reader-image-tools button:focus-visible{background:var(--c-hover);color:var(--c-ink);outline:0}
-.reader-image-tools button.is-danger:hover,.reader-image-tools button.is-danger:focus-visible{color:#a55752;background:color-mix(in srgb,#a55752 8%,transparent)}
-.reader-image-tool-sep{width:1px;height:16px;margin:0 3px;background:var(--c-line)}
-.reader-doc-card{position:fixed;z-index:960;width:270px;display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:12px;box-shadow:var(--c-pop-shadow);pointer-events:none;corner-shape:superellipse(2)}
+.reader-image-tools {
+  position: fixed;
+  z-index: 970;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface-tool-bg);
+  color: var(--c-ink);
+  -webkit-backdrop-filter: var(--surface-tool-filter);
+  backdrop-filter: var(--surface-tool-filter);
+  border: 1px solid var(--surface-menu-border);
+  border-radius: var(--radius-tool);
+  corner-shape: var(--corner-ui);
+  box-shadow: var(--surface-tool-shadow);
+}
+.reader-image-tools button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-item);
+  color: inherit;
+  transition: background 120ms ease, color 120ms ease;
+}
+.reader-image-tools button:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+@media (hover: hover) {
+  .reader-image-tools button:hover { background: var(--c-hover); }
+  .reader-image-tools button.is-danger:hover { color: var(--c-danger); }
+}
+.reader-image-tools button.is-danger:focus-visible { color: var(--c-danger); }
+/* The destructive action has a little extra space, without splitting the tray in two. */
+.reader-image-tool-sep { width: 4px; }
+@media (pointer: coarse) {
+  .reader-image-tools { max-width: calc(100vw - 16px); flex-wrap: wrap; }
+  .reader-image-tools button { width: 44px; height: 44px; }
+}
+.reader-doc-card{position:fixed;z-index:960;width:270px;display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--c-pop);border:1px solid var(--c-line);border-radius:var(--radius-tool);box-shadow:var(--surface-menu-shadow);pointer-events:none;corner-shape:var(--corner-ui)}
 .reader-doc-card-icon{flex:none;color:var(--c-sub);margin-top:1px}
 .reader-doc-card-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
 .reader-doc-card-copy strong{font:600 12.5px/1.4 var(--font-sans);color:var(--c-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .reader-doc-card-copy small{font:10.5px/1.45 var(--font-sans);color:var(--c-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .reader-image-lightbox{position:fixed;inset:0;z-index:2300;display:flex;align-items:center;justify-content:center;padding:40px;background:rgb(18 18 18 / .72);backdrop-filter:blur(3px)}
 .reader-image-lightbox figure{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:min(1120px,92vw);max-height:90dvh;margin:0}
-.reader-image-lightbox img{display:block;max-width:100%;max-height:calc(90dvh - 48px);object-fit:contain;border-radius:6px;background:#fff;box-shadow:0 18px 60px rgb(0 0 0 / .32)}
-.reader-image-lightbox figcaption{max-width:72ch;color:rgb(255 255 255 / .82);font:12.5px/1.6 var(--font-sans);text-align:center}
-.reader-lightbox-close{position:absolute;top:18px;right:20px;display:grid;place-items:center;width:34px;height:34px;border-radius:9px;color:rgb(255 255 255 / .82);background:rgb(0 0 0 / .28)}
+.reader-image-lightbox img{display:block;min-height:0;max-width:100%;max-height:calc(90dvh - 48px);object-fit:contain;border-radius:6px;background:#fff;box-shadow:0 18px 60px rgb(0 0 0 / .32)}
+.reader-image-lightbox figcaption{max-width:min(72ch,100%);max-height:22dvh;overflow:auto;overflow-wrap:anywhere;color:rgb(255 255 255 / .82);font:12.5px/1.6 var(--font-sans);text-align:center}
+.reader-lightbox-close{position:absolute;z-index:1;top:18px;right:20px;display:grid;place-items:center;width:34px;height:34px;border-radius:9px;color:rgb(255 255 255 / .82);background:rgb(0 0 0 / .28)}
 .reader-lightbox-close:hover{background:rgb(0 0 0 / .46);color:#fff}
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  .reader-image-lightbox { background:#191919; -webkit-backdrop-filter:none; backdrop-filter:none; }
+  .reader-lightbox-close { background:#353535; color:#fff; }
+}
+@media (forced-colors: active) {
+  .reader-image-lightbox { background:Canvas; }
+  .reader-image-lightbox figcaption { color:CanvasText; }
+  .reader-lightbox-close { border:1px solid ButtonText; background:ButtonFace; color:ButtonText; }
+}
 @media(max-width:640px){.reader-image-lightbox{padding:18px}.reader-image-lightbox img{max-height:calc(90dvh - 40px)}}
 
 /* Notion-like list rows: the marker column stays one text line tall. */
@@ -1029,3 +1051,12 @@ body[data-theme="dark"] .crepe-host .milkdown .milkdown-code-block {
 .crepe-host .milkdown .ProseMirror .milkdown-list-item-block .label-wrapper .label.checked{color:var(--c-accent)}
 .crepe-host .milkdown .ProseMirror .milkdown-list-item-block .content-dom > p{padding-block:0;line-height:inherit;margin:0}
 .crepe-host .milkdown .ProseMirror .milkdown-list-item-block:has(> .list-item > .label-wrapper .label.checked) > .list-item > .children > .content-dom > p{color:var(--c-faint);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--c-faint) 55%,transparent)}
+
+@media (pointer: coarse) {
+  .crepe-host .milkdown .milkdown-slash-menu .menu-groups .menu-group li,
+  .crepe-host .milkdown .milkdown-slash-menu .tab-group li,
+  .reader-lightbox-close { min-height: 44px; }
+  .crepe-host .milkdown .milkdown-slash-menu .tab-group li { display: grid; place-items: center; }
+  .crepe-host .milkdown .milkdown-slash-menu .slash-shortcut { display: none; }
+  .reader-lightbox-close { min-width: 44px; }
+}

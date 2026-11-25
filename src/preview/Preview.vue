@@ -1,7 +1,7 @@
 <template>
   <main class="preview-shell">
     <header v-if="ready" class="preview-header">
-      <button class="collect-button" type="button" @click="openPicker">收进抽屉</button>
+      <button ref="collectButton" class="collect-button" type="button" :disabled="phase === 'done'" @click="openPicker">{{ phase === 'done' ? '已保存到知识库' : '保存到知识库' }}</button>
     </header>
     <div v-if="!ready" class="preview-state">
       <template v-if="!embedded">这个页面需要在 DSH 的工作区 Markdown 预览中打开。</template>
@@ -9,25 +9,40 @@
       <template v-else>正在读取工作区文件…</template>
     </div>
     <div v-else class="preview-reader" @click="onArticleClick">
-      <MarkdownEditor :key="readerVersion" :value="readerRaw" :readonly="true" :doc-id="filePath" />
+      <MarkdownEditor :key="readerVersion" :value="readerRaw" :readonly="true" :doc-id="filePath" :workspace-name="workspaceReference" />
     </div>
-    <div v-if="picker" class="picker-mask" @click.self="picker=false">
-      <section class="picker" role="dialog" aria-modal="true" aria-label="收进抽屉" @keydown.esc="picker=false">
-        <div class="picker-heading">收进抽屉<button type="button" aria-label="关闭" @click="picker=false">×</button></div>
-        <div class="picker-tools"><input v-model.trim="libQuery" class="picker-search" type="search" placeholder="搜索抽屉" aria-label="搜索抽屉" autofocus /></div>
-        <div class="picker-grid">
-          <button v-for="lib in filteredLibraries" :key="lib.name" type="button" class="picker-card" :class="{ selected: destination === lib.name, draft: lib.name === DRAFT_NAME }" @click="destination=lib.name">
-            <ContentIcon :value="lib.name === DRAFT_NAME ? 'icon:draft' : lib.icon || 'icon:book'" :size="24" />
-            <strong>{{ lib.name }}</strong>
-            <small>{{ lib.docs || 0 }} 篇</small>
-          </button>
-          <p v-if="libraries.length && !filteredLibraries.length" class="picker-empty">没有匹配的抽屉</p><div v-if="!libraries.length" class="empty-library-create"><label>抽屉名称<input v-model="newLibraryName" placeholder="新抽屉" /></label><button :disabled="busy||!newLibraryName.trim()" @click="createLibrary">创建抽屉</button></div>
-        </div>
-        <label>文档名称<input v-model="newName" maxlength="160" /></label>
-        <p v-if="pickerError" class="picker-error">{{ pickerError }}</p>
-        <div class="picker-actions"><button type="button" @click="picker=false">取消</button><button type="button" :disabled="busy || !destination || !newName.trim()" @click="collect">{{ busy ? '正在收进…' : '收进' }}</button></div>
+    <Transition name="overlay"><div v-if="picker" class="picker-mask" @click.self="closePicker">
+      <section ref="pickerDialog" class="picker" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="preview-save-title">
+        <header class="picker-heading">
+          <h2 id="preview-save-title">保存到知识库</h2>
+          <button type="button" class="picker-close" aria-label="关闭" :disabled="locked" @click="closePicker"><PhX :size="17" /></button>
+        </header>
+        <p v-if="listState === 'loading'" class="picker-state" role="status">正在读取知识库…</p>
+        <template v-if="listState === 'ready'">
+          <template v-if="libraries.length">
+            <label v-if="libraries.length > 1" class="picker-search">
+              <PhMagnifyingGlass :size="15" aria-hidden="true" />
+              <input v-model.trim="libQuery" type="search" aria-label="搜索知识库" placeholder="搜索知识库" :disabled="busy" />
+            </label>
+            <div class="picker-results" :style="{ '--destination-rows': Math.min(libraries.length, 6) }">
+              <LibraryDestinationList v-if="filteredLibraries.length" v-model="destination" :libraries="filteredLibraries" :disabled="busy" />
+              <p v-else class="picker-state" role="status">没有匹配的知识库</p>
+            </div>
+            <label class="picker-field">文档名称<input v-model="newName" :disabled="busy" maxlength="160" /></label>
+          </template>
+          <form v-else class="empty-library-create" @submit.prevent="createLibrary">
+            <label class="picker-field">知识库名称<input v-model="newLibraryName" :disabled="creatingLibrary" /></label>
+            <button class="picker-submit" :disabled="busy || !newLibraryName.trim()">新建知识库</button>
+          </form>
+        </template>
+        <p v-if="pickerError" class="picker-error" role="alert">{{ pickerError }}</p>
+        <footer v-if="listState !== 'loading'" class="picker-actions">
+          <button type="button" :disabled="locked" @click="closePicker">取消</button>
+          <button v-if="listState === 'error'" type="button" @click="loadLibraries()">重试</button>
+          <button v-if="listState === 'ready' && libraries.length" type="button" class="picker-submit" :disabled="!canSave" @click="collect">{{ phase === 'reading' ? '正在读取…' : phase === 'writing' ? '正在保存…' : '保存' }}</button>
+        </footer>
       </section>
-    </div>
+    </div></Transition>
   </main>
 </template>
 
@@ -35,29 +50,80 @@
 import { scrollBehavior } from '../utils/scroll-target.js'
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { workspaceImages, rewriteWorkspaceImages } from '../../server/services/workspace-images.js'
+import { useDialogFocus } from '../composables/useDialogFocus.js'
 import { API_BASE } from '../utils/api'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
-import ContentIcon from '../components/ContentIcon.vue'
+import LibraryDestinationList from '../components/LibraryDestinationList.vue'
+import { PhMagnifyingGlass, PhX } from '../icons/remix'
 
 const embedded = window.parent !== window
 const title = ref('')
 const filePath = ref('')
 const sourcePath = ref('')
+const workspaceReference = computed(() => {
+  const path = filePath.value.replaceAll('\\', '/').split(/[?#]/, 1)[0]
+  if (/^(?:[a-z][a-z\d+.-]*:|[/~])/i.test(path) || path.split('/').includes('..')) {
+    return title.value.split(/[?#]/, 1)[0].split(/[/\\]/).at(-1) || path.split('/').at(-1)
+  }
+  return path
+})
 const source = ref('')
 const ready = ref(false)
 const receiveTimedOut = ref(false)
 let receiveTimer = null
 const picker = ref(false)
 const pickerError = ref('')
-const busy = ref(false)
+const pickerDialog = ref(null)
+const collectButton = ref(null)
+const creatingLibrary = ref(false)
+const phase = ref('idle')
+const busy = computed(() => creatingLibrary.value || phase.value !== 'idle')
+const locked = computed(() => creatingLibrary.value || phase.value === 'writing')
+let lastImport = null
+
+function closePicker() {
+  if (locked.value) return
+  if (phase.value === 'reading') {
+    requests.clear()
+    pendingImages.value = 0
+    fullReadId = ''
+  }
+  phase.value = 'idle'
+  picker.value = false
+  listRequest++
+}
+useDialogFocus(picker, pickerDialog, closePicker, () => collectButton.value)
 const newName = ref('')
 const destination = ref('')
 const libraries = ref([])
 const libQuery = ref('')
-const DRAFT_NAME = '草稿'
-const newLibraryName=ref('')
-async function createLibrary(){busy.value=true;pickerError.value='';try{const result=await fetch(API_BASE+'/api/lib',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newLibraryName.value.trim()})}).then(r=>r.json());if(!result.ok)throw Error(result.error);destination.value=newLibraryName.value.trim();await openPicker()}catch(e){pickerError.value=e.message}finally{busy.value=false}}
+const listState = ref('idle')
+let listRequest = 0
+const newLibraryName = ref('')
 const filteredLibraries = computed(() => libraries.value.filter(lib => lib.name.toLocaleLowerCase().includes(libQuery.value.toLocaleLowerCase())))
+const canSave = computed(() => !busy.value && listState.value === 'ready' && newName.value.trim() &&
+  filteredLibraries.value.some(lib => lib.name === destination.value))
+async function createLibrary() {
+  const name = newLibraryName.value.trim()
+  if (busy.value || !name || listState.value !== 'ready') return
+  const request = listRequest
+  creatingLibrary.value = true
+  pickerError.value = ''
+  try {
+    const response = await fetch(API_BASE + '/api/lib', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+    })
+    const result = await response.json()
+    if (!result.ok) throw Error(result.error || '无法新建知识库')
+    if (request === listRequest && picker.value) {
+      destination.value = name
+      newLibraryName.value = ''
+      await loadLibraries()
+    }
+  } catch (error) {
+    if (request === listRequest && picker.value) pickerError.value = error.message
+  } finally { creatingLibrary.value = false }
+}
 const pendingImages = ref(0)
 const imageData = new Map()
 const imageVersion = ref(0)
@@ -65,10 +131,10 @@ const sourceVersion = ref(0)
 const imageFailures = new Map()
 const requests = new Map()
 let contentComplete = false
-let fullRequestedFor = ''
+let lastPreview = null
+let fullReadId = ''
 let parentOrigin = ''
 let nextRequestId = 0
-let awaitingImages = false
 let resizeObserver
 
 const imageSpans = computed(() => workspaceImages(source.value))
@@ -112,6 +178,12 @@ function scanImages() {
 }
 watch(references, async () => { await nextTick(); scanImages() }, { flush: 'post' })
 
+function requestFullContent() {
+  if (fullReadId) return
+  fullReadId = String(++nextRequestId)
+  window.parent.postMessage({ type: 'dsh-reader-preview:full-request', requestId: fullReadId }, parentOrigin)
+}
+
 function onMessage(event) {
   const localParent = /^(?:https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?|dsh-app:\/\/app)$/.test(event.origin)
   const remoteReader = !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
@@ -121,20 +193,37 @@ function onMessage(event) {
     parentOrigin = event.origin
     clearTimeout(receiveTimer)
     receiveTimedOut.value = false
-    const changed = filePath.value && filePath.value !== String(data.filePath || '')
-    if (changed) { imageData.clear(); imageFailures.clear(); requests.clear(); pendingImages.value = 0; fullRequestedFor = ''; newName.value = '' }
-    title.value = String(data.title || '').slice(0, 200)
-    filePath.value = String(data.filePath || '').slice(0, 2000)
-    sourcePath.value = String(data.sourcePath || '').slice(0, 2000)
-    source.value = String(data.text || '')
-    sourceVersion.value++
-    contentComplete = data.eof === true
-    if (!contentComplete && !busy.value && fullRequestedFor !== filePath.value) {
-      fullRequestedFor = filePath.value
-      window.parent.postMessage({ type: 'dsh-reader-preview:full-request' }, parentOrigin)
+    const path = String(data.filePath || '').slice(0, 2000)
+    const changed = filePath.value && filePath.value !== path
+    if (changed) {
+      listRequest++
+      picker.value = false
+      phase.value = 'idle'
+      lastImport = null
+      newName.value = ''
     }
+    title.value = String(data.title || '').slice(0, 200)
+    filePath.value = path
+    sourcePath.value = String(data.sourcePath || '').slice(0, 2000)
     if (!newName.value) newName.value = title.value.replace(/\.(md|markdown)$/i, '')
     ready.value = true
+
+    const text = String(data.text || '')
+    const eof = data.eof === true
+    if (!changed && lastPreview?.text === text && lastPreview.eof === eof && lastPreview.version === data.version) return
+    lastPreview = { text, eof, version: data.version }
+    fullReadId = ''
+    imageData.clear()
+    imageFailures.clear()
+    requests.clear()
+    pendingImages.value = 0
+    source.value = text
+    sourceVersion.value++
+    contentComplete = eof
+    if (!contentComplete && (!busy.value || phase.value === 'reading')) requestFullContent()
+    if (contentComplete || phase.value === 'reading') {
+      nextTick(() => { scanImages(); commitWhenReady() })
+    }
   } else if (data.type === 'dsh-reader-preview:asset-response') {
     const reference = requests.get(String(data.requestId || ''))
     if (!reference) return
@@ -144,16 +233,20 @@ function onMessage(event) {
     else if (data.mime && data.base64) imageData.set(reference, { mime: data.mime, base64: data.base64 })
     scanImages()
     if (pendingImages.value === 0 && imageData.size > 0) imageVersion.value++
-    if (awaitingImages && pendingImages.value === 0) { awaitingImages = false; commitCollect() }
+    commitWhenReady()
   } else if (data.type === 'dsh-reader-preview:full-content') {
-    if (data.error) { if (busy.value) { pickerError.value = String(data.error); busy.value = false }; return }
+    if (!fullReadId || (data.requestId && data.requestId !== fullReadId)) return
+    fullReadId = ''
+    if (data.error) {
+      if (phase.value === 'reading') { pickerError.value = String(data.error); phase.value = 'idle' }
+      return
+    }
     source.value = String(data.text || '')
     sourceVersion.value++
     contentComplete = true
     nextTick(() => {
       scanImages()
-      if (pendingImages.value && busy.value) awaitingImages = true
-      else if (busy.value) commitCollect()
+      commitWhenReady()
     })
   }
 }
@@ -177,46 +270,77 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
 })
 
-async function openPicker() {
+function openPicker() {
+  if (picker.value || phase.value !== 'idle') return
+  libQuery.value = ''
+  newLibraryName.value = ''
+  picker.value = true
+  loadLibraries()
+}
+async function loadLibraries() {
+  const request = ++listRequest
   pickerError.value = ''
+  listState.value = 'loading'
   try {
     const [me, result] = await Promise.all([
       fetch(API_BASE + '/api/me', { credentials: 'same-origin' }).then(r => r.json()),
       fetch(API_BASE + '/api/libs', { credentials: 'same-origin' }).then(r => r.json())
     ])
-    if (me?.data?.role !== 'owner') throw Error('请先在阅读器中进入管理工作区')
-    if (!result.ok) throw Error(result.error || '无法读取抽屉')
+    if (!me.ok) throw Error(me.error || '无法读取当前身份')
+    if (me.data?.role !== 'owner') throw Error('当前连接为只读，请使用本机知识库。')
+    if (!result.ok) throw Error(result.error || '无法读取知识库')
+    if (request !== listRequest) return
     libraries.value = result.data.libs
     if (!libraries.value.some(lib => lib.name === destination.value)) destination.value = libraries.value[0]?.name || ''
-  } catch (error) { pickerError.value = error.message }
-  picker.value = true
+    listState.value = 'ready'
+  } catch (error) {
+    if (request !== listRequest) return
+    pickerError.value = error.message
+    listState.value = 'error'
+  }
 }
 function collect() {
-  if (busy.value || !destination.value || !newName.value.trim()) return
-  busy.value = true
+  if (!canSave.value) return
+  phase.value = 'reading'
   pickerError.value = ''
-  if (contentComplete) { nextTick(() => { scanImages(); if (pendingImages.value) awaitingImages = true; else commitCollect() }) }
-  else window.parent.postMessage({ type: 'dsh-reader-preview:full-request' }, parentOrigin || '*')
+  imageFailures.clear()
+  if (contentComplete) {
+    scanImages()
+    commitWhenReady()
+  } else requestFullContent()
 }
-async function commitCollect() {
+async function commitWhenReady() {
+  if (phase.value !== 'reading' || !contentComplete || pendingImages.value) return
   const missing = references.value.find(ref => !imageData.has(ref))
   if (missing) {
     pickerError.value = '图片无法保存：' + missing + (imageFailures.has(missing) ? '（' + imageFailures.get(missing) + '）' : '')
-    busy.value = false
+    phase.value = 'idle'
     return
   }
+  phase.value = 'writing'
+  const reference = filePath.value
   try {
+    const body = JSON.stringify({ dir: destination.value, name: newName.value.trim(), content: source.value, reference,
+      workspace: reference.slice(0, reference.lastIndexOf('/')),
+      assets: references.value.map(reference => ({ reference, ...imageData.get(reference) })) })
+    if (lastImport?.body !== body) lastImport = { body, key: crypto.getRandomValues(new Uint32Array(4)).join('-') }
     const response = await fetch(API_BASE + '/api/import-workspace-doc', {
-      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dir: destination.value, name: newName.value.trim(), content: source.value,
-        reference: filePath.value, workspace: filePath.value.slice(0, filePath.value.lastIndexOf('/')),
-        assets: references.value.map(reference => ({ reference, ...imageData.get(reference) })) })
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': lastImport.key }, body,
+      signal: AbortSignal.timeout(30000)
     })
     const json = await response.json()
-    if (!json.ok) throw Error(json.error || '收录失败')
+    if (!json.ok || !json.data?.file) throw Error(json.error || '文档保存失败')
+    if (filePath.value !== reference) return
+    phase.value = 'done'
     picker.value = false
-    window.parent.postMessage({ type: 'dsh-reader-preview:collected', file: json.data.file }, parentOrigin || '*')
-  } catch (error) { pickerError.value = error.message } finally { busy.value = false }
+    lastImport = null
+    window.parent.postMessage({ type: 'dsh-reader-preview:collected', file: json.data.file, id: json.data.id }, parentOrigin)
+  } catch (error) {
+    if (filePath.value !== reference) return
+    pickerError.value = error.message
+    phase.value = 'idle'
+  }
 }
 </script>
 
@@ -231,24 +355,42 @@ body { margin: 0; }
 .preview-state { padding: 30px; color: var(--c-faint); font-size: 13px; }
 .preview-reader { min-height: calc(100vh - 44px); padding: 8px 0 80px; }
 .preview-reader .editor-shell { max-width: var(--measure,850px); margin: auto; }
-.picker-mask { position: fixed; inset: 0; z-index: 10; background: var(--c-overlay); display: grid; place-items: center; padding: 16px; }
-.picker { width: min(720px,100%); max-height: min(720px,88dvh); overflow: auto; padding: 24px; border: 1px solid var(--c-line); border-radius: 38px; corner-shape: superellipse(2); background: var(--c-pop); box-shadow: var(--c-pop-shadow); }
-.picker-heading { display: flex; align-items: center; justify-content: space-between; font-size: 17px; }
-.picker-heading button { border: 0; background: transparent; color: var(--c-sub); font-size: 22px; cursor: pointer; }
-.picker-search,.picker label input { display: block; width: 100%; padding: 10px 12px; border: 1px solid var(--c-line); border-radius: var(--radius-control); corner-shape: superellipse(2); background: var(--c-field); font: inherit; color: var(--c-text); }
-.picker-tools { display:flex; align-items:center; gap:10px; margin:18px 0; }.picker-tools .picker-search { flex:1; min-width:0; }.picker-tools .select-menu-trigger { flex:none; }
-.picker-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(148px,1fr)); gap: 10px; max-height: min(42dvh,350px); overflow: auto; padding: 2px; }
-.picker-card { display: flex; align-items: flex-start; flex-direction: column; gap: 5px; min-height: 120px; padding: 16px; border: 1px solid transparent; border-radius: 24px; corner-shape: superellipse(2); background: var(--c-field); color: var(--c-text); text-align: left; cursor: pointer; }
-.picker-card:hover { background: var(--c-hover); }
-.picker-card.selected { border-color: var(--c-accent); background: color-mix(in srgb,var(--c-accent) 8%,var(--c-pop)); }
-.picker-card.draft { background: color-mix(in srgb,var(--c-accent) 5%,var(--c-pop)); }
-.picker-card-icon { font-size: 21px; line-height: 1; }
-.picker-card strong { font-size: 13px; font-weight: 400; }
-.picker-card small { font-size: 11px; color: var(--c-sub); }
-.picker-empty { grid-column: 1/-1; color: var(--c-sub); }
-.picker label { display: block; margin-top: 18px; font-size: 12px; color: var(--c-sub); }
-.picker label input { margin-top: 7px; }
-.picker-error { font-size: 12px; color: #c64b4b; }
-.picker-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-.picker-actions button:disabled { opacity: .5; cursor: default; }
+.picker-mask {
+  --picker-top: max(16px, calc((100dvh - min(270px, 35dvh) - 260px) / 2));
+  position: fixed; inset: 0; z-index: var(--layer-modal-backdrop); display: grid; place-items: start center;
+  padding: var(--picker-top) 16px 16px; background: var(--c-overlay);
+}
+.picker {
+  width: min(440px, 100%); max-height: calc(100dvh - var(--picker-top) - 16px); overflow: auto;
+  padding: 20px; border: 1px solid var(--c-line); border-radius: var(--radius-dialog);
+  background: var(--c-pop); box-shadow: var(--c-pop-shadow); color: var(--c-text);
+}
+/* Keep the query, name and submit targets in place as the visible results change. */
+.picker-results { block-size: min(calc(46px * var(--destination-rows) - 2px), 270px, 35dvh); overflow: auto; }
+.picker-results .destination-list { max-height: none; }
+.picker-heading, .picker-actions, .empty-library-create { display: flex; align-items: center; gap: 8px; }
+.picker-heading { justify-content: space-between; margin-bottom: 14px; }
+.picker-heading h2 { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 600; }
+.picker-close { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-control); color: var(--c-sub); }
+.picker-close:hover { background: var(--c-hover); color: var(--c-ink); }
+.picker-search, .picker-field input { border: 0; border-radius: var(--radius-control); background: var(--c-field); color: var(--c-text); }
+.picker-search { display: flex; align-items: center; gap: 7px; padding: 0 10px; margin: 0 0 8px; color: var(--c-sub); }
+.picker input { min-width: 0; width: 100%; min-height: 36px; font: inherit; font-size: 13px; }
+.picker-search input { flex: 1; border: 0; background: transparent; color: var(--c-text); outline: 0; }
+.picker-search:focus-within, .picker-field input:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+.picker-field { display: grid; gap: 6px; margin-top: 14px; color: var(--c-sub); font-size: 12px; }
+.picker-field input { padding: 7px 10px; }
+.empty-library-create { align-items: flex-end; }
+.empty-library-create label { flex: 1; margin: 0; min-width: 0; }
+.picker-state, .picker-error { margin: 12px 0; font-size: 13px; line-height: 1.5; color: var(--c-sub); }
+.picker-error { color: var(--c-danger, #b44b43); }
+.picker-actions { justify-content: flex-end; margin-top: 18px; }
+.picker-actions button, .empty-library-create button { min-height: 34px; padding: 6px 12px; background: transparent; border-radius: var(--radius-control); font-size: 13px; }
+.picker-actions button:hover, .empty-library-create button:hover { background: var(--c-hover); }
+.picker .picker-submit { color: var(--c-on-accent); background: var(--c-accent); }
+.picker .picker-submit:hover { background: var(--c-accent); filter: brightness(.93); }
+.picker button:disabled { opacity: .5; cursor: default; }
+@media (pointer: coarse) {
+  .collect-button, .picker-close, .picker-actions button, .empty-library-create button { min-width: 44px; min-height: 44px; }
+}
 </style>

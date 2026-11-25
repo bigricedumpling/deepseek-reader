@@ -1,14 +1,7 @@
 import fs from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { fault } from '../storage/workspace.js'
-
-/*
- * Agent 改动收件箱。
- *
- * 数据本来就存在：operations 记录谁在什么时候动了哪些文件，versions 保存每次写入前的全文。
- * 这里只做三件事：把操作翻译成人能读的条目、找回这次操作前后的正文、记录哪些已经看过。
- * 不复制正文，也不改现有的写入协议。
- */
+import { digest, fault } from '../storage/workspace.js'
 
 const labels = {
   'POST /doc': '新建',
@@ -49,17 +42,6 @@ function fileList(details) {
 
 function isVersionPath(value) {
   return typeof value === 'string' && /(^|\/)\.reader\/versions\/[^/]+\.md$/i.test(value)
-}
-
-function versionIdFrom(details) {
-  for (const file of fileList(details)) {
-    for (const value of [file.path, file.from, file.to]) {
-      if (!isVersionPath(value)) continue
-      const id = path.posix.basename(value, '.md')
-      if (id) return id
-    }
-  }
-  return ''
 }
 
 function docPathFrom(details, action) {
@@ -104,6 +86,7 @@ function resolveNode(repo, details, action) {
 }
 
 function actorInfo(repo, actor) {
+  if (actor === 'agent:local') return { kind: 'agent', id: 'local', name: '本机 Agent' }
   if (typeof actor === 'string' && actor.startsWith('agent:')) {
     const id = actor.slice('agent:'.length)
     const key = repo.db.prepare('SELECT name, revoked FROM credentials WHERE id=?').get(id)
@@ -114,30 +97,66 @@ function actorInfo(repo, actor) {
   return { kind: 'other', id: '', name: String(actor || '未知') }
 }
 
-function readVersion(repo, version) {
-  if (!version?.path) return ''
-  try { return fs.readFileSync(path.join(repo.root, version.path), 'utf8') } catch { return '' }
+// Both sides share content-addressed files with ordinary document history.
+// An external editor can change the document immediately after the API returns.
+function snapshotPath(node, revision) {
+  return '.reader/versions/' + node + '/' + revision + '.md'
+}
+
+function writeSnapshot(repo, node, revision, content) {
+  const relative = snapshotPath(node, revision)
+  const file = path.join(repo.root, relative)
+  if (!fs.existsSync(file)) repo.write(file, content)
+  return relative
+}
+
+export function recordDocumentChange(repo, operation, node, before, after) {
+  const afterRevision = digest(after)
+  writeSnapshot(repo, node, afterRevision, after)
+  repo.db.prepare('INSERT INTO activity_versions VALUES (?,?,?)').run(operation, node, afterRevision)
+  if (before !== null) recordPreviousVersion(repo, node, before, operation)
+  else pruneDocumentHistory(repo, node)
+}
+
+// One structural operation can update links in several documents.
+export function recordPreviousVersion(repo, node, before, versionId = randomUUID()) {
+  const revision = digest(before)
+  const file = writeSnapshot(repo, node, revision, before)
+  repo.db.prepare('INSERT INTO versions VALUES (?,?,?,?,?)').run(versionId, node, revision, file, Date.now())
+  pruneDocumentHistory(repo, node)
+}
+
+function pruneDocumentHistory(repo, node) {
+  // Imported history and creation receipts can age out on different writes.
+  const candidates = new Map()
+  const oldVersions = repo.db.prepare('SELECT id,path,revision FROM versions WHERE node=? ORDER BY at DESC,rowid DESC LIMIT -1 OFFSET 100').all(node)
+  for (const version of oldVersions) {
+    repo.db.prepare('DELETE FROM versions WHERE id=?').run(version.id)
+    candidates.set(version.path, version.revision)
+  }
+  const oldReceipts = repo.db.prepare('SELECT operation,revision FROM activity_versions WHERE node=? ORDER BY rowid DESC LIMIT -1 OFFSET 100').all(node)
+  for (const receipt of oldReceipts) {
+    repo.db.prepare('DELETE FROM activity_versions WHERE operation=?').run(receipt.operation)
+    candidates.set(snapshotPath(node, receipt.revision), receipt.revision)
+  }
+  for (const [file, revision] of candidates) {
+    if (repo.db.prepare('SELECT 1 FROM versions WHERE node=? AND path=?').get(node, file)) continue
+    if (file === snapshotPath(node, revision) && repo.db.prepare('SELECT 1 FROM activity_versions WHERE node=? AND revision=?').get(node, revision)) continue
+    repo.remove(path.join(repo.root, file))
+  }
+}
+
+function verifiedText(repo, node, revision) {
+  if (!/^[a-f0-9-]{36}$/i.test(node) || !/^[a-f0-9]{64}$/.test(revision)) return null
+  try {
+    const text = fs.readFileSync(path.join(repo.root, snapshotPath(node, revision)), 'utf8')
+    return digest(text) === revision ? text : null
+  } catch { return null }
 }
 
 function currentNode(repo, node) {
   if (!node?.id) return node
   return repo.byId(node.id) || node
-}
-
-function currentContent(repo, node) {
-  const current = currentNode(repo, node)
-  if (!current?.path) return ''
-  try { return fs.readFileSync(path.join(repo.root, current.path), 'utf8') } catch { return '' }
-}
-
-function versionFor(repo, details, node, at) {
-  const id = versionIdFrom(details)
-  if (id) {
-    const row = repo.db.prepare('SELECT rowid AS seq, * FROM versions WHERE id=?').get(id)
-    if (row) return row
-  }
-  if (!node?.id) return null
-  return repo.db.prepare('SELECT rowid AS seq, * FROM versions WHERE node=? AND at<=? ORDER BY at DESC, rowid DESC LIMIT 1').get(node.id, at)
 }
 
 function item(repo, row) {
@@ -180,31 +199,16 @@ function diffFor(repo, row) {
   if (row.action === 'PATCH /doc') return { ...base, kind: 'rename', before: '', after: '' }
   if (row.action === 'PUT /move/doc') return { ...base, kind: 'move', before: '', after: '' }
 
-  const version = versionFor(repo, details, node, row.at)
-  if (row.action === 'POST /doc') {
-    const first = node?.id
-      ? repo.db.prepare('SELECT rowid AS seq, * FROM versions WHERE node=? ORDER BY rowid LIMIT 1').get(node.id)
-      : null
-    return {
-      ...base,
-      kind: 'create',
-      before: '',
-      after: first ? readVersion(repo, first) : currentContent(repo, node),
-      versionId: ''
-    }
-  }
-
-  if (!version) {
-    return { ...base, kind: 'update', before: '', after: currentContent(repo, node), versionId: '' }
-  }
-  const next = repo.db.prepare('SELECT rowid AS seq, * FROM versions WHERE node=? AND rowid>? ORDER BY rowid LIMIT 1').get(version.node, version.seq)
-  return {
-    ...base,
-    kind: 'update',
-    before: readVersion(repo, version),
-    after: next ? readVersion(repo, next) : currentContent(repo, node),
-    versionId: version.id
-  }
+  if (details.subject?.unchanged) return { ...base, kind: 'unchanged', before: '', after: '' }
+  const unavailable = { ...base, kind: 'unavailable', before: '', after: '' }
+  const receipt = repo.db.prepare('SELECT node,revision FROM activity_versions WHERE operation=?').get(row.id)
+  if (!receipt) return unavailable
+  const after = verifiedText(repo, receipt.node, receipt.revision)
+  if (after === null) return unavailable
+  if (row.action === 'POST /doc') return { ...base, kind: 'create', before: '', after, versionId: '' }
+  const version = repo.db.prepare('SELECT revision FROM versions WHERE id=? AND node=?').get(row.id, receipt.node)
+  const before = version ? verifiedText(repo, receipt.node, version.revision) : null
+  return before === null ? unavailable : { ...base, kind: 'update', before, after, versionId: row.id }
 }
 
 export function activityService(repo) {

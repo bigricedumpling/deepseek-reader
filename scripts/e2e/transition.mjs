@@ -5,6 +5,7 @@
  * 换端口：`APP_PORT=8103 node scripts/e2e/transition.mjs`
  * 需要无头 Chrome 能连上 CDP；端口自动挑，冲突时用 CDP_PORT 指定。
  */
+import { chooseReadingSetting } from './reading-settings.mjs'
 import { spawn } from 'node:child_process'
 const APP_PORT = process.env.APP_PORT || 8090
 const PORT=Number(process.env.CDP_PORT||0) || (9500 + Math.floor(Math.random()*400))
@@ -25,17 +26,13 @@ try{
   await ev(`const b=[...document.querySelectorAll('button.doc-title')].find(function(x){return x.textContent.trim()==='评测调研'}); if(b)b.click(); return !!b;`)
   for(let k=0;k<60;k++){if(await ev(`return !!(window.__crepe && document.querySelector('.crepe-host .ProseMirror > p'))`))break;await sleep(400)}
   await sleep(2000)
-  const openMenu=async()=>{ if(await ev(`const p=document.querySelector('.pop-menu'); return !!(p&&p.textContent.includes('正文字号'))`))return
-    await ev(`[...document.querySelectorAll('button.btn-icon')].find(function(x){return x.title==='排版'}).click(); return true`); await sleep(400) }
   // 1) transition 属性在不在
   ck('段落有 max-width 过渡', (await ev(`return getComputedStyle(document.querySelector('.crepe-host .ProseMirror > p')).transitionProperty`)).includes('max-width'), await ev(`return getComputedStyle(document.querySelector('.crepe-host .ProseMirror > p')).transition`))
   // 2) 实测宽度是渐变而不是瞬间跳
-  await openMenu()
-  await ev(`const p=document.querySelector('.pop-menu'); const lab=[...p.querySelectorAll('.type-label')].find(function(l){return l.textContent.trim().startsWith('正文宽度')}); let el=lab.nextElementSibling; while(el&&!el.classList.contains('type-row'))el=el.nextElementSibling; [...el.querySelectorAll('button')].find(function(b){return b.textContent.trim()==='窄'}).click(); return true`)
+  await chooseReadingSetting(ev, '正文宽度', '窄')
   await sleep(900)
   const before=await ev(`return Math.round(document.querySelector('.crepe-host .ProseMirror > p').getBoundingClientRect().width)`)
-  await openMenu()
-  await ev(`const p=document.querySelector('.pop-menu'); const lab=[...p.querySelectorAll('.type-label')].find(function(l){return l.textContent.trim().startsWith('正文宽度')}); let el=lab.nextElementSibling; while(el&&!el.classList.contains('type-row'))el=el.nextElementSibling; [...el.querySelectorAll('button')].find(function(b){return b.textContent.trim()==='中'}).click(); return true`)
+  await chooseReadingSetting(ev, '正文宽度', '中')
   const samples=[]
   for (let i=0;i<6;i++){ await sleep(55); samples.push(await ev(`return Math.round(document.querySelector('.crepe-host .ProseMirror > p').getBoundingClientRect().width)`)) }
   await sleep(700)

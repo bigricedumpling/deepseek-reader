@@ -1,9 +1,9 @@
 import { $nodeSchema, $remark } from '@milkdown/kit/utils'
 import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import DOMPurify from 'dompurify'
-import { renderMarkdown } from './markdown.js'
+import { readingFragment } from './reading-fragment.js'
 import {DOMParser as ProseParser, DOMSerializer} from '@milkdown/kit/prose/model'
-import {preserveBlocks} from './preserved-markdown.js'
+import { isFrontmatterBlock, preserveBlocks } from './preserved-markdown.js'
 
 // Keep HTML as an explicit atomic block instead of discarding it during serialization.
 export const preservedRemark = $remark('readerPreservedBlocks', () => () => preserveBlocks)
@@ -11,13 +11,17 @@ export function configurePreservedMarkdown(ctx) {
   ctx.update(remarkStringifyOptionsCtx, options => ({...options, handlers:{...options.handlers, readerRaw:node=>node.value}}))
 }
 export const preservedSchema = $nodeSchema('reader_raw', () => ({
-  group:'block', atom:true, isolating:true, attrs:{value:{default:''}},
-  parseDOM:[{tag:'div[data-reader-raw]',getAttrs:dom=>({value:dom.dataset.readerRaw})}],
+  group:'block', atom:true, isolating:true, attrs:{value:{default:''},sourceKind:{default:''},definitions:{default:''}},
+  parseDOM:[{tag:'div[data-reader-raw]',getAttrs:dom=>({value:dom.dataset.readerRaw,sourceKind:dom.dataset.sourceKind || ''})}],
   toDOM(node) {
     const dom=document.createElement('div');dom.className='reader-raw-block';dom.dataset.readerRaw=node.attrs.value
-    dom.setAttribute('aria-label','HTML 或文档属性');dom.setAttribute('tabindex','0')
-    if (/^(---|\+\+\+)\r?\n/.test(node.attrs.value)) {dom.classList.add('reader-frontmatter');dom.setAttribute('aria-hidden','true');dom.removeAttribute('tabindex')}
-    else dom.innerHTML=DOMPurify.sanitize(renderMarkdown(node.attrs.value),{FORBID_ATTR:['style'],FORBID_TAGS:['style','iframe','object','embed','form','input','button','textarea']})
+    if (node.attrs.sourceKind) dom.dataset.sourceKind = node.attrs.sourceKind
+    dom.setAttribute('aria-label',node.attrs.sourceKind ? '内容块' : 'HTML 或文档属性');dom.setAttribute('tabindex','0')
+    if (isFrontmatterBlock(node) || node.attrs.sourceKind === 'definition') {dom.classList.add('reader-frontmatter');dom.setAttribute('aria-hidden','true');dom.removeAttribute('tabindex')}
+    else {
+      const context = node.attrs.definitions ? '\n\n' + node.attrs.definitions : ''
+      dom.append(readingFragment(node.attrs.value + context, { purifyOptions: { FORBID_ATTR:['style'], FORBID_TAGS:['style','iframe','object','embed','form','input','button','textarea'] } }))
+    }
     const edit=document.createElement('button');edit.type='button';edit.className='raw-edit-button';edit.textContent='编辑';edit.setAttribute('aria-label','编辑内容块');dom.append(edit)
     return dom
   },

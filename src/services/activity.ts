@@ -29,7 +29,7 @@ export interface ActivityDiff {
   id: string
   action: string
   actionLabel: string
-  kind: 'create' | 'update' | 'delete' | 'rename' | 'move' | 'meta'
+  kind: 'create' | 'update' | 'delete' | 'rename' | 'move' | 'meta' | 'unavailable' | 'unchanged'
   path: string
   name: string
   before: string

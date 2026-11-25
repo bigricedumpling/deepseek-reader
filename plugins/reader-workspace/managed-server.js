@@ -12,7 +12,8 @@ const alive = pid => { try { process.kill(pid, 0); return true } catch (error) {
 
 /** Stable origin per data directory; never silently substitute another library. */
 export function startManagedServer(onChange = () => {}, options = {}) {
-  const data = path.resolve(options.dataDirectory || readerDataDirectory())
+  const explicitDirectory = options.dataDirectory || process.env.DOCS_ROOT || process.env.DSH_READER_DATA_DIR
+  const data = path.resolve(explicitDirectory || readerDataDirectory())
   const runtime = options.runtimeDirectory || path.join(HERE, 'runtime')
   const identity = createHash('sha256').update(data).digest('hex').slice(0, 24)
   const runtimeData = path.join(path.dirname(data), 'runtime', identity)
@@ -35,7 +36,7 @@ export function startManagedServer(onChange = () => {}, options = {}) {
   }
   async function probe(url, legacy = false) {
     try {
-      const response = await fetch(new URL(legacy ? 'api/me' : 'api/instance', url), { signal: AbortSignal.timeout(1000) })
+      const response = await fetch(new URL(legacy ? 'api/me' : 'api/instance', url), { signal: AbortSignal.timeout(1000), redirect: 'error' })
       const result = await response.json()
       return response.ok && result.ok && (legacy ? ['owner', 'guest'].includes(result.data?.role)
         : result.data?.product === 'reader' && result.data?.protocol === 1 && result.data?.identity === identity)
@@ -49,22 +50,28 @@ export function startManagedServer(onChange = () => {}, options = {}) {
       if (!binding && fs.existsSync(bindingFile)) throw Error(`${BRAND_NAME} 服务记录无法读取，已保留原文件；请修复记录后重试`)
       // Pin legacy connections. Disconnection must not open a different empty library.
       if (!binding && !options.forceManaged && process.env.DSH_READER_FORCE_MANAGED !== '1'
-        && await probe('http://127.0.0.1:8090/', true)) {
+        && await probe('http://127.0.0.1:8090/', !explicitDirectory)) {
+        if (stopped) return
         binding = { kind: 'existing', url: 'http://127.0.0.1:8090/' }; bind(binding)
       }
       if (stopped) return
       if (binding?.kind === 'existing') {
-        status.dataDirectory = ''
-        const connected = await probe(binding.url, true)
-        publish(connected ? 'ready' : 'error', binding.url, connected ? ''
-          : `已连接的 ${BRAND_NAME} 暂不可用。请启动原服务，或在插件设置中更换连接；原抽屉未迁移。`)
+        if (!explicitDirectory) status.dataDirectory = ''
+        const connected = await probe(binding.url, !explicitDirectory)
+        if (stopped) return
+        const error = explicitDirectory ? '无法确认已绑定服务使用所选资料目录。请检查资料目录并启动对应服务。'
+          : `已连接的 ${BRAND_NAME} 暂不可用。请启动原服务，或在插件设置中更换连接。`
+        publish(connected ? 'ready' : 'error', connected ? binding.url : '', connected ? '' : error)
         later(10000); return
       }
-      if (binding && (binding.kind !== 'managed' || binding.identity !== identity)) throw Error(`${BRAND_NAME} 服务记录与当前抽屉不匹配，已停止自动连接`)
+      if (binding && (binding.kind !== 'managed' || binding.identity !== identity)) throw Error(`${BRAND_NAME} 服务记录与当前数据目录不匹配，已停止自动连接`)
       const port = Number(binding?.port || 0)
       if (!Number.isInteger(port) || port < 0 || port > 65535) throw Error(`${BRAND_NAME} 端口记录无效，请检查服务配置`)
       const url = port ? `http://127.0.0.1:${port}/` : ''
-      if (url && await probe(url)) { publish('ready', url); later(4000); return }
+      if (url && await probe(url)) {
+        if (!stopped) { publish('ready', url); later(4000) }
+        return
+      }
       if (stopped) return
       try {
         const fd = fs.openSync(lockFile, 'wx', 0o600)
@@ -121,4 +128,23 @@ export function startManagedServer(onChange = () => {}, options = {}) {
       else unlock()
     }
   }
+}
+
+// Node 24.0–24.1 predate import.meta.main.
+const isMain = import.meta.main ?? (process.argv[1] && fs.existsSync(process.argv[1])
+  && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url))
+if (isMain) {
+  let lastUrl = ''
+  const manager = startManagedServer(status => queueMicrotask(() => {
+    if (status.state === 'error') {
+      console.error(status.error)
+      process.exitCode = 1
+      manager.stop()
+    } else if (status.state === 'ready' && status.url !== lastUrl) {
+      lastUrl = status.url
+      console.log(`${BRAND_NAME} ${status.url}`)
+    }
+  }))
+  process.once('SIGINT', () => manager.stop())
+  process.once('SIGTERM', () => manager.stop())
 }

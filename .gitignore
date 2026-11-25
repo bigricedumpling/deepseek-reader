@@ -22,9 +22,13 @@ Icon?
 !public/icons/glass/
 !public/icons/glass/**
 
-# Landing preview build
+# Landing preview build and deployment overrides
 site/dist/
 site/demo-kb/.reader/
+site/HANDOFF.md
+site/.env
+site/.env.local
+site/.env.*.local
 
 # Source icon modules are part of the app, not macOS folder metadata.
 !src/icons/

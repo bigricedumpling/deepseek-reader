@@ -57,6 +57,6 @@ jobs:
           curl --fail --location --silent --show-error --retry 3 --output "$READER_UPGRADE_BASELINE" "$BASELINE_URL"
           npm run test:upgrade
         env:
-          BASELINE_URL: https://github.com/bigricedumpling/deepseek-reader/releases/download/v0.2.0-preview.5/dsh-reader-workspace-0.2.0-preview.5.tgz
+          BASELINE_URL: https://github.com/bigricedumpling/deepseek-reader/releases/download/v0.2.0-preview.6/dsh-reader-workspace-0.2.0-preview.6.tgz
           READER_UPGRADE_BASELINE: ${{ runner.temp }}/typocket-previous-market.tgz
-          READER_UPGRADE_BASELINE_SHA256: 58bbe780494f51fc7d0debc8cff54e15a91099b907b4f6b165652da0f1e5b61c
+          READER_UPGRADE_BASELINE_SHA256: aaf9191b561d6bfe82fd112a132b3bb6e32fd0b452444eff1f6b23de00410e0e
