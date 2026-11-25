@@ -43,7 +43,10 @@
 
         <div class="lib-panel-resize" aria-label="调整知识库栏宽度" @pointerdown.stop="startLibResize" />
 
-        <div class="lib-panel-list">
+        <div ref="libViewport" class="lib-panel-list">
+          <Teleport v-if="selectedLibRow" :to="selectedLibRow">
+            <span ref="libIndicator" class="lib-row-blob" aria-hidden="true"><span class="lib-row-marker" /></span>
+          </Teleport>
           <TransitionGroup name="lib-row" tag="div" class="lib-row-stack">
           <div v-if="libCreate.active && !managerOpen" key="__create" class="lib-row lib-create-row">
             <PhFolderSimplePlus :size="16" class="lib-create-icon" />
@@ -79,9 +82,6 @@
             @drop.prevent="dropLib(lib)"
             @dragend="endLibDrag"
           >
-            <Transition name="row-selection">
-              <span v-if="isRailCurrent(lib)" class="lib-row-blob" :class="{ 'is-draft': lib.name === '草稿' }" aria-hidden="true"><span class="lib-row-marker" /></span>
-            </Transition>
             <button class="lib-icon-btn" :disabled="isGuest" :title="isGuest ? undefined : '更换图标'" :aria-label="isGuest ? undefined : '更换知识库图标'" :aria-hidden="isGuest || undefined" @click.stop="pickLibIcon(lib, $event)"><ContentIcon v-if="lib.icon" class="lib-row-icon" :value="lib.icon" /><PhFolderSimple v-else class="lib-row-icon lib-icon-placeholder" :size="16" /></button>
             <div class="lib-row-body">
               <input
@@ -383,7 +383,7 @@
       @keydown="navigateRows"
     >
       <Teleport v-if="selectedDocRow" :to="selectedDocRow">
-        <Transition name="row-selection"><span v-if="showDocSelection" ref="docIndicator" class="doc-row-blob" aria-hidden="true" /></Transition>
+        <span ref="docIndicator" class="doc-row-blob" aria-hidden="true" />
       </Teleport>
       <!-- 根目录就地新建：分组和单列表下都能用 -->
       <div v-if="tree.create && (tree.create.parent || '') === (currentLib || '')" class="tree-create-row">
@@ -526,6 +526,7 @@ import AppDialog from './AppDialog.vue'
 import { API_BASE } from '../utils/api'
 import { storageGet, storageJSON, storageSet } from '../utils/storage'
 import { useFileManager } from '../composables/useFileManager'
+import { useRowSelection } from '../composables/useRowSelection'
 const props = defineProps({
   nodes: { type: Array, required: true },
   currentPath: { type: String, default: '' },
@@ -2240,54 +2241,24 @@ const searchOpen = ref(false), searchBody = ref(false)
 watch(searchOpen, open => { if (!open) searchBody.value = false })
 const query = ref('')
 
-// Keep the fill inside the actual row. Sorting, folding neighboring folders and
-// resizing therefore carry it with the title throughout the layout transition.
-const docNavEl = ref(null), selectedDocRow = shallowRef(null), docIndicator = ref(null)
-const showDocSelection = ref(false)
-const rowMotionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
-let rowMotion = null
-let lastRow = null
-
-function stopRowMotion() {
-  rowMotion?.cancel()
-  rowMotion = null
-}
-function syncRowMotionPreference() {
-  if (rowMotionPreference.matches) stopRowMotion()
-}
-onMounted(() => rowMotionPreference.addEventListener('change', syncRowMotionPreference))
-onBeforeUnmount(() => {
-  stopRowMotion()
-  rowMotionPreference.removeEventListener('change', syncRowMotionPreference)
+const docNavEl = ref(null)
+const { row: selectedDocRow, marker: docIndicator } = useRowSelection({
+  viewport: docNavEl,
+  selector: '.doc-row.is-on',
+  selection: () => props.currentPath,
+  scope: () => currentLib.value,
+  visible: () => !props.collapsed && !managerOpen.value,
+  layout: [() => props.nodes, groupMode, sortMode, query, collapsedCats]
 })
-watch(() => props.currentPath, (next, previous) => {
-  const mark = docIndicator.value
-  const sameLibrary = next?.split('/')[0] === previous?.split('/')[0]
-  lastRow = sameLibrary && showDocSelection.value && mark?.isConnected
-    ? { top: mark.getBoundingClientRect().top, parent: selectedDocRow.value?.parentElement }
-    : null
-  stopRowMotion()
-}, { flush: 'pre' })
-watch(
-  [docNavEl, () => props.currentPath, () => props.nodes, groupMode, sortMode, query, collapsedCats, managerOpen, () => props.collapsed],
-  async () => {
-    const row = docNavEl.value?.querySelector('.doc-row.is-on') || null
-    const from = lastRow
-    lastRow = null
-    selectedDocRow.value = row
-    showDocSelection.value = !!row && !props.collapsed && !managerOpen.value && !row.closest('.tree-children.is-collapsed')
-    if (!showDocSelection.value || rowMotionPreference.matches || !from || row.parentElement !== from.parent) return
-    await nextTick()
-    if (selectedDocRow.value !== row || !docIndicator.value || rowMotionPreference.matches) return
-    const mark = docIndicator.value
-    const dy = from.top - row.getBoundingClientRect().top
-    if (Math.abs(dy) < 1 || Math.abs(dy) > 120) return
-    rowMotion = mark.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], {
-      duration: 180, easing: getComputedStyle(mark).getPropertyValue('--motion-snap').trim()
-    })
-  },
-  { flush: 'post', immediate: true }
-)
+const libViewport = ref(null)
+const { row: selectedLibRow, marker: libIndicator } = useRowSelection({
+  viewport: libViewport,
+  selector: '.lib-row.is-current',
+  selection: () => managerOpen.value ? shelfLevels.value[1]?.path : currentLib.value || brandTitle.value,
+  scope: () => managerOpen.value,
+  visible: () => libPanel.open,
+  layout: [panelLibs]
+})
 const searchEl = ref(null), treeSearchTrigger = ref(null)
 
 watch([groupMode, sortMode], () => {
@@ -2570,12 +2541,20 @@ onMounted(loadActivityUnread)
   border-radius: 999px;
   background: var(--c-accent);
 }
-.row-selection-enter-active, .row-selection-leave-active { transition: opacity 90ms ease-out !important; }
-.row-selection-enter-from, .row-selection-leave-to { opacity: 0 !important; }
-@media (prefers-reduced-motion: reduce) {
-  .row-selection-enter-active, .row-selection-leave-active { transition: none !important; }
+@property --row-waist {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
 }
-.lib-row-blob.is-draft { background: color-mix(in srgb, var(--c-accent) 10%, var(--c-panel)); }
+.row-selection-stretching {
+  clip-path: shape(from 0 0, hline to 100%, vline to 10%,
+    curve to calc(100% - var(--row-waist)) 50% with 100% 27% / calc(100% - var(--row-waist)) 33%,
+    curve to 100% 90% with calc(100% - var(--row-waist)) 67% / 100% 73%,
+    vline to 100%, hline to 0, vline to 90%,
+    curve to var(--row-waist) 50% with 0 73% / var(--row-waist) 67%,
+    curve to 0 10% with var(--row-waist) 33% / 0 27%, close);
+}
+.lib-row.is-draft .lib-row-blob { background: color-mix(in srgb, var(--c-accent) 10%, transparent); }
 .lib-panel-footer { display:flex;flex-direction:column;margin:5px 8px 12px;gap:2px; }
 .lib-empty { color: var(--c-faint); font-size: 12px; text-align: center; padding: 24px 0; }
 

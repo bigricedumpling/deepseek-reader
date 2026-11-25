@@ -11,10 +11,71 @@ async function followRow(rowSelector, markerSelector, clickSelector) {
   do {
     await new Promise(requestAnimationFrame)
     const mark = row.querySelector(markerSelector) || document.querySelector(markerSelector)
-    if (!mark) throw Error('选中背景消失')
+    if (!mark) throw Error(rowSelector + ' 的选中背景消失')
     error = Math.max(error, Math.abs(row.getBoundingClientRect().top - mark.getBoundingClientRect().top))
   } while (performance.now() - start < 430)
   return { distance:Math.abs(row.getBoundingClientRect().top-oldTop), error }
+}
+
+// Sample the rendered marker. A translated rigid rectangle and a simple
+// crossfade each fail a different assertion even when the final row is correct.
+async function sampleSelection(from, to, marker, button, reverse) {
+  const row = selector => document.querySelector(selector)
+  const click = selector => (button ? row(selector).querySelector(button) : row(selector)).click()
+  const box = element => element.getBoundingClientRect()
+  const start = box(row(from)), end = box(row(to))
+  const distance = end.top - start.top
+  const result = { distance, passedMiddle:false, stretched:false, fadedFrom:false, fadedTo:false, reversed:false }
+  let expected = to, settled = 0, reversedPose
+  const deadline = performance.now() + 5000
+  click(to)
+  do {
+    await new Promise(requestAnimationFrame)
+    const marks = [...document.querySelectorAll(marker)]
+    for (const mark of marks) {
+      const rect = box(mark), opacity = Number(getComputedStyle(mark).opacity)
+      if (opacity <= .01 || rect.height === 0) continue
+      const progress = (rect.top + rect.height / 2 - start.top - start.height / 2) / distance
+      const middle = progress > .15 && progress < .85
+      if (middle) result.passedMiddle = true
+      if (rect.height > Math.max(start.height, end.height) + 1.5) result.stretched = true
+      if (opacity < .97 && Math.abs(progress) < .15) result.fadedFrom = true
+      if (opacity < .97 && Math.abs(1 - progress) < .15) result.fadedTo = true
+      if (reverse && middle && !result.reversed && row(to).matches('.is-on,.is-current')) {
+        // Freeze a painted frame so an asynchronous library read cannot finish
+        // the outgoing motion before the reversal. Compare the first frame of
+        // the return to exactly what was visible at interruption.
+        const outgoing = mark.getAnimations().find(animation => animation.effect?.target === mark)
+        if (!outgoing) continue
+        outgoing.pause()
+        await outgoing.ready
+        reversedPose = box(mark)
+        result.reversed = true
+        expected = from
+        click(from)
+      }
+    }
+    const target = row(expected)
+    const current = target?.querySelector(marker)
+    if (reversedPose && target.matches('.is-on,.is-current') && current) {
+      const returning = current.getAnimations().find(animation => animation.effect?.target === current)
+      if (returning) {
+        const time = returning.currentTime
+        returning.currentTime = 0
+        const first = box(current)
+        result.reversalJump = Math.max(Math.abs(first.top - reversedPose.top), Math.abs(first.bottom - reversedPose.bottom))
+        returning.currentTime = time
+        reversedPose = null
+      }
+    }
+    const aligned = current && Math.abs(box(current).top - box(target).top) < .75 &&
+      Math.abs(box(current).height - box(target).height) < .75
+    const finished = marks.length === 1 && aligned && target.matches('.is-on,.is-current') &&
+      !current.getAnimations().some(animation => animation.playState === 'running')
+    settled = finished ? settled + 1 : 0
+    if (settled >= 3) return result
+  } while (performance.now() < deadline)
+  throw Error('选中高亮未在目标行落定 ' + expected + ' ' + JSON.stringify(result))
 }
 
 async function measureOutline(rail, index = 104) {
@@ -146,6 +207,45 @@ export async function verifyNavigationMotion({send, ev, root, appUrl, sleep}) {
     await ready(`(() => { const t=document.querySelectorAll('.source-reading article h2')[104].getBoundingClientRect().top
       return Math.abs(t-document.getElementById('main-scroll-container').getBoundingClientRect().top-90)<2 })()`)
     await ready("document.querySelector('.toc-item.is-active')?.textContent.trim()==='章节 104'")
+
+    // Keep all destinations in the same visible list. Library changes exercise
+    // the real async switch; document changes exercise independent tree rows.
+    const libraries = Array.from({length:8}, (_, i) => 'Motion ' + i)
+    const entry = i => i === 1 ? '1.pdf' : i + '.md'
+    for (const name of libraries) {
+      const dir = path.join(root, name)
+      fs.mkdirSync(dir)
+      for (let i = 0; i < (name === libraries[0] ? 8 : 1); i++) {
+        const file = path.join(dir, entry(i))
+        if (i === 1) fs.copyFileSync(new URL('../../demo/产品白皮书.pdf', import.meta.url), file)
+        else fs.writeFileSync(file, '# Note ' + i + '\n')
+      }
+    }
+    await send('Page.navigate', {url:new URL('doc/Motion%200/0?lib=Motion%200', appUrl).href})
+    await ready('window.__reader?.currentPath === "Motion 0/0.md" && !!document.querySelector(".ProseMirror")')
+    if (await ev("return document.querySelector('.sidebar-toggle').getAttribute('aria-expanded')==='false'")) await click('.sidebar-toggle')
+    if (!(await ev("return !!document.querySelector('.lib-panel')"))) await click('.kb-list-btn')
+    await click('.tree-sort-control > button')
+    await ev("const name = [...document.querySelectorAll('.tree-sort-control [role=menuitemradio]')].find(el => el.textContent.trim() === '按名称'); name.click()")
+    for (const isLibrary of [false, true]) {
+      const row = i => isLibrary ? '.lib-row[data-path="Motion ' + i + '"]' : '.doc-row[data-file="Motion 0/' + entry(i) + '"]'
+      const marker = isLibrary ? '.lib-row-blob' : '.doc-row-blob'
+      const sample = (from, to, reverse = false) => ev('return (' + sampleSelection.toString() + ')(...' +
+        JSON.stringify([row(from), row(to), marker, isLibrary ? null : '.doc-title,.pdf-title', reverse]) + ')')
+      await ready('!!document.querySelector(' + JSON.stringify(row(0) + ' ' + marker) + ')')
+      await ev('document.querySelector(' + JSON.stringify(row(0)) + ').scrollIntoView({block:"start",behavior:"instant"})')
+      await media('no-preference')
+      const near = await sample(0, 1)
+      assert(near.stretched && near.passedMiddle, marker + ' 相邻选择应有连续的伸展与收束 ' + JSON.stringify(near))
+      const back = await sample(1, 0, true)
+      assert(back.reversed && back.reversalJump <= 1, marker + ' 反向选择应从可见轮廓续接 ' + JSON.stringify(back))
+      const far = await sample(1, 7)
+      assert(!far.passedMiddle && far.fadedFrom && far.fadedTo, marker + ' 跨多行应在两端退场和出现 ' + JSON.stringify(far))
+      await media('reduce')
+      const quiet = await sample(7, 6)
+      assert(!quiet.passedMiddle && !quiet.stretched && !quiet.fadedFrom && !quiet.fadedTo,
+        marker + ' 减少动态时应直接落定 ' + JSON.stringify(quiet))
+    }
   } finally {
     await send('Emulation.setTouchEmulationEnabled', {enabled:false})
     await media('no-preference')
