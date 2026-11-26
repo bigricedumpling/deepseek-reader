@@ -30,9 +30,9 @@ Choose a light, soft or dark appearance. The Default, Feishu, Notion and Obsidia
 
 *Paper excerpt from BERT by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova, NAACL 2019.* [Paper](https://aclanthology.org/N19-1423/) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
-**HTML (H5) files** open read-only and retain their layout and interactivity. The self-attention example below computes weights from illustrative vectors. Select a word on the left to update the chart on the right. [HTML example](docs/examples/self-attention.html)
+**HTML (H5) files** retain their layout and interactive controls. In *A Visual Explanation of Agent Harnesses*, scroll through the illustrated sequence to follow a tool request from the model to the runtime and back.
 
-![A local HTML self-attention example. Selecting a token displays its attention weights.](docs/images/readme-html.webp)
+![Typocket’s expanded file tree beside the opening of A Visual Explanation of Agent Harnesses, an interactive HTML essay shown in its English light theme.](docs/images/readme-html.webp)
 
 ## Agent tools and revision history
 

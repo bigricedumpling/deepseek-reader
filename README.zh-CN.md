@@ -30,9 +30,9 @@ Typocket 是一款本地文档阅读器和 Markdown 编辑器。一个知识库�
 
 *图中论文为 Jacob Devlin、Ming-Wei Chang、Kenton Lee、Kristina Toutanova 的《BERT》，NAACL 2019。* [原文](https://aclanthology.org/N19-1423/) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
-**HTML（H5）** 以只读方式打开，保留网页的排版和交互。图中的自注意力示例用一组演示向量计算权重。点选左侧的词，右侧图表随之更新。[HTML 示例文件](docs/examples/self-attention.html)
+**HTML（H5）** 保留网页原有的排版和交互。图中的《A Visual Explanation of Agent Harnesses》是一篇交互图解，随页面滚动逐步演示模型发出工具请求、运行程序执行并返回结果的过程。
 
-![本地 HTML 自注意力示例，选择词元可查看对应的注意力权重。](docs/images/readme-html.webp)
+![左侧是展开的 Typocket 文件树，右侧是交互网页 A Visual Explanation of Agent Harnesses 的英文浅色首页。](docs/images/readme-html.webp)
 
 ## Agent 工具与改稿记录
 
