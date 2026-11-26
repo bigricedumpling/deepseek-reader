@@ -6,6 +6,7 @@ import footnote from 'markdown-it-footnote'
 import { readMathAt, mathSourceSpans } from './math-source.js'
 import katex from 'katex'
 import { assetUrl } from './api.js'
+import { imageScaleMarker, legacyImageRatio } from './preserved-markdown.js'
 
 // Inline rules run only in Markdown text. Code samples, attributes, links and
 // HTML blocks stay with the Markdown parser that owns those source ranges.
@@ -150,11 +151,38 @@ function createParser(allowHtml) {
     return defaultLinkOpen(tokens, idx, options, env, self)
   }
 
+  md.core.ruler.after('inline', 'typocket_block_image_scale', state => {
+    for (let i = 1; i < state.tokens.length - 1; i++) {
+      const inline = state.tokens[i]
+      if (inline.type !== 'inline' || state.tokens[i - 1].type !== 'paragraph_open' ||
+          state.tokens[i + 1].type !== 'paragraph_close') continue
+      const [image, marker] = inline.children
+      if (image?.type !== 'image' || inline.children.length > 2) continue
+      // In a text-only reading surface the HTML parser is disabled. Recognize the
+      // editor's exact adjacent marker there as well; leave escaped examples alone.
+      const marked = marker && (marker.type === 'html_inline' || marker.type === 'text') &&
+        inline.content.endsWith(')' + marker.content) && imageScaleMarker(marker.content)
+      if (marker && !marked) continue
+      const legacy = legacyImageRatio(image.content)
+      if (marked) inline.children.pop()
+      if (marked || legacy !== null) image.meta = { ...image.meta, scale: marked || legacy, numericAlt: legacy !== null }
+    }
+  })
   const defaultImage = md.renderer.rules.image || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options))
   md.renderer.rules.image = function (tokens, idx, options, env, self) {
-    const src = tokens[idx].attrGet('src')
-    if (src) tokens[idx].attrSet('src', assetUrl(src))
-    return defaultImage(tokens, idx, options, env, self)
+    const image = tokens[idx]
+    const src = image.attrGet('src')
+    if (src) image.attrSet('src', assetUrl(src))
+    const scale = image.meta?.scale
+    if (scale && scale !== 1) image.attrSet('style', 'width:' + Number((scale * 100).toFixed(2)) + '%')
+    let html
+    if (image.meta?.numericAlt) {
+      image.attrSet('alt', image.attrGet('title') || '')
+      html = self.renderToken(tokens, idx, options)
+    } else html = defaultImage(tokens, idx, options, env, self)
+    return scale && scale !== 1
+      ? '<span class="reader-image-column"><span class="reader-image-natural">' + html + '</span></span>'
+      : html
   }
 
   return md

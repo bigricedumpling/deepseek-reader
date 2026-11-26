@@ -16,6 +16,12 @@
 
 .typocket-print { --article-note-ink: #585858; }
 
+/* The percentage is relative to the fitted image. Enlarged small originals can
+   extend past their intrinsic width up to the actual text column. */
+.reader-image-column { display: block; container-type: inline-size; }
+.reader-image-natural { display: inline-block; max-width: 100%; vertical-align: middle; }
+.reader-image-column > .reader-image-natural > img { display: block; max-width: 100cqi; height: auto; }
+
 /* Markdown-it emits a table wrapper and a plain pre. Crepe supplies its own scroll wrappers. */
 :is(.source-reading .milkdown .ProseMirror, .typocket-print, .typocket-export, .snapshot-reading) > :is(.table-wrap, pre) {
   margin-block: var(--article-block-gap);

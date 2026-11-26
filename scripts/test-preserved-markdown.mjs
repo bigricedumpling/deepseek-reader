@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import {remark} from 'remark'
 import gfm from 'remark-gfm'
 import { normalizeMarkdown, isCosmeticOnly } from '../src/utils/markdown-normalize.js'
-import {preserveBlocks} from '../src/utils/preserved-markdown.js'
+import { imageBlockAttributes, preserveBlocks, writeImageBlock } from '../src/utils/preserved-markdown.js'
+import { sourceBackedDocument } from '../src/utils/editor-source-blocks.js'
+import { renderMarkdown } from '../src/utils/markdown.js'
+import { Schema } from '@milkdown/kit/prose/model'
 const source='---\ntitle: Keep\n---\n\n# Heading\n\n<div>HTML body</div>\n\nText[^a]\n\n[^a]: Footnote\n\n```html\n<div>code</div>\n```\n'
 const tree=remark().use(gfm).parse(source)
 tree.children.push({type:'readerBlock',value:'custom block'})
@@ -59,3 +62,52 @@ const codeTable = '| Label | Example |\n| :--- | ---: |\n| [label](https://examp
 assert.equal(normalizeMarkdown(codeTable, codeTable.replace('path   ', 'path '), { spacing: false }), codeTable)
 const escapedPipe = codeTable.replace('path   ', 'a\\|b ')
 assert.equal(normalizeMarkdown(escapedPipe, codeTable, { spacing: false }), escapedPipe)
+
+const images = ['![Coast](same.png "Morning")', '![0.60](same.png "Evening")']
+const resized = images[0] + '<!-- typocket:scale=0.78 -->'
+const imageSource = images.join('\n\n') + '\n'
+const afterResize = [resized, images[1]].join('\n\n') + '\n'
+const afterCaption = afterResize.replace('Morning', 'Daybreak')
+assert.equal(normalizeMarkdown(afterResize, imageSource), afterResize)
+assert.equal(normalizeMarkdown(afterCaption, afterResize), afterCaption)
+assert.equal(normalizeMarkdown(imageSource, afterResize), imageSource)
+
+// Exercise the same readers/writers as the Crepe schema, including the
+// per-block source-preservation route and two images sharing one asset.
+const imageSchema = new Schema({ nodes: {
+  doc: { content: 'block*' }, text: {},
+  image: { group: 'block', attrs: { alt: {}, src: {}, caption: {}, ratio: {} } }
+} })
+function parseImageDoc(markdown) {
+  const ast = remark().parse(markdown)
+  preserveBlocks(ast, { value: markdown })
+  return imageSchema.node('doc', null, ast.children.map(block =>
+    imageSchema.node('image', imageBlockAttributes(block.type === 'image-block' ? block : block.children[0]))))
+}
+function printImageDoc(doc) {
+  const children = []
+  doc.forEach(node => {
+    const inline = []
+    writeImageBlock({
+      openNode() {},
+      addNode(type, _, value, attrs) { inline.push({ type, value, ...attrs }) },
+      closeNode() { children.push({ type: 'paragraph', children: inline }) }
+    }, node)
+  })
+  return remark().stringify({ type: 'root', children })
+}
+for (const reference of [imageSource, afterResize, afterCaption, '![](a.png)\n', '![2024](a.png)\n']) {
+  assert.equal(printImageDoc(parseImageDoc(reference)), reference)
+}
+const backed = sourceBackedDocument(imageSource, imageSchema, parseImageDoc, printImageDoc)
+assert.equal(backed.markdown(parseImageDoc(afterCaption), new Set()), afterCaption)
+assert.equal(backed.markdown(parseImageDoc(imageSource), new Set()), imageSource)
+for (const allowHtml of [true, false]) {
+  const html = renderMarkdown(afterResize, { allowHtml })
+  assert.match(html, /alt="Coast"/)
+  assert.match(html, /width:78%/)
+  assert.match(html, /width:60%/)
+  assert.doesNotMatch(html, /typocket:scale/)
+  assert.doesNotMatch(renderMarkdown('Inline ![0.60](a.png) text.', { allowHtml }), /width:60%/)
+}
+console.log('PASS: block image resize, alt text, captions, duplicate assets and original-size restore')

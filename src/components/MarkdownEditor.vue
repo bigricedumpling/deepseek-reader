@@ -122,6 +122,7 @@ import { preservedRemark, preservedSchema, editableHtmlSchema, configurePreserve
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag, configureColumnMarkdown } from '../utils/editor-columns'
 import { imagePaste } from '../utils/editor-images'
+import { responsiveImageBlocks } from '../utils/responsive-image-blocks'
 import { workspaceImages, rewriteWorkspaceImages } from '../../server/services/workspace-images.js'
 import { richBlockRemark, richBlockSchema, calloutSchema, calloutKeys, calloutValue, richMarkdown } from '../utils/rich-blocks'
 import { editorStateOptionsCtx, editorViewCtx, parserCtx, serializerCtx, remarkCtx } from '@milkdown/kit/core'
@@ -646,6 +647,7 @@ function createEditor() {
   crepe.editor.config(configureEditorMath)
   crepe.editor.use(editorMathRemark).use(inlineMathNode).use(blockMathNode).use(inlineMathInput)
   crepe.editor.use(imagePaste(uploadImage,message=>{uploadError.value=message}))
+  crepe.editor.use(responsiveImageBlocks(() => { userTyped = true }))
   crepe.editor.use(columnsRemark).use(columnSchema).use(columnsSchema).use(columnsDrag)
   crepe.editor.use(richBlockRemark).use(calloutSchema).use(richBlockSchema).use(calloutKeys)
   crepe.editor.use(inlineStyleRemark).use(textColorMark).use(highlightMark).use(underlineMark)

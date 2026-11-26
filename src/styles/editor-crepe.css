@@ -1082,14 +1082,23 @@ body[data-document-style]:not([data-document-style="default"]) .crepe-host {
 .crepe-host .milkdown .ProseMirror .milkdown-image-block{margin-block:1.15em!important;padding-block:0}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block:has(+ .milkdown-image-block){margin-bottom:.7em!important}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block + .milkdown-image-block{margin-top:.7em!important}
-.crepe-host .milkdown .ProseMirror .milkdown-image-block > .image-wrapper{max-width:100%;border-radius:0}
-.crepe-host .milkdown .ProseMirror .milkdown-image-block > .image-wrapper img{border-radius:0}
+.crepe-host .milkdown .ProseMirror .milkdown-image-block > .image-wrapper{
+  width:min(100%, calc(var(--reader-image-ratio, 1) * min(100%, var(--reader-image-width, 100%))));
+  min-width:0;max-width:100%;border-radius:0
+}
+.crepe-host .milkdown .ProseMirror .milkdown-image-block > .image-wrapper img{
+  width:100%;height:auto!important;min-height:0;object-fit:contain;border-radius:0
+}
+.crepe-host .milkdown .ProseMirror .milkdown-image-inline{max-width:100%;min-width:0}
+.crepe-host .milkdown .ProseMirror .milkdown-image-inline img{max-width:100%;height:auto;min-width:0}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block > .caption-input{display:block;box-sizing:border-box;width:100%;margin:7px auto 0;padding:2px 0;border:0;background:transparent;text-align:left;font:12.5px/1.55 var(--font-sans);color:var(--c-faint);caret-color:var(--c-accent)}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block > .caption-input::placeholder{color:var(--c-faint);opacity:.85}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block > .caption-input:focus{color:var(--c-text)}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block .image-wrapper .operation{display:none!important}
-.crepe-host .milkdown .ProseMirror .milkdown-image-block .image-wrapper .image-resize-handle{height:3px;max-width:120px;bottom:-4px;background:color-mix(in srgb,var(--c-accent) 55%,transparent);border-radius:3px;opacity:0;transition:opacity 140ms ease}
+.crepe-host .milkdown .ProseMirror .milkdown-image-block .image-wrapper .image-resize-handle{touch-action:none;height:3px;max-width:120px;bottom:-4px;background:color-mix(in srgb,var(--c-accent) 55%,transparent);border-radius:3px;opacity:0;transition:opacity 140ms ease}
+.crepe-host .milkdown .ProseMirror .milkdown-image-block .image-resize-handle::before{content:"";position:absolute;inset:-5px 0}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block:hover .image-wrapper .image-resize-handle{opacity:.55}
+.crepe-host .milkdown .ProseMirror[contenteditable=false] .milkdown-image-block .image-resize-handle{display:none}
 .crepe-host .milkdown .ProseMirror .milkdown-image-block.ProseMirror-selectednode > .image-wrapper,.crepe-host .milkdown .ProseMirror .milkdown-image-block.selected > .image-wrapper{outline:1.5px solid color-mix(in srgb,var(--c-accent) 48%,transparent);outline-offset:3px;border-radius:0}
 .reader-upload-status{display:inline-block;padding:3px 8px;background:var(--c-field);border-radius: 10px;color:var(--c-faint);font:12px var(--font-sans)}
 

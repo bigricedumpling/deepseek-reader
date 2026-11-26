@@ -1,13 +1,27 @@
 import { $nodeSchema, $remark } from '@milkdown/kit/utils'
+import { imageBlockSchema } from '@milkdown/kit/component/image-block'
 import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import DOMPurify from 'dompurify'
 import { readingFragment } from './reading-fragment.js'
 import {DOMParser as ProseParser, DOMSerializer} from '@milkdown/kit/prose/model'
-import { isFrontmatterBlock, preserveBlocks } from './preserved-markdown.js'
+import { imageBlockAttributes, isFrontmatterBlock, preserveBlocks, writeImageBlock } from './preserved-markdown.js'
 
 // Keep HTML as an explicit atomic block instead of discarding it during serialization.
 export const preservedRemark = $remark('readerPreservedBlocks', () => () => preserveBlocks)
 export function configurePreservedMarkdown(ctx) {
+  ctx.update(imageBlockSchema.key, previous => inner => {
+    const image = previous(inner)
+    return {
+      ...image,
+      attrs: { ...image.attrs, alt: { default: '', validate: 'string' } },
+      parseDOM: image.parseDOM.map(rule => ({
+        ...rule,
+        getAttrs: dom => ({ ...rule.getAttrs(dom), alt: dom.getAttribute('alt') || '' })
+      })),
+      parseMarkdown: { ...image.parseMarkdown, runner: (state, node, type) => state.addNode(type, imageBlockAttributes(node)) },
+      toMarkdown: { ...image.toMarkdown, runner: writeImageBlock }
+    }
+  })
   ctx.update(remarkStringifyOptionsCtx, options => ({...options, handlers:{...options.handlers, readerRaw:node=>node.value}}))
 }
 export const preservedSchema = $nodeSchema('reader_raw', () => ({

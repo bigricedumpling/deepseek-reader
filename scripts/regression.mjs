@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { verifyShareHandoff } from './e2e/share-handoff.mjs'
 import { verifyFind } from './e2e/find.mjs'
+import { verifyResponsiveImages } from './e2e/responsive-images.mjs'
 import { verifyFormulaReading } from './e2e/formula-reading.mjs'
 import { verifyCoverMaterials } from './e2e/cover-materials.mjs'
 import { verifyCoverPicker } from './e2e/cover-picker.mjs'
@@ -921,6 +922,9 @@ try {
 
   await verifyShareHandoff({ send, ev, root: SB, appUrl, sleep })
   check('分享提示词只携带所选目标，支持拒绝剪贴板后的手动复制', true)
+
+  await verifyResponsiveImages({ send, ev, root: SB, appUrl, sleep })
+  check('正文图片在收展侧栏和窄屏时保持比例，拖动、撤销与只读重开保留尺寸', true)
 
   const real = consoleErrors.filter(e => !/favicon|DevTools|Download the Vue/i.test(e))
   check('运行期无控制台报错', real.length === 0, real.slice(0, 2).join(' | '))

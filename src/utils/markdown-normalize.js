@@ -26,13 +26,11 @@ import { mathSourceSpans, protectedMarkdownRanges } from './math-source.js'
  * 编辑器会给 @ _ 之类加反斜杠，还会把裸链接包进尖括号。
  */
 /**
- * 编辑器会改、但看着一模一样的三类写法，比对时要抹平 —— 抹平了才能认出
+ * 编辑器会改、但看着一模一样的几种写法，比对时要抹平 —— 抹平了才能认出
  * "这一行用户没动过"，从而整行沿用原文：
  *
  *   1. 自动链接：原文 [url](url) 会被写成 <url>
- *   2. 图片替代文字：原文 ![逐轮评分与理由](url) 会被写成 ![1.00](url)
- *      图还是那张图，但 alt 文字被换成了缩放比例
- *   3. 转义、列表符号、表格空格
+ *   2. 转义、列表符号、表格空格
  *
  * 只动语法外壳，正文一个字不碰 —— 用户真改了内容就匹配不上，
  * 那一行会保持用户改过的样子。
@@ -47,16 +45,14 @@ import { mathSourceSpans, protectedMarkdownRanges } from './math-source.js'
  */
 const unifyBullet = (s) => String(s).replace(/^((?:\s*>\s*)*)([-*+])(\s+)/, '$1-$3')
 
-const mediaKey = (s) =>
+const linkKey = (s) =>
   String(s)
-    /* ![alt](url) → 只留 url：alt 被编辑器换掉是常态 */
-    .replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, '![]($2)')
     /* Only a URL used as its own label is equivalent to an autolink. */
-    .replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (link, label, url) => label === url ? url : link)
+    .replace(/(?<!!)\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (link, label, url) => label === url ? url : link)
     .replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
 
 const cellKey = (s) =>
-  mediaKey(String(s))
+  linkKey(String(s))
     .replace(/<br\s*\/?>/gi, '')
     .replace(/\\([\\`*_{}[\]()#+\-.!~$@|])/g, '$1')
     .replace(/\s+/g, '')
@@ -144,9 +140,9 @@ function restoreOriginalLines(lines, original) {
    * 这几样都是编辑器会改、但看着一模一样的东西，正文一个字不同就不会匹配上。
    */
   const strip = (s) => {
-    /* 先抹平图片 alt 与链接写法（见 mediaKey 的说明），再管尖括号和列表符号 */
+    /* 图片尺寸、替代文字和图注都参与比对，只有链接写法可以忽略。 */
     // Match a literal price even if the Markdown writer escaped its dollar. Formulas are already masked.
-    let out = mediaKey(s).replaceAll('\\$', '$')
+    let out = linkKey(s).replaceAll('\\$', '$')
     out = unifyBullet(out)
     if (out.trimStart().startsWith('|')) out = out.replace(/\s+/g, ' ')
     return out.trim()
