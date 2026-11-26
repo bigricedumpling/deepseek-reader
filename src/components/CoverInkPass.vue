@@ -83,7 +83,7 @@ onBeforeUnmount(() => {
    travels a little farther out. The whole printed plate rests between passes. */
 @keyframes paper-lift {
   0%, 1% { --paper-lift:0; opacity:0; animation-timing-function:cubic-bezier(.32,0,.22,1); }
-  4% { opacity:1; }
+  4% { --paper-lift:0; opacity:1; }
   16%, 20% { --paper-lift:1; animation-timing-function:cubic-bezier(.46,0,.28,1); }
   35% { --paper-lift:0; opacity:1; }
   37%, 100% { --paper-lift:0; opacity:0; }
@@ -91,7 +91,7 @@ onBeforeUnmount(() => {
 /* A pencil mark fades where it was written; only a physical sheet moves back. */
 @keyframes underline {
   0%, 1% { --paper-lift:0; opacity:0; animation-timing-function:cubic-bezier(.32,0,.22,1); }
-  4% { opacity:1; }
+  4% { --paper-lift:0; opacity:1; }
   16%, 22% { --paper-lift:1; opacity:1; }
   35%, 100% { --paper-lift:1; opacity:0; }
 }

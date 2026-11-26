@@ -8,6 +8,7 @@ import { once } from 'node:events'
 import { execFileSync, fork, spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { inspectFlowInk } from './mermaid.mjs'
 
 const runtime = process.env.READER_TEST_RUNTIME || fileURLToPath(new URL('../../', import.meta.url))
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'typocket-export-'))
@@ -74,7 +75,7 @@ try {
     ] }) + '\n~~~',
   ].join('\n\n')
   const diagrams = [
-    '~~~mermaid\nflowchart TD\n  A[DiagramAlpha] --> B[DiagramBeta]\n~~~',
+    '~~~mermaid\nflowchart TD\n  A[DiagramAlpha] -->|Approved| B[DiagramBeta]\n~~~',
     '~~~mermaid\nsequenceDiagram\n  Browser->>Agent: AskAgent\n  Agent-->>Browser: ReplyAgent\n~~~',
     '~~~mermaid\nmindmap\n  RootTopic\n    BranchTopic\n      LeafTopic\n~~~',
     '~~~mermaid\nunknown-diagram-example\n~~~',
@@ -149,8 +150,10 @@ try {
   const beforeMath = await api('GET', 'doc?path=' + encodeURIComponent(file))
   await api('PUT', 'doc', { path: file, revision: beforeMath.revision,
     content: beforeMath.content.replace('SAVED-EDIT', () => ['SAVED-EDIT', mathematics, diagrams].join('\n\n')) })
+  await evaluate("localStorage.setItem('reader.theme', 'dark')")
   await send('Page.reload', { ignoreCache: true })
   await waitFor('math document snapshot', () => evaluate("document.querySelector('.editor-shell')?.textContent.includes('LASTTERM')"))
+  assert.equal(await evaluate('document.body.dataset.theme'), 'dark')
   await clickExport('Markdown')
   await waitFor('Markdown download', () => fs.existsSync(path.join(downloads, 'Report.md')))
   assert.equal(fs.readFileSync(path.join(downloads, 'Report.md'), 'utf8'), fs.readFileSync(report, 'utf8'))
@@ -180,6 +183,9 @@ try {
     window.addEventListener('beforeprint', () => {
       const sheet = document.querySelector('.typocket-print')
       window.paperDiagrams = [...sheet.querySelectorAll('svg')].filter(svg => /DiagramAlpha|AskAgent|RootTopic/.test(svg.textContent)).length
+      const flow = [...sheet.querySelectorAll('svg')].find(svg => svg.textContent.includes('DiagramAlpha'))
+      const {openArrows, surface} = (${inspectFlowInk})(flow)
+      window.paperFlow = {openArrows, surface}
       window.paperDiagramFallback = [...sheet.querySelectorAll('pre code.language-mermaid')].map(code => code.textContent.trim())
     }, {once: true})`)
   await clickExport('PDF')
@@ -187,6 +193,9 @@ try {
   await evaluate('document.fonts.ready.then(()=>true)')
   const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false })
   assert.equal(await evaluate('window.paperDiagrams'), 3, 'PDF sheet contains the flowchart, sequence diagram and mind map')
+  const paperFlow = await evaluate('window.paperFlow')
+  assert(paperFlow.openArrows && /^rgb\(/.test(paperFlow.surface) && paperFlow.surface.match(/\d+/g).every(v => Number(v) >= 220),
+    'PDF uses open arrows and a light paper background when the editor is dark')
   assert.deepEqual(await evaluate('window.paperDiagramFallback'), ['unknown-diagram-example'])
   // Native beforeprint is synchronous; an on-screen SVG should match the
   // Markdown snapshot even when its source contains newlines and an arrow.
@@ -212,7 +221,7 @@ try {
   assert.equal(new Set([...sheets.join(' ').matchAll(/Print section\s+(\d+)/g)].map(m => Number(m[1]))).size, paragraphs.length)
   assert.match(paper, /FIRSTTERM/)
   assert.match(paper, /LASTTERM/)
-  for (const label of ['DiagramAlpha', 'DiagramBeta', 'AskAgent', 'ReplyAgent', 'RootTopic', 'LeafTopic']) assert(paper.includes(label), 'PDF includes ' + label)
+  for (const label of ['DiagramAlpha', 'Approved', 'DiagramBeta', 'AskAgent', 'ReplyAgent', 'RootTopic', 'LeafTopic']) assert(paper.includes(label), 'PDF includes ' + label)
   const bbox = execFileSync(process.env.PDFTOTEXT_BIN || 'pdftotext', ['-bbox', pdfPath, '-'], { encoding: 'utf8' })
   const formulaPage = bbox.split('<page ').find(page => page.includes('LASTTERM'))
   const pageWidth = Number(formulaPage.match(/width="([\d.]+)"/)?.[1])
@@ -312,6 +321,11 @@ try {
       scripts: document.scripts.length,
     }
   })()`), { diagrams: [true, true, true], fallback: ['unknown-diagram-example'], scripts: 0 })
+  const offlineFlow = await evaluate(`(() => {
+    const svg = [...document.querySelectorAll('svg')].find(svg => svg.textContent.includes('DiagramAlpha'))
+    return (${inspectFlowInk})(svg)
+  })()`)
+  assert.deepEqual(offlineFlow, { ...paperFlow, clearLabels:true }, 'offline HTML retains paper arrows and readable flowchart labels')
   assert.equal(await evaluate("document.querySelectorAll('img').length"), 3)
   assert(await evaluate("document.querySelector('.page-cover.small img')?.naturalWidth > 100"))
   assert(await evaluate("!document.querySelector('.page-cover canvas, .page-cover button')"))

@@ -1,3 +1,6 @@
+import { flowchartTheme, polishFlowchart } from './mermaid-flowchart.js'
+import { centerMindmapLabels, mindmapTheme } from './mermaid-mindmap.js'
+
 // Mermaid is loaded only for an explicitly marked Markdown fence.
 export function isMermaidLanguage(language) {
   return language?.trim().toLowerCase() === 'mermaid'
@@ -14,21 +17,23 @@ export function mermaidSourceKey(source) {
   return encodeURIComponent(source.trimEnd().toWellFormed())
 }
 
-function themeVariables(paper) {
-  const style = paper ? null : getComputedStyle(document.body)
-  const color = (token, fallback) => style?.getPropertyValue(token).trim() || fallback
-  return {
-    darkMode: !paper && document.body.dataset.theme === 'dark',
-    background: color('--c-surface', '#ffffff'),
-    primaryColor: color('--c-code-bg', '#f5f5f5'),
-    primaryBorderColor: color('--c-accent', '#303030'),
-    primaryTextColor: color('--c-ink', '#1a1a1a'),
-    lineColor: color('--c-sub', '#6b6b6b'),
-    secondaryColor: color('--c-surface', '#ffffff'),
-    tertiaryColor: color('--c-line-soft', '#f2f2f2'),
-    textColor: color('--c-text', '#333333'),
-    fontSize: '14px'
+// Palette and line weights are part of the SVG so standalone exports match the reader.
+function diagramVariables(dark) {
+  const ink = dark ? '#f1eee8' : '#302e2a'
+  const line = dark ? '#a9a69e' : '#87877f'
+  const canvas = dark ? '#202120' : '#ffffff'
+  const branches = dark ? ['#324238', '#403c51', '#494039'] : ['#edf2e9', '#eeeaf4', '#f7eee7']
+  const themeVariables = {
+    darkMode: dark, background: canvas, primaryColor: branches[0],
+    primaryTextColor: ink, primaryBorderColor: dark ? '#879482' : '#929e89',
+    secondaryColor: branches[1], tertiaryColor: branches[2], textColor: ink,
+    lineColor: line, edgeLabelBackground: canvas, fontSize: '15px', mainBkg: branches[0]
   }
+  for (let i = 0; i < 12; i++) {
+    themeVariables['cScale' + i] = branches[i % branches.length]
+    themeVariables['cScaleLabel' + i] = ink
+  }
+  return themeVariables
 }
 
 // initialize() changes global configuration. Keep it paired with its own render,
@@ -38,15 +43,26 @@ export function renderMermaidSvg(source, { paper = false } = {}) {
   if (!source?.trim()) return Promise.resolve(null)
   const render = lastRender.then(async () => {
     const { default: mermaid } = await import('mermaid')
+    // Register the built-in type detectors without loading the individual layouts.
+    await mermaid.registerExternalDiagrams([])
+    // render() also preprocesses legacy directives and frontmatter. If its fast
+    // detector cannot classify a source, let the native renderer decide validity.
+    let type = ''
+    try { type = mermaid.detectType(source) } catch {}
+    const dark = !paper && document.body.dataset.theme === 'dark'
+    const isFlowchart = type.startsWith('flowchart')
+    const family = isFlowchart ? flowchartTheme(dark) : type === 'mindmap' ? mindmapTheme(dark) : {}
     mermaid.initialize({
       startOnLoad: false,
       theme: 'base',
       securityLevel: 'strict',
       suppressErrorRendering: true,
       htmlLabels: false,
-      fontFamily: '"HarmonyOS Sans SC", "Noto Sans SC", sans-serif',
-      themeVariables: themeVariables(paper),
-      flowchart: { curve: 'basis', padding: 12, htmlLabels: false },
+      fontFamily: 'system-ui, sans-serif',
+      look: 'classic',
+      themeVariables: { ...diagramVariables(dark), ...family.themeVariables },
+      themeCSS: family.themeCSS || '',
+      flowchart: { curve: 'basis', padding: 11, minNodeWidth: 38, diagramPadding: 18, nodeSpacing: 38, rankSpacing: 62, htmlLabels: false },
       sequence: { actorMargin: 40 },
       gantt: { fontSize: 13 }
     })
@@ -60,7 +76,12 @@ export function renderMermaidSvg(source, { paper = false } = {}) {
       const id = 'mmd-' + crypto.getRandomValues(new Uint32Array(2)).join('-')
       // Strict Mermaid sanitizes its SVG. We never bind diagram-supplied events.
       const { svg } = await mermaid.render(id, source, surface)
-      return svg
+      if (!isFlowchart && type !== 'mindmap') return svg
+      surface.innerHTML = svg
+      const drawing = surface.querySelector('svg')
+      if (isFlowchart) polishFlowchart(drawing, dark, paper)
+      else centerMindmapLabels(drawing)
+      return drawing.outerHTML
     } finally {
       surface.remove()
     }

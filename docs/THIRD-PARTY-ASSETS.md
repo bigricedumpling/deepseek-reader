@@ -11,8 +11,9 @@
 | HarmonyOS Sans | 华为官方字体。源码仓库在 `public/fonts/` 中保留原版字体，插件和产品介绍页可使用设备上已安装的版本。 | `public/fonts/HarmonyOS-Sans-LICENSE.txt`。随软件分发原版字体须保留协议与许可声明。 |
 | TeX Gyre Pagella | GUST / TeX Gyre | `fonts/GUST-FONT-LICENSE.txt` |
 | PDF.js、CMap、标准字体与 WASM | pdfjs-dist / Mozilla PDF.js | `pdfjs/LICENSE` 与各资产目录的上游许可 |
+| Mermaid 图表引擎 | [Mermaid](https://github.com/mermaid-js/mermaid) | MIT，见 `licenses/Mermaid-LICENSE.txt`。 |
 | Remix Icon 4.9.1 | https://remixicon.com | `licenses/RemixIcon-LICENSE.txt`；用于功能性 UI 图标，不作为产品品牌标识 |
-| Phosphor Icons（@phosphor-icons/core 2.1.1） | https://phosphoricons.com | MIT；只取 regular / fill 路径生成 `phosphor-core.js`（首屏常用）和 `phosphor-paths.js`（选择器完整表，按需加载），UI 图标仍为 Remix |
+| Phosphor Icons（@phosphor-icons/core 2.1.1） | https://phosphoricons.com | MIT，见 `licenses/Phosphor-LICENSE.txt`。首屏与图标选择器使用 regular 和 fill 两套路径。 |
 | [Nucleo Glass Essential](https://nucleoapp.com/svg-glass-icons) | Nucleo，248 枚 | `icons/glass/COPYRIGHT.txt` |
 | [Nucleo Isometric](https://nucleoapp.com/svg-isometric-icons) 和 [SVG Arcade](https://nucleoapp.com/svg-arcade-icons) | Nucleo，分别为 141 枚和 570 枚 | `icons/nucleo/COPYRIGHT.txt` |
 

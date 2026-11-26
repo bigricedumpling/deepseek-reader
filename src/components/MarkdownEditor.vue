@@ -587,8 +587,9 @@ function createEditor() {
         languages: [...cmLanguages, mermaidLanguage],
         renderPreview,
         previewOnlyByDefault: true,
-        previewLoading: '<span role="status">正在绘制图表…</span>',
+        previewLoading: '<span class="mermaid-preview-loading" role="status">正在绘制图表…</span>',
         previewLabel: '预览',
+        previewToggleIcon: previewOnly => toolbarIcon(previewOnly ? 'code' : 'eye-off'),
         previewToggleText: (previewOnly) => (previewOnly ? '查看源码' : '收起源码')
       }
     }
@@ -796,6 +797,7 @@ function openReadingReference(event) {
 const calloutPicker=shallowRef(null),rawBlock=shallowRef(null),formula=shallowRef(null)
 function onHeadingBoundary(event){
  if(props.readonly||event.isComposing||event.shiftKey||event.metaKey||event.ctrlKey||event.altKey||!['Backspace','Enter'].includes(event.key))return
+ if(event.target.closest('.milkdown-code-block'))return
  const view=viewOf();if(!view)return
  const {$from,empty}=view.state.selection
  if(!empty||$from.depth!==1||$from.parent.type.name!=='heading'||$from.parentOffset!==0)return

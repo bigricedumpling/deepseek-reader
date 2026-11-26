@@ -2,7 +2,7 @@
 
 Typocket 是 DSH 中的个人文档工具，方便你阅读 Agent 的工作成果，继续编辑 Markdown，并将有用的资料保存到本机知识库。PDF 和 HTML 页面也可一起预览。插件安装包包含完整网页和本机服务。启用插件后自动启动，无需另装 Typocket、Node.js 或运行终端命令。
 
-![Typocket 中的英文示例声学笔记和节线图](https://raw.githubusercontent.com/bigricedumpling/deepseek-reader/v0.2.0-preview.8/docs/images/readme-reading.webp)
+![Typocket 中的英文示例声学笔记和节线图](https://raw.githubusercontent.com/bigricedumpling/deepseek-reader/v0.2.0-preview.9/docs/images/readme-reading.webp)
 
 ## 安装
 
@@ -18,7 +18,9 @@ macOS 默认知识库目录是 `~/Library/Application Support/Reader/知识库`�
 
 ## 工作区 Markdown 与 Agent
 
-工作区 Markdown 预览只读。相对链接继续打开工作区文件，相对图片从当前工作区读取；预览不会移动原文件。想保留时在预览页直接「保存到知识库」，生成知识库中的独立副本；不收录就不保留浏览记录。文档「更多」菜单中的「通过 Agent 分享」可为一篇文档或整个知识库复制分享提示词。将它交给有临时托管能力的 Agent，即可让它制作只读快照并返回网址。
+工作区 Markdown 预览只读。相对链接继续打开工作区文件，相对图片从当前工作区读取；预览不会移动原文件。想保留时在预览页直接「保存到知识库」，生成知识库中的独立副本；不收录就不保留浏览记录。收进知识库后，点 Mermaid 图表上的「查看源码」即可修改图表，导出网页或打印时也会带上图表。
+
+文档「更多」菜单中的「通过 Agent 分享」可为一篇文档或整个知识库复制分享提示词。将它交给有临时托管能力的 Agent，即可让它制作只读快照并返回网址。
 
 在支持技能的 DSH NEXT 中，启用插件后即可让 Agent 使用 `reader-workspace`。例如，告诉它「在项目资料里找到会议纪要，帮我把最后一段改短，保留原图」。插件向 DSH 注册文档工具，遵循会话的只读和工作区权限。本机连接无需配置 Typocket 令牌。在默认的工作区写入模式下，如果知识库位于工作区之外，DSH 会询问是否允许本次写入。
 

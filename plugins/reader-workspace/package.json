@@ -1,6 +1,6 @@
 {
   "name": "dsh-reader-workspace",
-  "version": "0.2.0-preview.8",
+  "version": "0.2.0-preview.9",
   "description": "Typocket: Read, write and organize local documents in DeepSeek Harness.",
   "license": "MIT",
   "repository": {

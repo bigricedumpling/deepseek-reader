@@ -83,28 +83,38 @@ class Sheet:
             self.draw.ellipse(((x-r)*SS,(y-r)*SS,(x+r)*SS,(y+r)*SS),fill=ink)
 
 
+# All three dividers stand in the same pocket. Their front and back edges
+# share a vanishing direction, with the tabs staggered along the top edge.
+INDEX_REAR = 'M 429 103 L 453 107 L 460 97 C 462 94 465 93 469 94 L 515 102 C 519 103 521 105 522 109 L 524 119 L 706 151 L 706 244 L 429 214 Z'
+INDEX_MIDDLE = 'M 412 123 L 514 141 L 522 129 C 524 126 527 125 531 126 L 575 134 C 580 135 582 137 583 141 L 585 153 L 695 172 L 695 252 L 412 223 Z'
+INDEX_FRONT = 'M 397 143 L 589 177 L 597 166 C 600 162 603 161 607 162 L 648 169 C 653 170 655 172 656 177 L 658 189 L 682 193 L 676 268 L 401 234 Z'
+INDEX_FACE = 'M 382 164 L 553 194 C 559 195 561 197 565 202 L 573 211 C 578 217 585 220 593 221 L 679 236 L 650 308 L 409 266 C 404 265 401 262 400 257 Z'
+INDEX_SIDE = 'M 679 236 L 726 201 L 710 272 L 650 308 Z'
+INDEX_NIB = 'M 445 151.5 L 589 177 L 597 166 C 600 162 603 161 607 162 L 648 169 C 653 170 655 172 656 177'
+
+
 def index(sheet):
     p=sheet.pen
-    # Card dividers fan toward the back. The thin lead-in and exit meet their
-    # neighbours at the same ordinate when the three covers are placed together.
+    # The continuous background line passes behind the pocket on both sides.
     p('M -8 207 C 100 207 165 220 243 210 C 323 200 354 174 394 163 C 426 154 449 143 475 137',1.6,GRAPHITE)
-    p('M 730 226 C 775 245 801 252 856 243 C 916 232 954 207 1030 204 C 1096 201 1156 207 1208 207',1.5,GRAPHITE)
-    p('M 473 138 L 545 85 C 549 81 552 81 557 82 L 604 91 C 610 92 611 94 613 99 L 617 106 L 702 121 C 707 122 709 125 709 129 L 699 219 L 480 232 Z',2.05,GRAPHITE,PAPER_BACK)
-    p('M 420 156 L 489 109 C 491 107 496 106 500 107 L 573 120 L 581 109 C 582 107 586 106 591 107 L 634 114 C 639 115 642 118 643 123 L 644 132 L 709 143 C 716 144 717 147 716 153 L 704 241 L 436 242 Z',2.05,GRAPHITE,'#f0eee4')
-    p('M 407 176 L 455 137 C 459 134 462 134 467 135 L 602 158 L 612 144 C 615 140 618 139 624 140 L 667 147 C 672 148 674 151 675 156 L 676 169 L 718 176 L 701 259 L 426 251 Z',1.9,INK,PAPER_LIGHT)
-    # A folded pocket, with its back edge disappearing behind the index cards.
-    p('M 385 163 L 419 149 L 451 154 L 435 171 Z',1.8,INK,PAPER_BACK)
-    p('M 385 163 C 383 161 381 163 382 167 L 400 257 C 401 262 405 265 410 266 L 647 309 C 652 310 654 308 656 305 L 688 216 L 670 209 L 604 206 C 592 206 581 201 575 194 L 564 182 C 561 179 557 178 552 178 Z',2.65,INK,'#f1eee4')
-    p('M 650 308 L 713 272 C 717 270 719 267 720 262 L 735 180 L 687 204 C 683 206 681 208 679 213 Z',2.3,INK,'#e5e3d8')
-    p('M 678 212 C 695 204 715 194 732 185',.95,GRAPHITE)
-    p('M 404 258 C 449 266 486 273 524 280 L 644 302',.95,PENCIL)
+    p('M 691 221 C 765 244 801 252 856 243 C 916 232 954 207 1030 204 C 1096 201 1156 207 1208 207',1.5,GRAPHITE)
+    p(INDEX_REAR,1.8,GRAPHITE,PAPER_BACK)
+    p(INDEX_MIDDLE,1.85,GRAPHITE,'#f0eee4')
+    p(INDEX_FRONT,1.95,INK,PAPER_LIGHT)
+    # Carry the blue nib along precisely the same curve as the front tab.
+    p('M 597 166 C 600 162 603 161 607 162 L 648 169 C 653 170 655 172 656 177',3.1,BLUE)
+    # Draw opaque faces first, the outer contour next, and the common fold once.
+    p(INDEX_SIDE,0,fill='#e5e3d8')
+    p(INDEX_FACE,0,fill='#f1eee4')
+    rim = INDEX_FACE.split(' L 650 308')[0]
+    p(rim + ' L 726 201 L 710 272 L 650 308 L 409 266 C 404 265 401 262 400 257 Z',2.45)
+    p('M 679 236 L 650 308',2.0)
+    p('M 406 258 C 453 267 489 273 530 280 L 641 300',.8,PENCIL)
     # Slip under a narrow label frame; the middle is deliberately blank.
     p('M 462 213 L 527 224 L 529 241 L 464 230 Z',1.5,GRAPHITE,PAPER_LIGHT)
     p('M 472 220 L 485 222',1.1,GRAPHITE)
     p('M 491 223 L 516 227',1.1,GRAPHITE)
-    # Pen tip rests on the visible top edge of the current tab.
-    p('M 607 153 L 613 145 C 616 141 619 141 624 142 L 666 149 C 671 150 672 154 673 158',3.8,BLUE,wet=True)
-    sheet.last_stroke = ('M 467 135 L 602 158 L 613 145 C 616 141 619 141 624 142 L 666 149 C 671 150 672 154 673 158', 3.0)
+    sheet.last_stroke = (INDEX_NIB, 2.25)
 
 
 def leaf(sheet):
@@ -175,18 +185,20 @@ def finish(image, seed):
 
 # Only the exposed side of the printed silhouette can reveal the moving sheet.
 # Keep clips stationary while the divider translates and the leaf pivots at its gutter.
-INDEX_GESTURE = '''  <g id="gesture">
-    <defs><clipPath id="behind-index"><path d="M 470 45 H 707 V 120 L 617 104 L 614 98 C 612 93 610 91 605 90 L 557 80 C 551 79 548 80 544 83 L 470 137 Z"/></clipPath></defs>
-    <g clip-path="url(#behind-index)">
-      <g style="transform:translate(calc(-6px * var(--paper-lift, 0)),calc(12px - 35px * var(--paper-lift, 0)))" stroke-linejoin="round">
-        <path fill="#e9e8dc" stroke="#60645b" stroke-width="2" d="M 487 147 L 547 100 Q 552 96 558 97 L 608 106 L 615 100 Q 618 97 623 98 L 651 103 Q 655 104 656 109 L 657 116 L 680 121 Q 685 122 685 127 L 681 152 L 487 159 Z"/>
-        <path fill="none" stroke="#95998b" stroke-width="1.25" stroke-linecap="round" d="M 622 104 L 644 108"/>
-      </g>
+# Cut the moving rear divider out against the actual four foreground contours.
+# Vertical sides let it rise through its slot without a second edge showing.
+INDEX_GESTURE = f'''  <g id="gesture">
+    <defs><mask id="behind-index" maskUnits="userSpaceOnUse" x="370" y="55" width="365" height="260">
+      <rect x="370" y="55" width="365" height="260" fill="white"/>
+      {''.join(f'<path d="{contour}" fill="black" stroke="black" stroke-width="2.4"/>' for contour in (INDEX_MIDDLE, INDEX_FRONT, INDEX_SIDE, INDEX_FACE))}
+    </mask></defs>
+    <g mask="url(#behind-index)">
+      <path style="transform:translateY(calc(-13px * var(--paper-lift, 0)))" fill="{PAPER_BACK}" stroke="{GRAPHITE}" stroke-width="1.8" stroke-linejoin="round" d="{INDEX_REAR}"/>
     </g>
   </g>'''
 
 LEAF_GESTURE = '''  <g id="gesture">
-    <defs><clipPath id="behind-leaf"><path d="M 497 134 C 543 101 590 77 633 73 C 652 97 669 126 677 147 C 699 123 724 107 750 99 L 755 46 L 495 46 Z"/></clipPath></defs>
+    <defs><clipPath id="behind-leaf"><path d="M 499 136 C 544 103 591 79 633 75 C 651 99 669 125 677 147 C 699 124 724 110 750 101 L 755 46 L 495 46 Z"/></clipPath></defs>
     <g clip-path="url(#behind-leaf)">
       <g transform="translate(604 268)"><g style="transform:rotate(calc(14deg * var(--paper-lift, 0)))">
         <g transform="translate(-604 -268)" stroke-linejoin="round">

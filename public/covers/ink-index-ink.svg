@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-600 0 2400 400">
-  <path id="nib" pathLength="1" fill="none" stroke-linejoin="round" stroke-linecap="round" stroke-width="3.90" d="M 467 135 L 602 158 L 613 145 C 616 141 619 141 624 142 L 666 149 C 671 150 672 154 673 158"/>
+  <path id="nib" pathLength="1" fill="none" stroke-linejoin="round" stroke-linecap="round" stroke-width="3.15" d="M 445 151.5 L 589 177 L 597 166 C 600 162 603 161 607 162 L 648 169 C 653 170 655 172 656 177"/>
   <g id="gesture">
-    <defs><clipPath id="behind-index"><path d="M 470 45 H 707 V 120 L 617 104 L 614 98 C 612 93 610 91 605 90 L 557 80 C 551 79 548 80 544 83 L 470 137 Z"/></clipPath></defs>
-    <g clip-path="url(#behind-index)">
-      <g style="transform:translate(calc(-6px * var(--paper-lift, 0)),calc(12px - 35px * var(--paper-lift, 0)))" stroke-linejoin="round">
-        <path fill="#e9e8dc" stroke="#60645b" stroke-width="2" d="M 487 147 L 547 100 Q 552 96 558 97 L 608 106 L 615 100 Q 618 97 623 98 L 651 103 Q 655 104 656 109 L 657 116 L 680 121 Q 685 122 685 127 L 681 152 L 487 159 Z"/>
-        <path fill="none" stroke="#95998b" stroke-width="1.25" stroke-linecap="round" d="M 622 104 L 644 108"/>
-      </g>
+    <defs><mask id="behind-index" maskUnits="userSpaceOnUse" x="370" y="55" width="365" height="260">
+      <rect x="370" y="55" width="365" height="260" fill="white"/>
+      <path d="M 412 123 L 514 141 L 522 129 C 524 126 527 125 531 126 L 575 134 C 580 135 582 137 583 141 L 585 153 L 695 172 L 695 252 L 412 223 Z" fill="black" stroke="black" stroke-width="2.4"/><path d="M 397 143 L 589 177 L 597 166 C 600 162 603 161 607 162 L 648 169 C 653 170 655 172 656 177 L 658 189 L 682 193 L 676 268 L 401 234 Z" fill="black" stroke="black" stroke-width="2.4"/><path d="M 679 236 L 726 201 L 710 272 L 650 308 Z" fill="black" stroke="black" stroke-width="2.4"/><path d="M 382 164 L 553 194 C 559 195 561 197 565 202 L 573 211 C 578 217 585 220 593 221 L 679 236 L 650 308 L 409 266 C 404 265 401 262 400 257 Z" fill="black" stroke="black" stroke-width="2.4"/>
+    </mask></defs>
+    <g mask="url(#behind-index)">
+      <path style="transform:translateY(calc(-13px * var(--paper-lift, 0)))" fill="#eae8dd" stroke="#676960" stroke-width="1.8" stroke-linejoin="round" d="M 429 103 L 453 107 L 460 97 C 462 94 465 93 469 94 L 515 102 C 519 103 521 105 522 109 L 524 119 L 706 151 L 706 244 L 429 214 Z"/>
     </g>
   </g>
   <path id="answer" pathLength="1" fill="none" stroke-linecap="round" stroke-width="2.6" d="M 394 163 C 354 174 323 200 243 210 C 165 220 100 207 -8 207"/>

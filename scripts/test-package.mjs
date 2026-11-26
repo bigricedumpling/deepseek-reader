@@ -21,6 +21,8 @@ try{
    assert(entries.includes('package/runtime/dist/covers/' + id + '-ink.svg'), 'missing ink overlay for ' + id)
  }
  assert(entries.includes('package/runtime/dist/licenses/Met-Ejiri.txt'))
+ assert(entries.includes('package/runtime/dist/licenses/Mermaid-LICENSE.txt'))
+ assert(entries.includes('package/runtime/dist/licenses/Phosphor-LICENSE.txt'))
  assert(entries.includes('package/platform.js'))
  assert(!entries.some(name=>/(?:^|\/)(?:\.runtime|route-aliases)\//.test(name)), 'deployment-specific route mappings must stay local')
  assert(entries.includes('package/runtime/dist/pdfjs/LICENSE'))

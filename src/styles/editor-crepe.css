@@ -743,6 +743,58 @@ body[data-para="space"] .crepe-host .ProseMirror {
   max-width: 100%;
   height: auto;
 }
+.crepe-host .milkdown .mermaid-type-label {
+  margin: 0 0 8px;
+  color: var(--c-sub);
+  font: 600 12px/28px var(--font-sans);
+  text-align: start;
+}
+/* Crepe keeps the source editor mounted. Its hidden state distinguishes a
+ * diagram on the page from the live preview below an expanded source editor. */
+.crepe-host .milkdown .milkdown-code-block:has(> .codemirror-host.hidden):has(.mermaid-preview, .mermaid-preview-error, .mermaid-preview-loading) {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+
+  > .tools {
+    position: absolute;
+    inset-block-start: 8px;
+    inset-inline-end: 0;
+    z-index: 1;
+  }
+  .language-button, .language-picker, .copy-button {
+    display: none;
+  }
+  .mermaid-type-label, .mermaid-preview-error, .mermaid-preview-loading {
+    padding-inline-end: 7em;
+  }
+  .mermaid-preview-error, .mermaid-preview-loading {
+    display: block;
+    min-height: 44px;
+    padding-block: 12px;
+    text-align: start;
+  }
+}
+.crepe-host .milkdown .milkdown-code-block:has(> .codemirror-host:not(.hidden)) {
+  .mermaid-type-label { display: none; }
+}
+.crepe-host .milkdown .milkdown-code-block:has(.mermaid-preview, .mermaid-preview-error, .mermaid-preview-loading) {
+  .tools .preview-toggle-button {
+    min-height: 28px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    opacity: 1;
+    background: transparent;
+    color: var(--c-sub);
+    font: 500 12px/1.4 var(--font-sans);
+  }
+  .tools .preview-toggle-button:hover { background: var(--c-hover); }
+  .tools .preview-toggle-button:focus-visible {
+    outline: 2px solid var(--c-focus);
+    outline-offset: -2px;
+  }
+  .preview-toggle-button .milkdown-icon { gap: 4px; }
+}
 .crepe-host .milkdown .mermaid-preview-error {
   padding-block: 6px;
   color: var(--c-sub);
@@ -757,7 +809,7 @@ body[data-para="space"] .crepe-host .ProseMirror {
   opacity: 1;
 }
 @media (hover: none) {
-  .crepe-host .milkdown .milkdown-code-block:has(.preview-panel) .preview-toggle-button {
+  .crepe-host .milkdown .milkdown-code-block:has(.preview-panel) .tools button {
     opacity: 1;
   }
 }

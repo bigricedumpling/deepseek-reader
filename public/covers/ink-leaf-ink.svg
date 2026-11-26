@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-600 0 2400 400">
   <path id="nib" pathLength="1" fill="none" stroke-linejoin="round" stroke-linecap="round" stroke-width="3.70" d="M 499 136 C 544 103 591 79 633 75 C 662 113 682 154 680 192 C 653 214 628 240 604 268 C 611 284 631 298 653 307"/>
   <g id="gesture">
-    <defs><clipPath id="behind-leaf"><path d="M 497 134 C 543 101 590 77 633 73 C 652 97 669 126 677 147 C 699 123 724 107 750 99 L 755 46 L 495 46 Z"/></clipPath></defs>
+    <defs><clipPath id="behind-leaf"><path d="M 499 136 C 544 103 591 79 633 75 C 651 99 669 125 677 147 C 699 124 724 110 750 101 L 755 46 L 495 46 Z"/></clipPath></defs>
     <g clip-path="url(#behind-leaf)">
       <g transform="translate(604 268)"><g style="transform:rotate(calc(14deg * var(--paper-lift, 0)))">
         <g transform="translate(-604 -268)" stroke-linejoin="round">
