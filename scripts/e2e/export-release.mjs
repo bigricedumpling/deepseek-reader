@@ -73,6 +73,12 @@ try {
       'Other column',
     ] }) + '\n~~~',
   ].join('\n\n')
+  const diagrams = [
+    '~~~mermaid\nflowchart TD\n  A[DiagramAlpha] --> B[DiagramBeta]\n~~~',
+    '~~~mermaid\nsequenceDiagram\n  Browser->>Agent: AskAgent\n  Agent-->>Browser: ReplyAgent\n~~~',
+    '~~~mermaid\nmindmap\n  RootTopic\n    BranchTopic\n      LeafTopic\n~~~',
+    '~~~mermaid\nunknown-diagram-example\n~~~',
+  ].join('\n\n')
   const source = path.join(temp, 'source.md')
   fs.writeFileSync(source, markdown)
   const { file } = await api('POST', 'import-workspace-doc', {
@@ -142,7 +148,7 @@ try {
   // Exercise export independently of editor normalization, from the saved Markdown snapshot.
   const beforeMath = await api('GET', 'doc?path=' + encodeURIComponent(file))
   await api('PUT', 'doc', { path: file, revision: beforeMath.revision,
-    content: beforeMath.content.replace('SAVED-EDIT', () => 'SAVED-EDIT\n\n' + mathematics) })
+    content: beforeMath.content.replace('SAVED-EDIT', () => ['SAVED-EDIT', mathematics, diagrams].join('\n\n')) })
   await send('Page.reload', { ignoreCache: true })
   await waitFor('math document snapshot', () => evaluate("document.querySelector('.editor-shell')?.textContent.includes('LASTTERM')"))
   await clickExport('Markdown')
@@ -161,6 +167,7 @@ try {
   assert.deepEqual(Buffer.from(entries['attachments/001.png']), png)
   assert.deepEqual(Buffer.from(entries['attachments/002.png']), png)
   assert(portable.includes('SAVED-EDIT') && portable.includes('LASTTERM'))
+  assert(portable.includes(diagrams), 'Markdown bundle keeps editable diagram source, indentation and fences')
   await clickExport('网页')
   const html = path.join(downloads, 'Report.html')
   await waitFor('HTML download', async () => {
@@ -169,11 +176,28 @@ try {
     return fs.existsSync(html)
   })
   // Use the menu entry, then materialize the browser's real print layout through CDP.
-  await evaluate('window.print = () => { window.auditPrint = true }')
+  await evaluate(`window.print = () => { window.auditPrint = true }
+    window.addEventListener('beforeprint', () => {
+      const sheet = document.querySelector('.typocket-print')
+      window.paperDiagrams = [...sheet.querySelectorAll('svg')].filter(svg => /DiagramAlpha|AskAgent|RootTopic/.test(svg.textContent)).length
+      window.paperDiagramFallback = [...sheet.querySelectorAll('pre code.language-mermaid')].map(code => code.textContent.trim())
+    }, {once: true})`)
   await clickExport('PDF')
-  assert(await evaluate('window.auditPrint'))
+  await waitFor('print action after diagram rendering', () => evaluate('window.auditPrint'))
   await evaluate('document.fonts.ready.then(()=>true)')
   const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false })
+  assert.equal(await evaluate('window.paperDiagrams'), 3, 'PDF sheet contains the flowchart, sequence diagram and mind map')
+  assert.deepEqual(await evaluate('window.paperDiagramFallback'), ['unknown-diagram-example'])
+  // Native beforeprint is synchronous; an on-screen SVG should match the
+  // Markdown snapshot even when its source contains newlines and an arrow.
+  await evaluate("[...document.querySelectorAll('.milkdown-code-block')].find(el => el.textContent.includes('DiagramAlpha')).scrollIntoView({block:'center', behavior:'instant'})")
+  await waitFor('visible flowchart', () => evaluate("[...document.querySelectorAll('.mermaid-preview[data-src] > svg')].some(svg => svg.textContent.includes('DiagramAlpha'))"))
+  assert(await evaluate(`(() => {
+    window.dispatchEvent(new Event('beforeprint'))
+    const result = [...document.querySelectorAll('.typocket-print svg')].some(svg => svg.textContent.includes('DiagramAlpha'))
+    window.dispatchEvent(new Event('afterprint'))
+    return result
+  })()`), 'native print picks up the matching multiline source')
   const pdfPath = path.join(temp, 'report.pdf')
   fs.writeFileSync(pdfPath, Buffer.from(pdf.data, 'base64'))
   const sheets = execFileSync(process.env.PDFTOTEXT_BIN || 'pdftotext', ['-layout', pdfPath, '-'], { encoding: 'utf8' }).trimEnd().split('\f')
@@ -188,6 +212,7 @@ try {
   assert.equal(new Set([...sheets.join(' ').matchAll(/Print section\s+(\d+)/g)].map(m => Number(m[1]))).size, paragraphs.length)
   assert.match(paper, /FIRSTTERM/)
   assert.match(paper, /LASTTERM/)
+  for (const label of ['DiagramAlpha', 'DiagramBeta', 'AskAgent', 'ReplyAgent', 'RootTopic', 'LeafTopic']) assert(paper.includes(label), 'PDF includes ' + label)
   const bbox = execFileSync(process.env.PDFTOTEXT_BIN || 'pdftotext', ['-bbox', pdfPath, '-'], { encoding: 'utf8' })
   const formulaPage = bbox.split('<page ').find(page => page.includes('LASTTERM'))
   const pageWidth = Number(formulaPage.match(/width="([\d.]+)"/)?.[1])
@@ -278,6 +303,15 @@ try {
   await waitFor('offline artwork and crop', () => evaluate("document.querySelector('.page-cover.small img')?.naturalWidth > 500 && getComputedStyle(document.querySelector('.page-cover img')).objectPosition === '50% 65%'"))
   await send('Page.navigate', { url: pathToFileURL(html).href })
   await waitFor('offline file', () => evaluate("location.protocol==='file:' && document.body?.textContent.includes('LAST-PAGE')"))
+  assert.deepEqual(await evaluate(`(() => {
+    const labels = ['DiagramAlpha', 'AskAgent', 'LeafTopic']
+    const svgs = [...document.querySelectorAll('svg')]
+    return {
+      diagrams: labels.map(label => svgs.some(svg => svg.textContent.includes(label) && svg.getBoundingClientRect().height > 10)),
+      fallback: [...document.querySelectorAll('pre > code.language-mermaid')].map(code => code.textContent.trim()),
+      scripts: document.scripts.length,
+    }
+  })()`), { diagrams: [true, true, true], fallback: ['unknown-diagram-example'], scripts: 0 })
   assert.equal(await evaluate("document.querySelectorAll('img').length"), 3)
   assert(await evaluate("document.querySelector('.page-cover.small img')?.naturalWidth > 100"))
   assert(await evaluate("!document.querySelector('.page-cover canvas, .page-cover button')"))
@@ -291,7 +325,7 @@ try {
   })()`)
   assert(distinctColors > 2, 'the offline cover retains its rendered artwork')
   assert(await evaluate("Array.from(document.images).every(i=>i.src.startsWith('data:image/') && i.complete && i.naturalWidth>0)"))
-  assert(await evaluate("!!document.querySelector('math') && document.querySelector('table').textContent.includes('TableCell') && document.querySelector('pre code').textContent.includes('codeMarker')"))
+  assert(await evaluate("!!document.querySelector('math') && document.querySelector('table').textContent.includes('TableCell') && [...document.querySelectorAll('pre code')].some(code => code.textContent.includes('codeMarker'))"))
   const math = await evaluate(`(() => {
     const equations = [...document.querySelectorAll('math')]
     const long = equations.find(eq => eq.textContent.includes('LASTTERM'))

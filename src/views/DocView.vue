@@ -71,7 +71,7 @@
             <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="15" /> Markdown 文件</button>
             <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('package')"><PhFileText :size="15" /> Markdown 和附件（ZIP）</button>
             <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
-            <button v-if="!isPreview" class="pop-item" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
+            <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
             <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener" @click="open = ''"><PhArrowSquareOut :size="15" />打开原文件</a>
           </div>
         </transition>
@@ -716,13 +716,13 @@ const exportStatus = ref(''), exporting = ref(false)
 async function pickExport(kind) {
   open.value = ''
   if (kind === 'md') return exportMarkdown()
-  if (kind === 'pdf') return exportPdf()
   if (exporting.value) return
   exporting.value = true
   const title = props.meta.name
   const timer = setTimeout(() => { exportStatus.value = '正在导出《' + title + '》…' }, 400)
   try {
-    if (kind === 'package') await exportPackage()
+    if (kind === 'pdf') await exportPdf()
+    else if (kind === 'package') await exportPackage()
     else await exportHtml()
   } catch (error) {
     store.setError(error.message)

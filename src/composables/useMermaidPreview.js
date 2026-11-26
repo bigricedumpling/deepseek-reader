@@ -1,50 +1,50 @@
-/**
- * 在编辑器里给 ```mermaid 代码块补一块渲染出来的图。
- *
- * 为什么是补一块而不是替换代码块：
- * Crepe 的代码块是 CodeMirror 实例，源码必须留着给用户改。
- * 所以图追加在块内、源码下面，源码一动就重画，语法错就把图撤掉、代码原样保留。
- */
-export function useMermaidPreview({ host, renderSvg }) {
-  let timer = null
+import { onWatcherCleanup, watch } from 'vue'
+import { useReaderStore } from '../stores/reader'
+import { isMermaidLanguage, mermaidSourceKey, renderMermaidSvg } from '../utils/mermaid.js'
 
-  async function paint() {
-    if (!host.value) return
-    const blocks = [...host.value.querySelectorAll('.milkdown-code-block')]
-    for (const block of blocks) {
-      const lang = (block.querySelector('.language-button')?.textContent || '').trim().toLowerCase()
-      const existing = block.querySelector('.mermaid-preview')
-      if (lang !== 'mermaid') {
-        existing?.remove()
-        continue
-      }
-      const code = (block.querySelector('.cm-content')?.textContent || '').trim()
-      if (!code) {
-        existing?.remove()
-        continue
-      }
-      // 源码没变就别重画，否则每次重排都要重新渲染一遍图
-      if (existing && existing.dataset.src === code) continue
-      existing?.remove()
-      const svg = await renderSvg(code)
-      if (!svg) continue
-      const box = document.createElement('div')
-      box.className = 'mermaid-preview'
-      box.dataset.src = code
-      box.innerHTML = svg
-      block.appendChild(box)
-    }
+export function useMermaidPreview() {
+  const reader = useReaderStore()
+
+  // A native CodeMirror preview and a read-only fence each own their watcher.
+  // Invalidate pending work when the source, language, theme or owning block changes.
+  function watchDiagram(source, apply) {
+    const stop = watch(
+      [() => reader.resolvedTheme, () => reader.documentStyle],
+      (_, __, onCleanup) => {
+        let current = true
+        const timer = setTimeout(async () => {
+          const svg = await renderMermaidSvg(source)
+          if (!current) return
+          if (!svg) {
+            const message = document.createElement('div')
+            message.className = 'mermaid-preview-error'
+            message.setAttribute('role', 'status')
+            message.textContent = '图表未能显示，请检查 Mermaid 源码。'
+            apply(message, false)
+            return
+          }
+          const figure = document.createElement('figure')
+          figure.className = 'mermaid-preview'
+          figure.dataset.src = mermaidSourceKey(source)
+          figure.innerHTML = svg
+          apply(figure, true)
+        }, 140)
+        onCleanup(() => {
+          current = false
+          clearTimeout(timer)
+        })
+      },
+      { immediate: true, flush: 'post' }
+    )
+    onWatcherCleanup(stop)
   }
 
-  /** 合并短时间内的多次变更，编辑器每敲一个字都会触发一次 DOM 变动 */
-  function schedule() {
-    clearTimeout(timer)
-    timer = setTimeout(paint, 600)
+  function renderPreview(language, source, apply) {
+    if (!isMermaidLanguage(language)) return null
+    // Crepe supplies the entire document model, including lines outside the viewport.
+    watchDiagram(source, element => apply(element.outerHTML))
+    // Returning undefined selects Crepe's asynchronous preview mode.
   }
 
-  function stop() {
-    clearTimeout(timer)
-  }
-
-  return { paint, schedule, stop }
+  return { renderPreview, watchDiagram }
 }

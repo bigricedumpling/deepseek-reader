@@ -730,18 +730,36 @@ body[data-para="space"] .crepe-host .ProseMirror {
   table-layout: fixed;
 }
 
-/* mermaid 预览：贴在代码块下面，居中，可以横向滚动 */
-.crepe-host .milkdown .milkdown-code-block .mermaid-preview {
-  margin-top: 4px;
-  padding: 12px;
-  border-top:0;
+.crepe-host .milkdown .mermaid-preview {
+  margin: 0;
+  padding-block: 8px;
+  min-width: 0;
   overflow-x: auto;
   text-align: center;
-  background: var(--c-pop);
 }
-.crepe-host .milkdown .milkdown-code-block .mermaid-preview svg {
+.crepe-host .milkdown .mermaid-preview > svg {
+  display: block;
+  margin-inline: auto;
   max-width: 100%;
   height: auto;
+}
+.crepe-host .milkdown .mermaid-preview-error {
+  padding-block: 6px;
+  color: var(--c-sub);
+  font: 13px/1.5 var(--font-sans);
+  text-align: start;
+}
+.crepe-host .milkdown .milkdown-code-block:has(.preview-panel) .preview-divider {
+  display: none;
+}
+.crepe-host .milkdown .milkdown-code-block:focus-within .tools button,
+.crepe-host .milkdown .milkdown-code-block:has(.mermaid-preview-error) .preview-toggle-button {
+  opacity: 1;
+}
+@media (hover: none) {
+  .crepe-host .milkdown .milkdown-code-block:has(.preview-panel) .preview-toggle-button {
+    opacity: 1;
+  }
 }
 
 /*

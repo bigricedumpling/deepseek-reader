@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
+import { chooseReadingSetting } from './reading-settings.mjs'
 
 export async function verifyEditorStartupRecovery({ ev, root, file, sleep }) {
   const contents = () => fs.readFileSync(path.join(root, file))
@@ -41,6 +42,31 @@ export async function verifyEditorStartupRecovery({ ev, root, file, sleep }) {
       && !article.textContent.includes('# 混合排版') && !document.querySelector('.editor-shell textarea:not([hidden])')
       && action?.checkVisibility() && action.textContent.trim() === '重试'
   `)
+  const chartSelector = '.source-reading .mermaid-preview > svg'
+  await until('启动恢复阅读页保留有效图表和错误源码', `
+    const svg = document.querySelector(${JSON.stringify(chartSelector)})
+    const error = document.querySelector('.source-reading .mermaid-preview-error')
+    const labels = [...(svg?.querySelectorAll('text,foreignObject') || [])].map(el => el.textContent)
+    return labels.some(label => label.includes('Start')) && labels.some(label => label.includes('End'))
+      && error?.checkVisibility() && error.nextElementSibling?.querySelector('code')?.textContent.includes('A[Missing bracket')
+  `)
+  const appearance = await ev(`const svg = document.querySelector(${JSON.stringify(chartSelector)})
+    return { theme: document.body.dataset.theme, id: svg.id, fill: getComputedStyle(svg.querySelector('.node rect')).fill }`)
+  const nextTheme = appearance.theme === 'dark' ? 'light' : 'dark'
+  const themeLabel = { dark: '深色', light: '浅色', sepia: '柔和' }
+  try {
+    await chooseReadingSetting(ev, '外观', themeLabel[nextTheme])
+    await until('阅读主题同步到当前图表', `
+      const svg = document.querySelector(${JSON.stringify(chartSelector)})
+      return document.body.dataset.theme === ${JSON.stringify(nextTheme)}
+        && svg && svg.id !== ${JSON.stringify(appearance.id)}
+        && getComputedStyle(svg.querySelector('.node rect')).fill !== ${JSON.stringify(appearance.fill)}
+        && document.querySelector('.source-reading .mermaid-preview-error + pre code')?.textContent.includes('A[Missing bracket')
+    `)
+  } finally {
+    await chooseReadingSetting(ev, '外观', themeLabel[appearance.theme])
+    await ev("document.querySelector('button[aria-label=阅读设置]').click()")
+  }
   assert.deepEqual(contents(), original, '启动失败时不得改写文件')
   await ev("document.querySelector('.editor-shell [role=status] button').click()")
   await until('点击重试后富文本编辑器恢复', `

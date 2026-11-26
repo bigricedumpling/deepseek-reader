@@ -16,6 +16,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { verifyShareHandoff } from './e2e/share-handoff.mjs'
+import { verifyMermaid } from './e2e/mermaid.mjs'
 import { verifyFind } from './e2e/find.mjs'
 import { verifyResponsiveImages } from './e2e/responsive-images.mjs'
 import { verifyFormulaReading } from './e2e/formula-reading.mjs'
@@ -499,7 +500,9 @@ try {
     '# 混合排版', '', '> 公式后的内容仍然可以编辑。', '',
     '$$', 'f(x) = \\sqrt{x^2+1} + \\frac{1}{2}', '$$', '',
     '## 下一节', '', '一段文字里带有 **粗体** 和 *斜体*，还有 $a+b$ 以及 [来源](https://example.com/)。', '',
-    '修改这一段。', '', '| 样本 | 结果 |', '|---|---|', '| 甲 | $x^2$ |', ''
+    '修改这一段。', '', '| 样本 | 结果 |', '|---|---|', '| 甲 | $x^2$ |', '',
+    '```mermaid', 'flowchart TD', '  A[Start] --> B[End]', '```', '',
+    '```mermaid', 'flowchart TD', '  A[Missing bracket', '```', ''
   ].join('\n')
   fs.writeFileSync(path.join(SB, formulaFile), mixedFormula)
   await ev('await window.__reader.loadTree()')
@@ -925,6 +928,9 @@ try {
 
   await verifyResponsiveImages({ send, ev, root: SB, appUrl, sleep })
   check('正文图片在收展侧栏和窄屏时保持比例，拖动、撤销与只读重开保留尺寸', true)
+
+  await verifyMermaid({ send, ev, root: SB, appUrl, sleep })
+  check('多行 Mermaid 和思维导图在正文、源码编辑、斜杠插入与窄屏只读重开时可用', true)
 
   const real = consoleErrors.filter(e => !/favicon|DevTools|Download the Vue/i.test(e))
   check('运行期无控制台报错', real.length === 0, real.slice(0, 2).join(' | '))

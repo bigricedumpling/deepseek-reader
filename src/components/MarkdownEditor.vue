@@ -95,7 +95,6 @@ import { ParserState } from '@milkdown/kit/transformer'
 import MarkdownReading from './MarkdownReading.vue'
 import { trailingConfig } from '@milkdown/kit/plugin/trailing'
 import { editorMathRemark, inlineMathNode, blockMathNode, inlineMathInput, configureEditorMath } from '../utils/editor-math.js'
-import { renderMermaidSvg } from '../utils/mermaid'
 import { normalizeMarkdown } from '../utils/markdown-normalize'
 import { editorShortcuts, applyBlockKind, blockKindOf, resolveDocHref, resolveDocReference } from '../utils/editor-shortcuts'
 import { editorFold, bindFoldView, refreshFolds } from '../utils/editor-fold'
@@ -132,6 +131,7 @@ import ImageLightbox from './ImageLightbox.vue'
 import { useMermaidPreview } from '../composables/useMermaidPreview'
 import { useTableColumnWidths } from '../composables/useTableColumnWidths'
 import { languages as cmLanguages } from '@codemirror/language-data'
+import { LanguageDescription, LanguageSupport, StreamLanguage } from '@codemirror/language'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import '../styles/editor-crepe.css'
@@ -154,7 +154,14 @@ const emit = defineEmits(['update:value', 'restore', 'pick-doc', 'open-doc', 're
 const host = ref(null)
 const editorUnavailable = ref(false)
 
-const mermaid = useMermaidPreview({ host, renderSvg: renderMermaidSvg })
+const { renderPreview } = useMermaidPreview()
+// Mermaid fences are editable as plain text. Expose the language in the picker as well.
+const mermaidLanguage = LanguageDescription.of({
+  name: 'Mermaid',
+  support: new LanguageSupport(StreamLanguage.define({
+    token(stream) { stream.skipToEnd(); return null }
+  }))
+})
 const colw = useTableColumnWidths({
   host,
   docId: computed(() => props.docId),
@@ -536,6 +543,9 @@ function createEditor() {
          * "内部链接"分支接住 —— 开成工具内部的标签页，不是浏览器标签页。
          */
         buildMenu: (builder) => {
+          builder.getGroup('advanced').addItem('mindmap', {
+            label: '思维导图', icon: toolbarIcon('git-branch'), onRun: insertMindmap
+          })
           builder.getGroup('advanced').addItem('math', {
             label: '公式', icon: toolbarIcon(TOOLBAR_ICONS.latex), onRun: () => beginFormula(true)
           })
@@ -574,8 +584,12 @@ function createEditor() {
       },
       [Crepe.Feature.CodeMirror]: {
         // 挂上 CodeMirror 的语言包，代码块才有语法高亮。按语言惰性加载，不写的那种不下载
-        languages: cmLanguages,
-        previewToggleText: (previewOnly) => (previewOnly ? '编辑' : '预览')
+        languages: [...cmLanguages, mermaidLanguage],
+        renderPreview,
+        previewOnlyByDefault: true,
+        previewLoading: '<span role="status">正在绘制图表…</span>',
+        previewLabel: '预览',
+        previewToggleText: (previewOnly) => (previewOnly ? '查看源码' : '收起源码')
       }
     }
   })
@@ -736,18 +750,12 @@ onMounted(async () => {
     host.value.addEventListener(ev, () => { userTyped = true }, true)
   }
 
-  /*
-   * 代码块重画和表格列宽都要跟着 DOM 变动走。
-   * 列宽用更短的等待：拖拽时要跟手，mermaid 要等异步渲染，两者节奏不一样。
-   */
   observer = new MutationObserver(() => {
     decorateFormula()
     decorateSlashMenu()
-    mermaid.schedule()
     colw.schedule()
   })
   observer.observe(host.value, { childList: true, subtree: true, characterData: true })
-  mermaid.schedule()
   decorateFormula()
   decorateSlashMenu()
 
@@ -811,6 +819,24 @@ function decorateFormula() {
     el.setAttribute('role', 'button')
     el.setAttribute('aria-label', '编辑公式')
   }
+}
+
+function insertMindmap() {
+  const view = viewOf()
+  if (!view?.editable) return
+  const { schema, selection, tr } = view.state
+  const { $from, from, to } = selection
+  if ($from.parent.type !== schema.nodes.paragraph) return
+  const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uFFFC')
+  const command = before.match(/(?:^|\s)(\/[^\s/]*)$/)?.[1] || ''
+  const start = from - command.length
+  const wholeParagraph = start === $from.start() && to === $from.end()
+  const diagram = schema.nodes.code_block.create({ language: 'mermaid' },
+    schema.text('mindmap\n  root((主题))\n    想法\n    下一步'))
+  tr.replaceWith(wholeParagraph ? $from.before() : start, wholeParagraph ? $from.after() : to, diagram)
+  userTyped = true
+  view.dispatch(tr.scrollIntoView())
+  view.focus()
 }
 
 function beginFormula(display) {
@@ -1690,7 +1716,6 @@ onBeforeUnmount(async () => {
   window.removeEventListener('scroll', onDocScroll, true)
   window.removeEventListener('resize', hideImageTools)
   observer?.disconnect()
-  mermaid.stop()
   colw.detach()
   // An editor replaced during initialization must finish creating before teardown.
   await creating?.catch(() => {})

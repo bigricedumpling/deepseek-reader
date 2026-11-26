@@ -1,4 +1,3 @@
-import DOMPurify from 'dompurify'
 import { onMounted, onBeforeUnmount } from 'vue'
 import { readingDocument } from '../utils/safe-reading.js'
 import { getCoverArtwork } from '../utils/cover-artworks.js'
@@ -6,7 +5,7 @@ import { coverPalettes } from '../utils/cover-presets.js'
 import { renderCoverFrame } from '../utils/cover-renderer.js'
 import documentFlow from '../styles/document-flow.css?inline'
 import { assetUrl } from '../utils/api.js'
-import { renderMermaidSvg } from '../utils/mermaid.js'
+import { mermaidCodeBlocks, mermaidSourceKey, renderMermaidSvg } from '../utils/mermaid.js'
 
 function download(filename, blob) {
   const url = URL.createObjectURL(blob)
@@ -203,27 +202,48 @@ export function useExport(getDoc, getRaw, getCover) {
     download(doc.name + '.zip', await markdownPackage(doc, raw))
   }
 
+  // The menu can await all diagrams, including diagrams outside the live editor's
+  // viewport. Native beforeprint is synchronous, so it reuses matching live SVGs.
+  async function renderPaperDiagrams(article) {
+    for (const code of mermaidCodeBlocks(article)) {
+      const svg = await renderMermaidSvg(code.textContent, { paper: true })
+      if (svg) code.parentElement.outerHTML = svg
+    }
+  }
+
   let printed = null
+  let readyToPrint = null
   function removePrintCopy() {
     printed?.remove()
     printed = null
+    readyToPrint = null
   }
 
-  function preparePrint() {
-    removePrintCopy()
-    const original = document.getElementById('main-scroll-container')
-    if (!original?.querySelector('.editor-shell')) return
+  function printSheet(original) {
     const sheet = document.createElement('article')
     sheet.className = 'typocket-print'
     sheet.append(exportedHeader(original, getCover()), articleFragment(getRaw()))
-    // Reuse a rendered diagram only when its source still matches this code block.
-    const diagrams = Array.from(original.querySelectorAll('.mermaid-preview'))
-    for (const code of sheet.querySelectorAll('pre > code.language-mermaid')) {
-      const diagram = diagrams.find(item => item.dataset.src === code.textContent.trim().split('\n').join(''))
-      const svg = diagram?.querySelector('svg')
-      if (svg) code.parentElement.replaceWith(svg.cloneNode(true))
-    }
     for (const image of sheet.querySelectorAll('img')) image.loading = 'eager'
+    return sheet
+  }
+
+  function preparePrint() {
+    if (printed?.isConnected && !readyToPrint) return
+    const original = document.getElementById('main-scroll-container')
+    if (!original?.querySelector('.editor-shell')) return
+    const sheet = readyToPrint || printSheet(original)
+    if (!readyToPrint) {
+      const diagrams = new Map()
+      for (const preview of original.querySelectorAll('.mermaid-preview[data-src]')) {
+        const svg = preview.querySelector('svg')
+        if (svg) diagrams.set(preview.dataset.src, svg)
+      }
+      for (const code of mermaidCodeBlocks(sheet)) {
+        const svg = diagrams.get(mermaidSourceKey(code.textContent))
+        if (svg) code.parentElement.replaceWith(svg.cloneNode(true))
+      }
+    }
+    removePrintCopy()
     measurePrintMath(sheet)
     document.body.append(sheet)
     printed = sheet
@@ -239,7 +259,14 @@ export function useExport(getDoc, getRaw, getCover) {
     removePrintCopy()
   })
 
-  function exportPdf() {
+  async function exportPdf() {
+    const original = document.getElementById('main-scroll-container')
+    const file = getDoc()?.file
+    if (!file || !original?.querySelector('.editor-shell')) throw Error('正文尚未加载')
+    const sheet = printSheet(original)
+    await renderPaperDiagrams(sheet)
+    if (getDoc()?.file !== file || !original.isConnected) return
+    readyToPrint = sheet
     window.print()
   }
 
@@ -263,10 +290,7 @@ export function useExport(getDoc, getRaw, getCover) {
     output.head.append(style)
     output.body.className = 'typocket-export'
     output.body.append(exportedHeader(original, getCover()), articleFragment(getRaw()))
-    for (const code of output.querySelectorAll('pre > code.language-mermaid')) {
-      const svg = await renderMermaidSvg(code.textContent)
-      if (svg) code.parentElement.replaceWith(DOMPurify.sanitize(svg, { RETURN_DOM_FRAGMENT: true }))
-    }
+    await renderPaperDiagrams(output.body)
     for (const el of output.body.querySelectorAll('*')) {
       for (const attr of Array.from(el.attributes)) {
         if (/^(?:data-reader-|on)/.test(attr.name) || ['contenteditable', 'draggable', 'tabindex'].includes(attr.name)) el.removeAttribute(attr.name)
