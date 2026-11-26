@@ -1,3 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-600 0 2400 400">
   <path id="nib" pathLength="1" fill="none" stroke-linejoin="round" stroke-linecap="round" stroke-width="3.90" d="M 467 135 L 602 158 L 613 145 C 616 141 619 141 624 142 L 666 149 C 671 150 672 154 673 158"/>
+  <g id="gesture">
+    <defs><clipPath id="behind-index"><path d="M 470 45 H 707 V 120 L 617 104 L 614 98 C 612 93 610 91 605 90 L 557 80 C 551 79 548 80 544 83 L 470 137 Z"/></clipPath></defs>
+    <g clip-path="url(#behind-index)">
+      <g style="transform:translate(calc(-6px * var(--paper-lift, 0)),calc(12px - 35px * var(--paper-lift, 0)))" stroke-linejoin="round">
+        <path fill="#e9e8dc" stroke="#60645b" stroke-width="2" d="M 487 147 L 547 100 Q 552 96 558 97 L 608 106 L 615 100 Q 618 97 623 98 L 651 103 Q 655 104 656 109 L 657 116 L 680 121 Q 685 122 685 127 L 681 152 L 487 159 Z"/>
+        <path fill="none" stroke="#95998b" stroke-width="1.25" stroke-linecap="round" d="M 622 104 L 644 108"/>
+      </g>
+    </g>
+  </g>
+  <path id="answer" pathLength="1" fill="none" stroke-linecap="round" stroke-width="2.6" d="M 394 163 C 354 174 323 200 243 210 C 165 220 100 207 -8 207"/>
 </svg>

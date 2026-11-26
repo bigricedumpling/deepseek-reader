@@ -4,7 +4,7 @@ import { API_BASE } from './api.js'
 const artworks = coverArtworkCatalog.map(artwork => ({
   ...artwork,
   url: API_BASE + '/covers/' + artwork.id + '.webp',
-  inkUrl: artwork.ink ? API_BASE + '/covers/' + artwork.id + '-ink.svg#nib' : null,
+  inkUrl: artwork.ink ? API_BASE + '/covers/' + artwork.id + '-ink.svg' : null,
   thumbnail: API_BASE + '/covers/' + artwork.id + '-thumb.webp'
 }))
 

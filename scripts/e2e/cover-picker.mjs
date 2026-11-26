@@ -61,10 +61,39 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     new URL(tile.querySelector('img').src).pathname.endsWith('/' + tile.querySelector('input').value + '-thumb.webp'))`))
   assert.equal(await saved(), null)
   assert(await ev('return !document.querySelector(".page-cover, .cover-done, .cover-cancel")'))
+  const stage = '.cover-plane .cover-ink-pass'
+  async function checkRhythm(selector, id) {
+    const svg = 'document.querySelector(' + JSON.stringify(selector + '[data-cover-ink="' + id + '"]') + ')'
+    // An external SVG fragment may be referenced before its geometry has loaded.
+    await wait(svg + "?.querySelectorAll('use').length === 4 && [..."+svg+".querySelectorAll('use')].every(use => use.getBBox().width > 0)")
+    const result = await ev(`const svg=${svg}, tracks=svg.getAnimations({subtree:true})
+      const period=tracks[0]?.effect.getTiming().duration
+      const repeating=tracks.length > 0 && tracks.every(a => a.effect.getTiming().iterations === Infinity && a.effect.getTiming().duration === period)
+      const gesture=svg.querySelector('.paper-gesture'), nib=svg.querySelector('.wet-line'), writing=nib.parentElement, answer=svg.querySelector('.ink-answer')
+      const before=tracks.map(track => track.currentTime)
+      function sample(phase) {
+        for (const track of tracks) track.currentTime=phase*period
+        return [gesture,writing,answer].map(el=>Number(getComputedStyle(el).opacity))
+          .concat(Number(getComputedStyle(gesture).getPropertyValue('--paper-lift')), parseFloat(getComputedStyle(nib).strokeDashoffset))
+      }
+      try {
+        const phases=[.09,.24,.435,.72,.94]
+        const first=phases.map(sample), second=phases.map(phase=>sample(phase+1))
+        return {repeating, first, second, urls:[gesture,nib,svg.querySelector('.pen-tip'),answer].map(el=>el.getAttribute('href'))}
+      } finally { tracks.forEach((track,i)=>{track.currentTime=before[i]}) }`)
+    assert(result.repeating, id + ' must loop every gesture together')
+    assert.deepEqual(result.urls.map(url=>url.slice(url.lastIndexOf('/')+1)), ['gesture','nib','nib','answer'].map(fragment=>id+'-ink.svg#'+fragment))
+    const [paper, pen, echo, ...rest]=result.first
+    assert(paper[0]>.8 && paper[1]<.02 && paper[2]<.02 && paper[3]>0, id+' should move the paper or underline first')
+    assert(pen[1]>.8 && pen[2]<.02 && pen[4]>0 && pen[4]<1, id+' should trace its main ink stroke next')
+    assert(echo[0]<.02 && echo[1]<.02 && echo[2]>.4, id+' should leave one quieter answering stroke')
+    assert(rest.every(frame=>frame.slice(0,3).every(opacity=>opacity<.02)), id+' should rest on its still artwork')
+    assert(result.first.every((frame,i)=>frame.every((value,j)=>Math.abs(value-result.second[i][j])<.002)), id+' must repeat the whole sequence')
+  }
   for (const id of inkSeries) {
     await click(radio(id))
-    await wait(`document.querySelector('.cover-plane svg[data-cover-ink="${id}"] use')?.getAttribute('href')?.endsWith('/covers/${id}-ink.svg#nib')`)
-    await wait(`document.querySelector('.cover-tile svg[data-cover-ink="${id}"] use')`)
+    await checkRhythm(stage, id)
+    await checkRhythm('.cover-tile .cover-ink-pass', id)
     const activeTiles = await ev(`return [...document.querySelectorAll('.cover-tile svg.cover-ink-pass')]
       .map(svg => [svg.dataset.coverInk, svg.closest('.cover-tile').querySelector('input:checked')?.value])`)
     assert.deepEqual(activeTiles, [[id, id]], 'only the selected thumbnail draws its ink stroke')
@@ -81,26 +110,10 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   }
 
   await checkBodyWidth('Selected artwork and its actions')
-  const stage = '.cover-plane .cover-ink-pass'
   const running = selector => `document.querySelector(${JSON.stringify(selector)})?.getAnimations({subtree:true})
     .some(track=>track.playState==='running' && track.effect.getTiming().iterations===Infinity)`
   const stopped = selector => `![...document.querySelectorAll(${JSON.stringify(selector)})]
     .some(svg=>svg.getAnimations({subtree:true}).some(track=>track.playState==='running'))`
-  for (const selector of [stage, '.cover-tile .cover-ink-pass']) {
-    await wait(running(selector))
-    const validCycle = await ev(`const svg=document.querySelector(${JSON.stringify(selector)}), tracks=svg.getAnimations({subtree:true})
-      if(!tracks.every(a=>a.effect.getTiming().iterations===Infinity)) return false
-      const period=tracks[0].effect.getTiming().duration
-      const sample=phase=>{
-        for(const a of tracks){a.pause();a.currentTime=period*phase}
-        return Number(getComputedStyle(svg).opacity)
-      }
-      try {
-        return sample(.15)>.5 && sample(.65)<.02 && sample(1.15)>.5 && sample(1.65)<.02
-      } finally {for(const a of tracks) a.play()}`)
-    assert(validCycle,'the ink should return after a dry interval on ' + selector)
-  }
-
   await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion', value:'reduce'}]})
   try {
     await wait(stopped('.cover-ink-pass'))

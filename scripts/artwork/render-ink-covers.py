@@ -173,14 +173,52 @@ def finish(image, seed):
     return ImageChops.add(image,ImageOps.colorize(fine,'#000000','#070706'),offset=-3)
 
 
-def save_wet_pass(path, stroke):
+# Only the exposed side of the printed silhouette can reveal the moving sheet.
+# Keep clips stationary while the divider translates and the leaf pivots at its gutter.
+INDEX_GESTURE = '''  <g id="gesture">
+    <defs><clipPath id="behind-index"><path d="M 470 45 H 707 V 120 L 617 104 L 614 98 C 612 93 610 91 605 90 L 557 80 C 551 79 548 80 544 83 L 470 137 Z"/></clipPath></defs>
+    <g clip-path="url(#behind-index)">
+      <g style="transform:translate(calc(-6px * var(--paper-lift, 0)),calc(12px - 35px * var(--paper-lift, 0)))" stroke-linejoin="round">
+        <path fill="#e9e8dc" stroke="#60645b" stroke-width="2" d="M 487 147 L 547 100 Q 552 96 558 97 L 608 106 L 615 100 Q 618 97 623 98 L 651 103 Q 655 104 656 109 L 657 116 L 680 121 Q 685 122 685 127 L 681 152 L 487 159 Z"/>
+        <path fill="none" stroke="#95998b" stroke-width="1.25" stroke-linecap="round" d="M 622 104 L 644 108"/>
+      </g>
+    </g>
+  </g>'''
+
+LEAF_GESTURE = '''  <g id="gesture">
+    <defs><clipPath id="behind-leaf"><path d="M 497 134 C 543 101 590 77 633 73 C 652 97 669 126 677 147 C 699 123 724 107 750 99 L 755 46 L 495 46 Z"/></clipPath></defs>
+    <g clip-path="url(#behind-leaf)">
+      <g transform="translate(604 268)"><g style="transform:rotate(calc(14deg * var(--paper-lift, 0)))">
+        <g transform="translate(-604 -268)" stroke-linejoin="round">
+          <path fill="#eeeee2" stroke="#64685e" stroke-width="2" d="M 604 268 C 580 213 547 171 505 138 C 548 107 592 84 631 79 C 656 111 676 154 676 192 C 649 218 624 244 604 268 Z"/>
+          <path fill="none" stroke="#a7aa99" stroke-width="1" d="M 628 83 C 648 109 662 137 670 160"/>
+        </g>
+      </g></g>
+    </g>
+  </g>'''
+
+MARGIN_GESTURE = '''  <g id="gesture">
+    <path fill="none" stroke="#526e8f" stroke-width="2.5" stroke-linecap="round" pathLength="1" stroke-dasharray="1 1" style="stroke-dashoffset:calc(1 - var(--paper-lift, 0))" d="M 401 171 C 423 172 450 167 473 166 C 490 165 509 164 522 164"/>
+  </g>'''
+
+# Follow the exposed part of each original hairline out into the margin.
+MOTION = {
+    'ink-index': (INDEX_GESTURE, 'M 394 163 C 354 174 323 200 243 210 C 165 220 100 207 -8 207'),
+    'ink-leaf': (LEAF_GESTURE, 'M 843 186 C 900 196 950 225 1030 216 C 1117 207 1157 207 1208 207'),
+    'ink-margin': (MARGIN_GESTURE, 'M 746 198 C 769 184 786 187 806 204 C 841 239 875 196 931 192'),
+}
+
+
+def save_wet_pass(path, stroke, artwork):
     d,width = stroke
-    # A single pass dries onto the plate beneath. Both images use the same
-    # viewbox so the nib remains registered through object-fit and repositioning.
+    gesture, answer = MOTION[artwork]
     path.write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-600 0 2400 400">\n'
         f'  <path id="nib" pathLength="1" fill="none" stroke-linejoin="round" '
-        f'stroke-linecap="round" stroke-width="{width+0.9:.2f}" d="{d}"/>\n</svg>\n'
+        f'stroke-linecap="round" stroke-width="{width+0.9:.2f}" d="{d}"/>\n'
+        f'{gesture}\n'
+        f'  <path id="answer" pathLength="1" fill="none" stroke-linecap="round" '
+        f'stroke-width="2.6" d="{answer}"/>\n</svg>\n'
     )
 
 
@@ -195,4 +233,4 @@ if __name__ == '__main__':
         finished=finish(sheet.image, 18+i)
         finished.save(out / (name+'.webp'), quality=87, method=6)
         ImageOps.fit(finished,(480,160),method=Image.Resampling.LANCZOS).save(out / (name+'-thumb.webp'),quality=91,method=6)
-        save_wet_pass(out / (name+'-ink.svg'),sheet.last_stroke)
+        save_wet_pass(out / (name+'-ink.svg'),sheet.last_stroke,name)

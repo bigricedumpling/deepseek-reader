@@ -1,3 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-600 0 2400 400">
   <path id="nib" pathLength="1" fill="none" stroke-linejoin="round" stroke-linecap="round" stroke-width="3.35" d="M 475 238 C 486 241 503 241 512 238 L 520 223 L 527 239 C 554 239 571 243 583 253 C 594 262 590 279 578 280 C 566 281 563 272 570 262 C 587 242 632 232 686 223 C 701 221 716 216 725 210"/>
+  <g id="gesture">
+    <path fill="none" stroke="#526e8f" stroke-width="2.5" stroke-linecap="round" pathLength="1" stroke-dasharray="1 1" style="stroke-dashoffset:calc(1 - var(--paper-lift, 0))" d="M 401 171 C 423 172 450 167 473 166 C 490 165 509 164 522 164"/>
+  </g>
+  <path id="answer" pathLength="1" fill="none" stroke-linecap="round" stroke-width="2.6" d="M 746 198 C 769 184 786 187 806 204 C 841 239 875 196 931 192"/>
 </svg>
