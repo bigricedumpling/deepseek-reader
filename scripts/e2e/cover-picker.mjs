@@ -34,6 +34,11 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     await wait(option)
     await ev(option + '.click()')
   }
+  async function checkBodyWidth(label) {
+    const [visible, content] = await ev(`const body=document.querySelector('.cover-body')
+      return [body.clientWidth,body.scrollWidth]`)
+    assert.equal(content, visible, label + ' must fit without horizontal scrolling')
+  }
   async function checkTiles(ids) {
     const nodes = await ev(`return [...document.querySelectorAll('.cover-tile')].map(label=>{
       const input=label.querySelector('input');return [input.value, label.innerText.trim(), input.getAttribute('aria-label')]
@@ -49,7 +54,7 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   await wait('document.querySelector(".ProseMirror h1")?.textContent === "Materials"')
   await click(trigger)
   const inkSeries = ['ink-index', 'ink-leaf', 'ink-margin']
-  const gallery = [...inkSeries, 'overlap', 'resonance', 'register', 'refraction']
+  const gallery = [...inkSeries, 'overlap', 'resonance', 'register']
   await wait(`document.querySelectorAll('.cover-tile img').length === ${gallery.length} && [...document.querySelectorAll('.cover-tile img')].every(im => im.complete && im.naturalWidth)`)
   await checkTiles(gallery)
   assert(await ev(`return [...document.querySelectorAll('.cover-tile')].every(tile =>
@@ -59,6 +64,9 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   for (const id of inkSeries) {
     await click(radio(id))
     await wait(`document.querySelector('.cover-plane svg[data-cover-ink="${id}"] use')?.getAttribute('href')?.endsWith('/covers/${id}-ink.svg#nib')`)
+    const activeTiles = await ev(`return [...document.querySelectorAll('.cover-tile svg.cover-ink-pass')]
+      .map(svg => [svg.dataset.coverInk, svg.closest('.cover-tile').querySelector('input:checked')?.value])`)
+    assert.deepEqual(activeTiles, [[id, id]], 'only the newly selected thumbnail draws its ink stroke')
     assert(await ev(`const svg=document.querySelector('.cover-plane svg[data-cover-ink="${id}"]')
       const img=svg.parentElement.querySelector('.document-cover-image'), viewport=img.getBoundingClientRect()
       const aspect=img.naturalWidth/img.naturalHeight, box=svg.getBoundingClientRect()
@@ -71,10 +79,17 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     await expectSaved('first click writes full artwork ' + id, c => c?.artwork === id)
   }
 
+  await checkBodyWidth('Selected artwork and its actions')
   await wait('!document.querySelector(".cover-ink-pass")')
+  await click(radio('ink-margin'))
+  await sleep(150)
+  assert(await ev('return !document.querySelector(".cover-ink-pass")'), 'reselecting the dry illustration should leave it still')
 
+  await click(radio('ink-leaf'))
+  await wait(`document.querySelector('.cover-plane [data-cover-ink="ink-leaf"]')`)
   await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion', value:'reduce'}]})
   try {
+    await wait('!document.querySelector(".cover-ink-pass")')
     await ev('performance.clearResourceTimings()')
     await click(radio('ink-index'))
     await wait(inHeader('ink-index'))
@@ -135,6 +150,7 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   await expectSaved('pattern saved on selection', c => c?.preset === 'mesh')
   await click('.cover-adjust')
   await click('.cover-swatches button:nth-child(2)')
+  await checkBodyWidth('Pattern settings')
   const palette = await colors()
   assert.equal(palette.length, 3)
   await expectSaved('palette saved without confirmation', c => c?.colors.join() === palette.join())
@@ -156,9 +172,10 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,500,240);ctx.fillStyle='#101010';ctx.fillRect(500,0,500,240);
     const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));
     const input=document.querySelector('.cover-picker input[type=file]');
-    const transfer=new DataTransfer();transfer.items.add(new File([blob],'Two inks.png',{type:'image/png'}));
+    const transfer=new DataTransfer();transfer.items.add(new File([blob],'Two inks '.repeat(20)+'.png',{type:'image/png'}));
     input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));`)
   await expectSaved('upload applies immediately', c => c?.type === 'image' && c.asset)
+  await checkBodyWidth('Long uploaded filename')
   await wait('document.querySelector(".doc-topbar.over-cover .doc-tools[data-cover-surface=dark]")')
   await wait('document.querySelector(".doc-topbar.over-cover .doc-tab[data-cover-surface=light]")')
   await click('.cover-adjust')
@@ -173,7 +190,9 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   try {
     await click(edit)
     await wait('document.querySelector(".cover-picker [role=tab][aria-selected=true]")?.textContent.trim()==="上传"')
+    await checkBodyWidth('Narrow upload settings')
     await tab('图库')
+    await checkBodyWidth('Narrow gallery')
     assert(await ev(`const panel=document.querySelector('.cover-picker'), rect=panel.getBoundingClientRect();
       return rect.left>=0 && rect.right<=innerWidth+1 && rect.bottom<=innerHeight+1 && panel.scrollWidth<=panel.clientWidth+1`), 'narrow picker must fit')
     await click(radio('ink-leaf'))
@@ -191,22 +210,27 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     await send('Emulation.clearDeviceMetricsOverride')
   }
 
-  // A file created in an older release must keep its unavailable material.
-  const metaUrl = new URL('api/metadata', appUrl)
-  const metadata = await fetch(new URL('api/metadata?path=' + encodeURIComponent(file), appUrl)).then(r=>r.json())
-  const oldCover = {type:'gradient', preset:'ribbon', height:'small', animated:false, seed:513,
-    colors:['#315072','#c4baab','#dda871','#b8c6c3']}
-  const updated = await fetch(metaUrl,{method:'PUT', headers:{'content-type':'application/json'},
-    body:JSON.stringify({path:file, revision:metadata.data.revision, meta:{cover:oldCover}})}).then(r=>r.json())
-  assert(updated.ok, updated.error)
-  const previousTimeOrigin = await ev('return performance.timeOrigin')
-  await send('Page.reload')
-  await wait('performance.timeOrigin !== '+previousTimeOrigin)
-  await wait('document.querySelector(".cover-plane canvas,.page-cover canvas")')
-  await click(edit)
-  await tab('图案')
-  await checkTiles(['mist','mesh','grain','pixel'])
-  await close()
-  await closed()
-  assert.deepEqual(await saved(), updated.data.meta.cover)
+  // Opening the picker must preserve a retired cover until its owner changes it.
+  const archivedCovers = [
+    {type:'gradient', preset:'ribbon', height:'small', animated:false, seed:513,
+      colors:['#315072','#c4baab','#dda871','#b8c6c3']},
+    {type:'artwork', artwork:'refraction', height:'large', position:38}
+  ]
+  for (const cover of archivedCovers) {
+    const metadata = await fetch(new URL('api/metadata?path=' + encodeURIComponent(file), appUrl)).then(r=>r.json())
+    const updated = await fetch(new URL('api/metadata', appUrl), {method:'PUT', headers:{'content-type':'application/json'},
+      body:JSON.stringify({path:file, revision:metadata.data.revision, meta:{cover}})}).then(r=>r.json())
+    assert(updated.ok, updated.error)
+    const previousTimeOrigin = await ev('return performance.timeOrigin')
+    await send('Page.reload')
+    await wait('performance.timeOrigin !== '+previousTimeOrigin)
+    const artwork = cover.type === 'artwork'
+    await wait(artwork ? inHeader(cover.artwork) : 'document.querySelector(".cover-plane canvas,.page-cover canvas")')
+    await click(edit)
+    await tab(artwork ? '图库' : '图案')
+    await checkTiles(artwork ? gallery : ['mist','mesh','grain','pixel'])
+    await close()
+    await closed()
+    assert.deepEqual(await saved(), updated.data.meta.cover)
+  }
 }
