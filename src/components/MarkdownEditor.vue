@@ -81,15 +81,7 @@
         </div>
       </Transition>
     </Teleport>
-    <Teleport to="body">
-      <div v-if="imagePreview" ref="lightboxDialog" role="dialog" aria-modal="true" aria-label="图片预览" class="reader-image-lightbox" @click.self="closeImagePreview">
-        <button type="button" class="reader-lightbox-close" aria-label="关闭大图" @click="closeImagePreview"><PhX :size="20" /></button>
-        <figure>
-          <img :src="imagePreview.src" :alt="imagePreview.caption || ''" />
-          <figcaption v-if="imagePreview.caption">{{ imagePreview.caption }}</figcaption>
-        </figure>
-      </div>
-    </Teleport>
+    <ImageLightbox v-if="imagePreview" :image="imagePreview" @close="imagePreview = null" />
   </div>
 </template>
 
@@ -136,7 +128,7 @@ import { API_BASE, assetUrl } from '../utils/api'
 if (import.meta.hot) {
   import.meta.hot.accept(() => window.location.reload())
 }
-import { useDialogFocus } from '../composables/useDialogFocus'
+import ImageLightbox from './ImageLightbox.vue'
 import { useMermaidPreview } from '../composables/useMermaidPreview'
 import { useTableColumnWidths } from '../composables/useTableColumnWidths'
 import { languages as cmLanguages } from '@codemirror/language-data'
@@ -188,9 +180,7 @@ const contextMenu = ref(null)
 const contextItems = ref([])
 const imageTools = ref(null)
 const imageToolsPanel = ref(null)
-const imagePreview = ref(null)
-const lightboxDialog = ref(null)
-useDialogFocus(() => !!imagePreview.value, lightboxDialog, closeImagePreview)
+const imagePreview = shallowRef(null)
 const docLinkCard = ref(null)
 let imageHideTimer = 0
 let docCardHideTimer = 0
@@ -1278,11 +1268,6 @@ async function focusImageCaption(pos) {
   }, 30)
 }
 
-function closeImagePreview() {
-  imagePreview.value = null
-  viewOf()?.focus()
-}
-
 function downloadImage(node) {
   const href = imageAbsolute(node.attrs.src)
   const raw = String(node.attrs.caption || '').trim().replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)
@@ -1307,7 +1292,11 @@ async function imageAction(action, info) {
   }
   hideImageTools()
   if (action === 'preview') {
-    imagePreview.value = { src: imageAbsolute(node.attrs.src), caption: node.attrs.caption || '' }
+    const source = view.nodeDOM(target.pos)?.querySelector?.('.image-wrapper > img')
+    imagePreview.value = {
+      source, editor: view.dom, src: source?.currentSrc || source?.src || assetUrl(node.attrs.src),
+      alt: source?.alt || node.attrs.caption || '', caption: node.attrs.caption || ''
+    }
     return
   }
   if (action === 'caption') {
@@ -1632,12 +1621,11 @@ function onDocScroll(e) {
 function onDocKey(e) {
   if (e.key === 'Escape') {
     clearCopyHint()
-    const hadMenu = !!menu.value || !!styleMenu.value || !!contextMenu.value || !!imageTools.value || !!imagePreview.value || !!docLinkCard.value
+    const hadMenu = !!menu.value || !!styleMenu.value || !!contextMenu.value || !!imageTools.value || !!docLinkCard.value
     closeMenu()
     styleMenu.value = null
     closeContextMenu()
     hideImageTools()
-    imagePreview.value = null
     docLinkCard.value = null
     if (hadMenu) viewOf()?.focus()
   }

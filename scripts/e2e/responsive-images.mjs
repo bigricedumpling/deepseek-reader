@@ -77,6 +77,7 @@ export async function verifyResponsiveImages({send, ev, root, appUrl, sleep}) {
     const expanded = await fitted('Sidebar open')
     const readAlt = () => ev(`return [...document.querySelectorAll(${JSON.stringify(imageSelector)})].slice(0,3).map(image => image.alt)`)
     assert.deepEqual(await readAlt(), ['Coastal panorama','Scaled','2026'], 'Editor lost authored descriptions or read an image ratio as text')
+    await verifyPicturePreview({send, ev, until})
     assert(expanded[4].inColumn && expanded[4].room < expanded[0].room * .6, 'Figure is not in a split column')
     await setSidebar(false)
     await until('Sidebar did not change the available column', async () => (await geometry())[0]?.room > expanded[0].room + 10)
@@ -171,5 +172,89 @@ export async function verifyResponsiveImages({send, ev, root, appUrl, sleep}) {
     assert.equal(fs.readFileSync(docPath,'utf8'),afterDrag,'Read-only layout rewrote image markup')
   } finally {
     await send('Emulation.clearDeviceMetricsOverride')
+  }
+}
+
+async function verifyPicturePreview({send, ev, until}) {
+  const source = '.milkdown-image-block .image-wrapper > img[alt="Scaled"]'
+  const dialog = '.reader-image-lightbox'
+  async function open(context = false) {
+    const target = await ev(`const img = document.querySelector(${JSON.stringify(source)})
+      img.scrollIntoView({block:'center', behavior:'instant'})
+      const r = img.getBoundingClientRect()
+      return {x:r.left+r.width*.15,y:r.top+r.height/2}`)
+    await send('Input.dispatchMouseEvent', {type:'mouseMoved', ...target})
+    if (context) {
+      for (const type of ['mousePressed','mouseReleased'])
+        await send('Input.dispatchMouseEvent', {type, button:'right', buttons:type==='mousePressed'?2:0, clickCount:1, ...target})
+    }
+    const menu = context ? '.editor-context-menu' : '.reader-image-tools'
+    const find = `[...document.querySelectorAll('${menu} button')].find(el=>el.getAttribute('aria-label')==='查看大图'||el.textContent.trim()==='查看大图')`
+    await until('Preview action did not appear in ' + menu, () => ev('return !!' + find))
+    return ev(`const action = ${find}
+      const before = document.querySelector('#main-scroll-container').scrollTop
+      action.click()
+      await new Promise(requestAnimationFrame)
+      const panel = document.querySelector('${dialog}')
+      const photo = panel.querySelector('img'), original = document.querySelector(${JSON.stringify(source)})
+      const anim = photo.getAnimations()[0]
+      if (anim) { anim.pause(); anim.currentTime = 0 }
+      const r = original.getBoundingClientRect(), s = photo.getBoundingClientRect()
+      const result = {anchored:original.classList.contains('reader-lightbox-source'), alt:photo.alt,
+        error:Math.max(Math.abs(r.left-s.left),Math.abs(r.top-s.top),Math.abs(r.width-s.width),Math.abs(r.height-s.height)),
+        before, animated:!!anim, focused:panel.contains(document.activeElement)}
+      if (anim) anim.play()
+      return result`)
+  }
+  const closed = () => until('Picture preview did not close', () => ev(`return !document.querySelector('${dialog}')`))
+  const settled = () => until('Image animation did not settle', () => ev(`return document.querySelector('${dialog} img')?.getAnimations().length===0`))
+  const opened = await open()
+  assert(opened.animated && opened.anchored && opened.focused && opened.alt==='Scaled' && opened.error < 2, JSON.stringify(opened))
+  await settled()
+  const returned = await ev(`const panel = document.querySelector('${dialog}')
+    const img = panel.querySelector('img'), original = document.querySelector(${JSON.stringify(source)})
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))
+    const flight = img.getAnimations()[0]
+    flight.pause(); flight.currentTime = flight.effect.getTiming().duration - .05
+    const a = img.getBoundingClientRect(), b = original.getBoundingClientRect()
+    const error = Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y),Math.abs(a.width-b.width),Math.abs(a.height-b.height))
+    flight.play();return error`)
+  assert(returned < 2, 'Image did not return to the selected source: ' + returned)
+  await closed()
+  assert(await ev(`const source = document.querySelector(${JSON.stringify(source)})
+    return document.activeElement === source && getComputedStyle(source).opacity==='1' &&
+      document.querySelector('#main-scroll-container').scrollTop===${opened.before}`), 'Focus or reading position moved on close')
+
+  await open(true)
+  await settled()
+  const fallback = await ev(`const original = document.querySelector(${JSON.stringify(source)})
+    original.style.display='none'
+    const panel = document.querySelector('${dialog}');panel.querySelector('button').click()
+    const frames = panel.querySelector('img').getAnimations()[0].effect.getKeyframes()
+    original.style.display=''
+    return frames.at(-1).opacity==='0' && frames.at(-1).transform==='none'`)
+  assert(fallback, 'Hidden source should fade out at the current location')
+  await closed()
+  await open(true)
+  const interruption = await ev(`const panel = document.querySelector('${dialog}'), img = panel.querySelector('img')
+    const entering = img.getAnimations()[0]
+    if (!entering) return false
+    entering.pause(); entering.currentTime = entering.effect.getTiming().duration * .42
+    const before = img.getBoundingClientRect()
+    panel.querySelector('button').click()
+    const leaving = img.getAnimations()[0]
+    leaving.pause(); leaving.currentTime = 0
+    const after = img.getBoundingClientRect(); leaving.play()
+    return Math.abs(before.x - after.x) < 2 && Math.abs(before.width - after.width) < 2`)
+  assert(interruption, 'An interrupted opening animation jumped before returning to the source')
+  await closed()
+  try {
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]})
+    const reduced = await open(true)
+    assert(!reduced.animated, 'Reduced-motion preview should open directly')
+    await ev(`document.querySelector('${dialog}').click()`)
+    await closed()
+  } finally {
+    await send('Emulation.setEmulatedMedia',{features:[]})
   }
 }

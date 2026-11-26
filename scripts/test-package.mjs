@@ -17,6 +17,9 @@ try{
    assert(entries.includes('package/runtime/dist/covers/' + id + '.webp'))
    if (!archived) assert(entries.includes('package/runtime/dist/covers/' + id + '-thumb.webp'))
  }
+ for (const id of ['ink-index','ink-leaf','ink-margin']) {
+   assert(entries.includes('package/runtime/dist/covers/' + id + '-ink.svg'), 'missing ink overlay for ' + id)
+ }
  assert(entries.includes('package/runtime/dist/licenses/Met-Ejiri.txt'))
  assert(entries.includes('package/platform.js'))
  assert(!entries.some(name=>/(?:^|\/)(?:\.runtime|route-aliases)\//.test(name)), 'deployment-specific route mappings must stay local')

@@ -38,7 +38,7 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     const nodes = await ev(`return [...document.querySelectorAll('.cover-tile')].map(label=>{
       const input=label.querySelector('input');return [input.value, label.innerText.trim(), input.getAttribute('aria-label')]
     })`)
-    assert.deepEqual(nodes.map(n => n[0]).sort(), ids.sort())
+    assert.deepEqual(nodes.map(n => n[0]), ids)
     assert(nodes.every(([, text, accessibleName]) => !text && accessibleName?.trim()))
   }
   const trigger = '.page-header-controls button:last-child', edit = '.cover-actions button'
@@ -48,13 +48,50 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   await send('Page.navigate', { url })
   await wait('document.querySelector(".ProseMirror h1")?.textContent === "Materials"')
   await click(trigger)
-  await wait('document.querySelectorAll(".cover-tile img").length === 4 && [...document.querySelectorAll(".cover-tile img")].every(im=>im.complete && im.naturalWidth)')
-  await checkTiles(['overlap','resonance','register','refraction'])
+  const inkSeries = ['ink-index', 'ink-leaf', 'ink-margin']
+  const gallery = [...inkSeries, 'overlap', 'resonance', 'register', 'refraction']
+  await wait(`document.querySelectorAll('.cover-tile img').length === ${gallery.length} && [...document.querySelectorAll('.cover-tile img')].every(im => im.complete && im.naturalWidth)`)
+  await checkTiles(gallery)
+  assert(await ev(`return [...document.querySelectorAll('.cover-tile')].every(tile =>
+    new URL(tile.querySelector('img').src).pathname.endsWith('/' + tile.querySelector('input').value + '-thumb.webp'))`))
   assert.equal(await saved(), null)
   assert(await ev('return !document.querySelector(".page-cover, .cover-done, .cover-cancel")'))
-  await click(radio('refraction'))
-  await wait(inHeader('refraction'))
-  await expectSaved('first click writes full art', c => c?.artwork === 'refraction')
+  for (const id of inkSeries) {
+    await click(radio(id))
+    await wait(`document.querySelector('.cover-plane svg[data-cover-ink="${id}"] use')?.getAttribute('href')?.endsWith('/covers/${id}-ink.svg#nib')`)
+    assert(await ev(`const svg=document.querySelector('.cover-plane svg[data-cover-ink="${id}"]')
+      const img=svg.parentElement.querySelector('.document-cover-image'), viewport=img.getBoundingClientRect()
+      const aspect=img.naturalWidth/img.naturalHeight, box=svg.getBoundingClientRect()
+      const w=Math.max(viewport.width,viewport.height*aspect), h=w/aspect
+      return Math.abs(svg.viewBox.baseVal.width/svg.viewBox.baseVal.height-aspect)<.001 &&
+        Math.abs(box.width-w)<1 && Math.abs(box.height-h)<1 &&
+        Math.abs(box.left-viewport.left-(viewport.width-w)/2)<1 && Math.abs(box.top-viewport.top-(viewport.height-h)/2)<1`),
+      'the new ink must trace the same crop as the printed line on ' + id)
+    await wait(inHeader(id))
+    await expectSaved('first click writes full artwork ' + id, c => c?.artwork === id)
+  }
+
+  await wait('!document.querySelector(".cover-ink-pass")')
+
+  await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion', value:'reduce'}]})
+  try {
+    await ev('performance.clearResourceTimings()')
+    await click(radio('ink-index'))
+    await wait(inHeader('ink-index'))
+    await expectSaved('ink choice with reduced motion', c => c?.artwork === 'ink-index')
+    assert(await ev(`return !document.querySelector('.cover-ink-pass') &&
+      !performance.getEntriesByType('resource').some(entry => entry.name.endsWith('-ink.svg'))`))
+  } finally {
+    await send('Emulation.setEmulatedMedia', {features:[]})
+  }
+  await close()
+  await closed()
+  await send('Page.reload')
+  await wait(inHeader('ink-index'))
+  assert(await ev(`return !document.querySelector('.cover-ink-pass') &&
+    !performance.getEntriesByType('resource').some(entry => entry.name.endsWith('-ink.svg'))`),
+    'opening a saved document must not replay its cover stroke')
+  await click(edit)
 
   // A rejected choice leaves the saved cover intact and allows another selection.
   await ev(`const original=window.fetch; window.fetch=function(input,init) {
@@ -66,7 +103,7 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   }`)
   await click(radio('resonance'))
   await wait('document.querySelector(".cover-picker [role=alert]")?.textContent.trim()')
-  assert.equal((await saved()).artwork, 'refraction')
+  assert.equal((await saved()).artwork, 'ink-index')
 
   // Hold the first real metadata write while two more choices and a dismissal arrive.
   await ev(`const original=window.fetch; window.fetch=async function(input,init) {
@@ -139,8 +176,8 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     await tab('图库')
     assert(await ev(`const panel=document.querySelector('.cover-picker'), rect=panel.getBoundingClientRect();
       return rect.left>=0 && rect.right<=innerWidth+1 && rect.bottom<=innerHeight+1 && panel.scrollWidth<=panel.clientWidth+1`), 'narrow picker must fit')
-    await click(radio('overlap'))
-    await expectSaved('narrow gallery choice', c => c?.artwork === 'overlap')
+    await click(radio('ink-leaf'))
+    await expectSaved('narrow gallery choice', c => c?.artwork === 'ink-leaf')
     await click('.cover-remove')
     await expectSaved('remove persists immediately', c => c === null)
     await wait('!document.querySelector(".page-cover")')

@@ -1192,18 +1192,20 @@ body[data-document-style]:not([data-document-style="default"]) .crepe-host {
 .reader-doc-card-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
 .reader-doc-card-copy strong{font:600 12.5px/1.4 var(--font-sans);color:var(--c-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .reader-doc-card-copy small{font:10.5px/1.45 var(--font-sans);color:var(--c-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.reader-image-lightbox{position:fixed;inset:0;z-index:2300;display:flex;align-items:center;justify-content:center;padding:40px;background:rgb(18 18 18 / .72);backdrop-filter:blur(3px)}
-.reader-image-lightbox figure{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:min(1120px,92vw);max-height:90dvh;margin:0}
-.reader-image-lightbox img{display:block;min-height:0;max-width:100%;max-height:calc(90dvh - 48px);object-fit:contain;border-radius:6px;background:#fff;box-shadow:0 18px 60px rgb(0 0 0 / .32)}
+.reader-image-lightbox{position:fixed;inset:0;z-index:2300;display:flex;align-items:center;justify-content:center;padding:40px;overflow:auto;overscroll-behavior:contain}
+.reader-lightbox-scrim{position:absolute;inset:0;pointer-events:none;background:rgb(18 18 18 / .72);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.reader-lightbox-source{opacity:0!important}
+.reader-image-lightbox figure{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:min(1120px,92vw);max-height:90dvh;margin:0}
+.reader-image-lightbox img{display:block;width:auto;height:auto;min-height:0;max-width:100%;max-height:calc(90dvh - 48px);object-fit:contain;border-radius:6px;background:#fff;box-shadow:0 18px 60px rgb(0 0 0 / .32)}
 .reader-image-lightbox figcaption{max-width:min(72ch,100%);max-height:22dvh;overflow:auto;overflow-wrap:anywhere;color:rgb(255 255 255 / .82);font:12.5px/1.6 var(--font-sans);text-align:center}
 .reader-lightbox-close{position:absolute;z-index:1;top:18px;right:20px;display:grid;place-items:center;width:34px;height:34px;border-radius:9px;color:rgb(255 255 255 / .82);background:rgb(0 0 0 / .28)}
 .reader-lightbox-close:hover{background:rgb(0 0 0 / .46);color:#fff}
 @media (prefers-reduced-transparency: reduce), (forced-colors: active) {
-  .reader-image-lightbox { background:#191919; -webkit-backdrop-filter:none; backdrop-filter:none; }
+  .reader-lightbox-scrim { background:#191919; -webkit-backdrop-filter:none; backdrop-filter:none; }
   .reader-lightbox-close { background:#353535; color:#fff; }
 }
 @media (forced-colors: active) {
-  .reader-image-lightbox { background:Canvas; }
+  .reader-lightbox-scrim { background:Canvas; }
   .reader-image-lightbox figcaption { color:CanvasText; }
   .reader-lightbox-close { border:1px solid ButtonText; background:ButtonFace; color:ButtonText; }
 }
