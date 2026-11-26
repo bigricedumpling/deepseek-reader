@@ -4,7 +4,7 @@
 
 | 资产 | 来源 | 随包许可 |
 | --- | --- | --- |
-| 葛饰北斋《骏州江尻》封面 | [纽约大都会艺术博物馆，JP2953](https://www.metmuseum.org/art/collection/search/55735) | 馆方以 [CC0](https://www.metmuseum.org/hubs/open-access) 开放公版图像。随包出处及裁切说明见 `licenses/Met-Ejiri.txt`。 |
+| 葛饰北斋《骏州江尻》封面（旧文档） | [纽约大都会艺术博物馆，JP2953](https://www.metmuseum.org/art/collection/search/55735) | 馆方以 [CC0](https://www.metmuseum.org/hubs/open-access) 开放公版图像。随包出处及裁切说明见 `licenses/Met-Ejiri.txt`。 |
 | Noto Sans SC | Google Fonts / @fontsource/noto-sans-sc | 插件使用 `fonts/Noto-Sans-SC-LICENSE.txt`。产品介绍页使用 Noto Sans SC 可变字体子集，许可见 `site/public/fonts/Noto-Sans-SC-LICENSE.txt`。两者均采用 SIL OFL 1.1。 |
 | Noto Serif SC | Google Fonts / @fontsource/noto-serif-sc | `fonts/Noto-Serif-SC-LICENSE.txt`，SIL OFL 1.1 |
 | 寒蝉楷书 ChillKai | https://github.com/Warren2060/Chillkai | `fonts/ChillKai-LICENSE.txt`，SIL OFL 1.1 |

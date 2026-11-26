@@ -1401,7 +1401,11 @@ const routes = {
     return { ok:true, savedAt:Date.now(), data:{id:n.id,revision:digest(next)} }
   },
   'POST /asset': async body => {
-    const doc=String(body.path||'');assertMd(doc)
+    const doc = String(body.path || '')
+    const abs = assertMd(doc)
+    if (body.documentId && (repo.byId(body.documentId)?.path !== doc || !fs.existsSync(abs))) {
+      throw fault('DOCUMENT_CHANGED', '原文档已移动或移除，请重新选择图片', 409)
+    }
     return {ok:true,data:assets.upload(doc,String(body.mime||''),String(body.data||body.base64||''))}
   },
 

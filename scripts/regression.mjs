@@ -887,7 +887,7 @@ try {
   check('程序封面的小样、动态及可复现静帧', true)
 
   await verifyCoverPicker({ send, ev, root: SB, appUrl, sleep })
-  check('封面试放、取消、图案、上传、局部对比度与窄屏保存', true)
+  check('封面直接保存、连续选择、上传、局部对比度与窄屏移除', true)
 
   await verifySurfaceMotion({ send, ev, root: SB, appUrl, sleep })
   check('浮层在最终位置淡入，PDF 开关查找时正文保持原位', true)

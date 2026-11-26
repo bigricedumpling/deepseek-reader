@@ -2,7 +2,7 @@
 export async function verifyCoverMaterials({ ev, moduleBase = '/src/utils/' }) {
   return ev(`
     const {renderCoverFrame} = await import(${JSON.stringify(moduleBase + 'cover-renderer.js')})
-    const {coverShapes, patternCovers, coverPalettes, coverPaletteNames} =
+    const {patternCovers, coverPalettes} =
       await import(${JSON.stringify(moduleBase + 'cover-presets.js')})
     const doc = document.implementation.createHTMLDocument('cover fixture')
     const create = doc.createElement.bind(doc)
@@ -27,12 +27,12 @@ export async function verifyCoverMaterials({ ev, moduleBase = '/src/utils/' }) {
       for(let i=0;i<a.length;i+=4) delta+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2])
       return delta/(a.length*.75)
     }
-    assert(patternCovers.length===6 && new Set(patternCovers.map(c=>c.preset)).size===6,'Six selectable cover styles')
-    assert(coverPalettes.length===4 && coverPaletteNames.length===4,'Four named palettes')
+    assert(patternCovers.map(c=>c.preset).sort().join()==='grain,mesh,mist,pixel','Four selectable cover styles')
+    assert(coverPalettes.length===4,'Four palettes')
     const metrics = {}
-    for (const cover of patternCovers) {
+    const archived = ['ribbon', 'halftone'].map(preset => ({...patternCovers[0], preset}))
+    for (const cover of [...patternCovers, ...archived]) {
       const id=cover.preset
-      assert(coverShapes.some(([key])=>key===id),'Missing style label for '+id)
       for (const [w,h] of [[540,160],[122,46]]) {
         const c=canvas(w,h), still=canvas(w,h)
         assert(renderCoverFrame(c,cover,0),id+' first frame')

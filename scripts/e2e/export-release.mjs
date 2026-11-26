@@ -215,10 +215,10 @@ try {
   const artFile = (await api('POST', 'doc', {dir:'Samples', name:'Artwork', content:'# Print proof\n'})).file
   const artMeta = await api('GET', 'metadata?path=' + encodeURIComponent(artFile))
   await api('PUT', 'metadata', {path:artFile, revision:artMeta.revision, meta:{
-    cover:{type:'artwork', artwork:'overlap', height:'small', position:65}
+    cover:{type:'artwork', artwork:'ejiri', height:'small', position:65}
   }})
   await send('Page.navigate', {url:base + '/doc/Samples/Artwork?lib=Samples'})
-  await waitFor('saved full artwork on the document', () => evaluate("document.querySelector('.editor-shell') && document.querySelector('.cover-plane img[src$=\"/covers/overlap.webp\"]')?.naturalWidth > 500"))
+  await waitFor('saved full artwork on the document', () => evaluate("document.querySelector('.editor-shell') && document.querySelector('.cover-plane img[src$=\"/covers/ejiri.webp\"]')?.naturalWidth > 500"))
   await clickExport('Markdown 和附件')
   const artZip = path.join(downloads, 'Artwork.zip')
   await waitFor('artwork Markdown export', () => fs.existsSync(artZip))
@@ -228,20 +228,25 @@ try {
   await clickExport('网页')
   const artHtml = path.join(downloads, 'Artwork.html')
   await waitFor('artwork HTML export', () => fs.existsSync(artHtml))
-  const artSource = fs.readFileSync(path.join(runtime, 'dist/covers/overlap.webp'))
+  const artSource = fs.readFileSync(path.join(runtime, 'dist/covers/ejiri.webp'))
   assert(fs.readFileSync(artHtml, 'utf8').includes('data:image/webp;base64,' + artSource.toString('base64')))
   await evaluate("document.querySelector('.cover-actions button').click()")
-  await waitFor('featured choices', () => evaluate("!!document.querySelector('.cover-picker input[value=resonance]')"))
-  await evaluate("document.querySelector('.cover-picker input[value=resonance]').click()")
-  await waitFor('unsaved print preview', () => evaluate("document.querySelector('.cover-plane img[src$=\"/covers/resonance.webp\"]')?.naturalWidth > 500"))
+  await waitFor('featured choices', () => evaluate("!!document.querySelector('.cover-picker input[value=refraction]')"))
+  assert.equal((await api('GET', 'metadata?path=' + encodeURIComponent(artFile))).meta.cover.artwork, 'ejiri')
+  await evaluate("document.querySelector('.cover-picker input[value=refraction]').click()")
+  await waitFor('selected full artwork on the document', () => evaluate("document.querySelector('.cover-plane img[src$=\"/covers/refraction.webp\"]')?.naturalWidth > 500"))
+  const selectedArt = await waitFor('selected artwork persisted', async () => {
+    const { meta } = await api('GET', 'metadata?path=' + encodeURIComponent(artFile))
+    return meta.cover?.artwork === 'refraction' && meta.cover
+  })
   await evaluate(`window.addEventListener('beforeprint', () => {
     const img = document.querySelector('.typocket-print .page-cover.small img')
     window.printedArtwork = [img?.getAttribute('src'), img?.style.objectPosition]
   }, {once:true})`)
   const artPdf = await send('Page.printToPDF', {printBackground:true, preferCSSPageSize:true, displayHeaderFooter:false})
   const printedArtwork = await evaluate('window.printedArtwork')
-  assert(printedArtwork[0].endsWith('/covers/overlap.webp'))
-  assert.match(printedArtwork[1], /^(center|50%) 65%$/)
+  assert(printedArtwork[0].endsWith('/covers/refraction.webp'))
+  assert.equal(printedArtwork[1].replace('center', '50%'), '50% ' + selectedArt.position + '%')
   const artPdfPath = path.join(temp, 'artwork.pdf')
   fs.writeFileSync(artPdfPath, Buffer.from(artPdf.data, 'base64'))
   const printImages = execFileSync(process.env.PDFIMAGES_BIN || 'pdfimages', ['-list', artPdfPath], {encoding:'utf8'})
@@ -289,7 +294,7 @@ try {
     return block.scrollWidth > block.clientWidth && block.getBoundingClientRect().right <= innerWidth
       && getComputedStyle(block).overflowX === 'auto' && document.documentElement.scrollWidth <= innerWidth
   })()`), 'long block math scrolls within its column in the offline file')
-  console.log('PASS: isolated workflow, saved edit, byte-identical Markdown, editable ZIP with attachments, offline HTML, embedded static and procedural covers, printed saved artwork during trial, two figures, CORS failure, ' + sheets.length + ' nonempty PDF pages, trash restore; browser ready ' + ready + ' ms at ' + slowdown + 'x CPU slowdown')
+  console.log('PASS: isolated workflow, saved edit, byte-identical Markdown, editable ZIP with attachments, offline HTML, embedded static and procedural covers, printed directly applied artwork and exported an archived cover, two figures, CORS failure, ' + sheets.length + ' nonempty PDF pages, trash restore; browser ready ' + ready + ' ms at ' + slowdown + 'x CPU slowdown')
 } finally {
   socket?.close()
   await stop(chrome)

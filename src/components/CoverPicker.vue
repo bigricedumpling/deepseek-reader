@@ -1,61 +1,60 @@
 <template>
   <Teleport to="body">
     <Transition name="pop" appear @after-leave="emit('dismiss')">
-      <div v-if="visible" class="cover-dismiss" @pointerdown.self="cancel">
+      <div v-if="visible" class="cover-dismiss" @pointerdown.self="close">
         <section ref="dialog" class="reader-dialog cover-picker" :style="placement" tabindex="-1"
-          role="dialog" aria-modal="true" aria-label="封面设置" :aria-busy="busy">
+          role="dialog" aria-modal="true" aria-label="封面设置" :aria-busy="saving || decoding">
           <div class="cover-head">
             <div class="cover-tabs" role="tablist" aria-label="封面来源" @keydown="navigateTabs">
               <button v-for="source in sources" :key="source" :id="'cover-tab-'+source" role="tab"
                 :tabindex="tab === source ? 0 : -1" :aria-selected="tab === source" aria-controls="cover-choices"
-                :disabled="busy" @click="changeSource(source)">{{source}}</button>
+                @click="changeSource(source)">{{source}}</button>
             </div>
-            <button class="cover-close" aria-label="关闭" :disabled="busy" @click="cancel"><PhX :size="16"/></button>
+            <button class="cover-close" aria-label="关闭" @click="close"><PhX :size="16"/></button>
           </div>
           <div class="cover-body" role="tabpanel" id="cover-choices" :aria-labelledby="'cover-tab-'+tab">
-            <div v-if="tab==='图库'" class="cover-grid gallery-grid" role="radiogroup" aria-label="图库封面">
+            <div v-if="tab==='图库'" class="cover-grid" role="radiogroup" aria-label="图库封面">
               <label v-for="art in coverArtworks" :key="art.id" class="cover-tile">
-                <input type="radio" name="featured-cover" :value="art.id" :aria-label="art.name" :disabled="busy"
+                <input type="radio" name="featured-cover" :value="art.id" :aria-label="art.name"
                   :checked="draft?.artwork === art.id" @change="selectArt(art.id)" />
                 <span class="cover-thumb"><img :src="art.thumbnail" alt="" />
                   <span v-if="draft?.artwork === art.id" class="cover-mark"><PhCheck :size="12"/></span>
                 </span>
-                <span class="cover-name">{{art.name}}</span>
               </label>
             </div>
             <div v-else-if="tab==='图案'" class="cover-grid" role="radiogroup" aria-label="图案样式">
               <label v-for="choice in patterns" :key="choice.cover.preset" class="cover-tile">
-                <input type="radio" name="pattern-cover" :value="choice.cover.preset" :aria-label="choice.name" :disabled="busy"
-                  :checked="draft?.type === 'gradient' && draft.preset === choice.cover.preset" @change="setPattern(choice.cover)" />
+                <input type="radio" name="pattern-cover" :value="choice.cover.preset" :aria-label="choice.name"
+                  :checked="draft?.type === 'gradient' && draft.preset === choice.cover.preset" @change="selectPattern(choice.cover)" />
                 <span class="cover-thumb"><GradientCover :cover="choice.cover" :active="false"/>
                   <span v-if="draft?.type === 'gradient' && draft.preset === choice.cover.preset" class="cover-mark"><PhCheck :size="12"/></span>
                 </span>
-                <span class="cover-name">{{choice.name}}</span>
               </label>
             </div>
             <div v-else class="cover-upload">
-              <button v-if="uploaded" class="upload-choice" :aria-pressed="draft?.type==='image'" :disabled="busy" @click="selectUploaded">
+              <button v-if="uploaded" class="upload-choice" :aria-pressed="draft?.type==='image'" @click="selectUploaded">
                 <img :src="uploaded.previewUrl || assetUrl(uploaded.asset)" alt="" />
-                <span>{{imageFile?.name || '已上传的封面'}}</span>
+                <span>{{uploadName || '已上传的封面'}}</span>
                 <PhCheck v-if="draft?.type==='image'" :size="16"/>
               </button>
-              <button class="cover-file-button" :disabled="busy" @click="fileInput.click()">
+              <button class="cover-file-button" @click="fileInput.click()">
                 <PhImage :size="18"/>{{ uploaded ? '更换图片' : '选择本地图片' }}
               </button>
               <small v-if="!uploaded">PNG、JPEG、WebP、GIF，最大 10 MB</small>
               <input ref="fileInput" hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="chooseImage"/>
             </div>
-            <div v-if="selectedSource === tab" class="cover-adjust-bar">
-              <button class="cover-adjust" :aria-expanded="adjust" aria-controls="cover-adjustments" :disabled="busy" @click="adjust=!adjust">
+            <div v-if="draft" class="cover-adjust-bar">
+              <button v-if="selectedSource === tab" class="cover-adjust" :aria-expanded="adjust" aria-controls="cover-adjustments" @click="adjust=!adjust">
                 <PhSlidersHorizontal :size="14"/>调整<PhCaretDown class="adjust-caret" :class="{open:adjust}" :size="12"/>
               </button>
+              <button class="cover-remove" @click="removeCover">移除封面</button>
             </div>
             <div v-if="adjust && selectedSource === tab" id="cover-adjustments" class="cover-adjustments">
               <div v-if="draft.type === 'gradient'" class="cover-pattern-settings">
                 <div class="cover-palette-row">
                   <span>配色</span>
                   <div class="cover-swatches" role="group" aria-label="配色">
-                    <button v-for="(colors,i) in coverPalettes" :key="i" :aria-label="coverPaletteNames[i]" :title="coverPaletteNames[i]" :disabled="busy"
+                    <button v-for="(colors,i) in coverPalettes" :key="i" :aria-label="coverPaletteNames[i]"
                       :aria-pressed="sameColors(colors,draft.colors)" @click="setPalette(colors)">
                       <span :style="{background:'linear-gradient(115deg,'+colors.join(',')+')'}"></span>
                     </button>
@@ -64,31 +63,26 @@
                 <div class="cover-custom" role="group" aria-label="自选颜色">
                   <span>自选</span>
                   <input v-for="(color,i) in draft.colors" :key="i" type="color" :value="color" :aria-label="'颜色 '+(i+1)"
-                    :disabled="busy" @input="setColor(i,$event.target.value)"/>
+                    @input="setColor(i,$event.target.value)" @change="commitAdjustment"/>
                 </div>
                 <div class="cover-variation">
-                  <button class="cover-shuffle" :disabled="busy" @click="shuffle"><PhShuffle :size="14"/>换一版</button>
-                  <button class="cover-flow" role="switch" :aria-checked="!!draft.animated" :disabled="busy" @click="toggleMotion">
+                  <button class="cover-shuffle" @click="shuffle"><PhShuffle :size="14"/>换一版</button>
+                  <button class="cover-flow" role="switch" :aria-checked="!!draft.animated" @click="toggleMotion">
                     动态<span class="cover-switch"></span>
                   </button>
                 </div>
               </div>
               <label v-else class="cover-position-row"><span>上下位置</span>
-                <input type="range" min="0" max="100" :value="draft.position ?? 50" :disabled="busy" @input="setPosition(Number($event.target.value))"/>
+                <input type="range" min="0" max="100" :value="draft.position ?? 50" @input="setPosition(Number($event.target.value))" @change="commitAdjustment"/>
               </label>
               <div class="cover-height-row"><span>封面高度</span>
                 <div class="cover-heights" role="group" aria-label="封面高度">
-                  <button v-for="choice in heights" :key="choice[0]" :aria-pressed="draft.height === choice[0]" :disabled="busy" @click="setHeight(choice[0])">{{choice[1]}}</button>
+                  <button v-for="choice in heights" :key="choice[0]" :aria-pressed="draft.height === choice[0]" @click="setHeight(choice[0])">{{choice[1]}}</button>
                 </div>
               </div>
             </div>
           </div>
           <p v-if="error" class="reader-error" role="alert">{{error}}</p>
-          <footer class="cover-footer">
-            <button v-if="original" class="cover-remove" :disabled="busy" @click="toggleRemove">{{draft ? '移除' : '撤销移除'}}</button>
-            <button class="cover-cancel" :disabled="busy" @click="cancel">取消</button>
-            <button class="cover-done" :disabled="busy || !canApply" @click="apply">{{busy ? '保存中…' : (draft ? '使用封面' : '确认移除')}}</button>
-          </footer>
         </section>
       </div>
     </Transition>
@@ -118,27 +112,60 @@ const sources = ['图库','图案','上传']
 const heights = [['small','矮'],['medium','中'],['large','高']]
 const openedPath = props.path
 const openedId = store.currentSourceId
-const initial = props.original && JSON.parse(JSON.stringify(props.original))
+const initial = props.original || null
 const sourceOf = type => ({artwork:'图库', gradient:'图案', image:'上传'})[type]
 const tab = ref(sourceOf(initial?.type) || '图库')
 const height = ref(initial?.height || 'medium')
 const artwork = (id, position = 50) => ({type:'artwork', artwork:id, position, height:height.value})
-const draft = shallowRef(initial || artwork(coverArtworks[0].id))
+const draft = shallowRef(initial)
 const selectedSource = computed(() => sourceOf(draft.value?.type))
 const uploaded = shallowRef(initial?.type === 'image' ? initial : null)
-const fileInput = ref(null), imageFile = shallowRef(null)
-const adjust = ref(false), busy = ref(false), error = ref(''), visible = ref(true)
+const fileInput = ref(null), uploadName = ref('')
+const adjust = ref(false), saving = ref(false), decoding = ref(false), error = ref(''), visible = ref(true)
 const dialog = ref(null)
-const placement = usePickerPlacement(dialog, computed(() => props.anchor), 420, 'end')
-function fingerprint(cover) {
-  return cover ? JSON.stringify(cover, Object.keys(cover).sort()) : ''
-}
-const initialFingerprint = fingerprint(initial)
-const canApply = computed(() => fingerprint(draft.value) !== initialFingerprint)
-useDialogFocus(visible, dialog, cancel)
-let previousDraft = null, objectUrl = '', mounted = true, imageChoice = 0
+const placement = usePickerPlacement(dialog, computed(() => props.anchor), 420, initial ? 'end' : 'start')
+useDialogFocus(visible, dialog, close)
 const assetUrl = id => API_BASE+'/api/file?asset='+encodeURIComponent(id)
-watch(draft, value => emit('preview', value), {immediate:true, flush:'sync'})
+let saved = initial, revision = store.pageMetaRevision
+let queued = null, localFile = null, fileChoice = 0
+let adjustmentPending = false, closing = false, mounted = true
+
+function sameCover(a, b) {
+  const key = value => value ? JSON.stringify(value, Object.keys(value).sort()) : ''
+  return key(a) === key(b)
+}
+function show(cover) {
+  draft.value = cover
+  if (mounted) emit('preview', cover)
+}
+function setCover(cover, commit = true) {
+  error.value = ''
+  closing = false
+  show(cover)
+  adjustmentPending = !commit
+  if (commit) enqueue()
+}
+function enqueue() {
+  queued = {cover:draft.value, file:localFile}
+  if (!saving.value) void saveSelections()
+}
+function commitAdjustment() {
+  if (!adjustmentPending) return
+  adjustmentPending = false
+  enqueue()
+}
+function close() {
+  closing = true
+  commitAdjustment()
+  closeWhenReady()
+}
+function closeWhenReady() {
+  if (closing && !saving.value && !decoding.value) visible.value = false
+}
+function dismissFileChoice() {
+  fileChoice++
+  decoding.value = false
+}
 
 function sameColors(a, b) {
   return a?.join().toLowerCase() === b?.join().toLowerCase()
@@ -159,23 +186,26 @@ const patterns = computed(() => patternCovers.map(preset => {
 
 function changeSource(source) {
   if (tab.value === source) return
-  imageChoice++
+  commitAdjustment()
   tab.value = source
   adjust.value = false
-  error.value = ''
 }
 function selectArt(id) {
-  draft.value = artwork(id, initial?.artwork === id ? initial.position : 50)
-  error.value = ''
+  dismissFileChoice()
+  setCover(artwork(id, saved?.artwork === id ? saved.position : 50))
 }
-function setPattern(value) {
-  draft.value = {...value,height:height.value}
-  patternDrafts.value[value.preset] = draft.value
-  error.value = ''
+function setPattern(value, commit = true) {
+  const next = {...value,height:height.value}
+  patternDrafts.value[value.preset] = next
+  setCover(next, commit)
 }
-function setPalette(colors) {
+function selectPattern(value) {
+  dismissFileChoice()
+  setPattern(value)
+}
+function setPalette(colors, commit = true) {
   userPalette.value = [...colors]
-  setPattern({...draft.value,colors:userPalette.value})
+  setPattern({...draft.value,colors:userPalette.value}, commit)
 }
 function toggleMotion() {
   userMotion.value = !draft.value.animated
@@ -184,104 +214,164 @@ function toggleMotion() {
 function setColor(index, value) {
   const colors = [...draft.value.colors]
   colors[index] = value
-  setPalette(colors)
+  setPalette(colors, false)
 }
 function shuffle() {
   const offset = 1 + Math.floor(Math.random() * 999)
   setPattern({...draft.value,seed:(Math.floor(draft.value.seed || 0) + offset) % 1000})
 }
 function setPosition(position) {
-  draft.value = {...draft.value, position}
-  if (draft.value.type === 'image') uploaded.value = draft.value
+  const next = {...draft.value,position}
+  if (next.type === 'image') uploaded.value = next
+  setCover(next, false)
 }
 function setHeight(value) {
   height.value = value
-  draft.value = {...draft.value, height:value}
+  setCover({...draft.value,height:value})
+}
+function removeCover() {
+  dismissFileChoice()
+  adjust.value = false
+  setCover(null)
 }
 function selectUploaded() {
-  if (uploaded.value) draft.value = {...uploaded.value,height:height.value}
+  dismissFileChoice()
+  if (uploaded.value) setCover({...uploaded.value,height:height.value})
+}
+function report(message) {
+  closing = false
+  if (mounted) error.value = message
+  else store.setError('封面保存失败：' + message)
 }
 async function chooseImage(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
-  if (!file || busy.value) return
-  if (file.size > 10 * 1024 * 1024) { error.value = '图片不能超过 10 MB'; return }
-  if (!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)) { error.value = '请选择 PNG、JPEG、WebP 或 GIF 图片'; return }
-  const ticket = ++imageChoice
+  if (!file) return
+  const ticket = ++fileChoice
+  if (file.size > 10 * 1024 * 1024 || !['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)) {
+    decoding.value = false
+    report(file.size > 10 * 1024 * 1024 ? '图片不能超过 10 MB' : '请选择 PNG、JPEG、WebP 或 GIF 图片')
+    return
+  }
   const url = URL.createObjectURL(file)
-  const image = new Image()
-  image.src = url
-  try { await image.decode() }
-  catch {
-    URL.revokeObjectURL(url)
-    if (ownsPreview() && visible.value && ticket === imageChoice && tab.value === '上传') error.value = '无法预览这张图片，请选择有效的图片文件。'
-    return
-  }
-  if (!ownsPreview() || !visible.value || busy.value || ticket !== imageChoice || tab.value !== '上传') {
-    URL.revokeObjectURL(url)
-    return
-  }
-  const previousUrl = objectUrl
-  objectUrl = url
-  imageFile.value = file
-  uploaded.value = {type:'image',previewUrl:objectUrl,position:50,height:height.value}
-  selectUploaded()
-  if (previousUrl) URL.revokeObjectURL(previousUrl)
-  error.value = ''
-}
-function toggleRemove() {
-  if (draft.value) { previousDraft = draft.value; draft.value = null }
-  else draft.value = previousDraft || initial
-  adjust.value = false
-  error.value = ''
-}
-function cancel() {
-  if (busy.value) return
-  visible.value = false
-  emit('preview', undefined)
-}
-function ownsPreview() {
-  return mounted && store.currentPath === openedPath && store.currentSourceId === openedId && !store.currentReadonly
-}
-async function apply() {
-  if (busy.value || !canApply.value || !ownsPreview()) return
-  busy.value = true
-  error.value = ''
+  decoding.value = true
   try {
-    if (fingerprint(store.pageMeta.cover) !== initialFingerprint) {
-      throw Error('这篇文档的封面已在别处更改。请关闭后重新打开封面选择器。')
-    }
-    const next = draft.value && {...draft.value}
-    if (next?.type === 'image' && !next.asset) {
-      const file = imageFile.value
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result.split(',')[1])
-        reader.onerror = () => reject(new Error('无法读取这张图片'))
-        reader.readAsDataURL(file)
-      })
-      if (!ownsPreview()) return
-      const response = await fetch(API_BASE+'/api/asset',{
-        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:openedPath,mime:file.type,base64})
-      })
-      const result = await response.json()
-      if (!result.ok) throw Error(result.error || '图片上传失败')
-      if (!ownsPreview()) return
-      next.asset = result.data.id
-      uploaded.value = {...uploaded.value,asset:next.asset}
-      draft.value = {...draft.value,asset:next.asset}
-    }
-    if (!ownsPreview()) return
-    if (next) delete next.previewUrl
-    await store.savePageMeta({cover:next})
-    if (ownsPreview()) { visible.value = false; emit('preview',undefined) }
-  } catch (e) {
-    if (ownsPreview()) error.value = e.message || '封面保存失败'
-  } finally { busy.value = false }
+    const image = new Image()
+    image.src = url
+    await image.decode()
+    if (ticket !== fileChoice) return
+    if (localFile) URL.revokeObjectURL(localFile.url)
+    localFile = {file,url,asset:''}
+    uploadName.value = file.name
+    uploaded.value = {type:'image',previewUrl:url,position:50,height:height.value}
+    const shouldClose = closing
+    setCover(uploaded.value)
+    closing = shouldClose
+  } catch {
+    if (ticket === fileChoice) report('无法读取这张图片，请选择有效的图片文件。')
+  } finally {
+    if (localFile?.url !== url) URL.revokeObjectURL(url)
+    if (ticket === fileChoice) decoding.value = false
+    closeWhenReady()
+  }
 }
+async function upload(local) {
+  if (local.asset) return local.asset
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result.split(',')[1])
+    reader.onerror = () => reject(new Error('无法读取这张图片'))
+    reader.readAsDataURL(local.file)
+  })
+  const response = await fetch(API_BASE+'/api/asset',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({path:openedPath,documentId:openedId,mime:local.file.type,base64})
+  })
+  const result = await response.json()
+  if (!result.ok) throw Error(result.error || '图片上传失败')
+  local.asset = result.data.id
+  if (uploaded.value?.previewUrl === local.url) uploaded.value = {...uploaded.value,asset:local.asset}
+  return local.asset
+}
+
+async function persist(cover) {
+  const target = {path:openedPath,id:openedId,revision}
+  try {
+    return await store.savePageMeta({cover}, target)
+  } catch (e) {
+    if (e.code !== 'CONFLICT' || !e.details?.revision) throw e
+    // An Agent may have changed a different page property while this picker was open.
+    if (sameCover(e.details.meta?.cover, saved)) {
+      return await store.savePageMeta({cover},{...target,revision:e.details.revision})
+    }
+    throw e
+  }
+}
+
+// Only one revision can be written at a time. A later click replaces any choice
+// still waiting, and retains the identity of the document even after navigation.
+async function saveSelections() {
+  saving.value = true
+  try {
+    while (queued) {
+      const {cover, file} = queued
+      queued = null
+      try {
+        let next = cover
+        if (cover?.previewUrl) {
+          const asset = cover.asset || await upload(file)
+          if (queued) continue
+          next = {...cover,asset}
+          delete next.previewUrl
+        }
+        if (!sameCover(next, saved)) {
+          const result = await persist(next)
+          saved = result.meta.cover ?? null
+          revision = result.revision
+        }
+        if (!queued && !adjustmentPending && draft.value === cover) show(saved)
+      } catch (e) {
+        if (e.code === 'CONFLICT' && e.details?.revision) {
+          saved = e.details.meta?.cover ?? null
+          revision = e.details.revision
+          queued = null
+          adjustmentPending = false
+        }
+        if (!queued) {
+          adjustmentPending = false
+          adoptSaved()
+          report(e.code === 'CONFLICT' ? '封面已在别处更改，已显示最新版本。' : (e.message || '封面保存失败，请重试。'))
+        }
+      }
+    }
+  } finally {
+    saving.value = false
+    closeWhenReady()
+    if (!mounted && !decoding.value && localFile) URL.revokeObjectURL(localFile.url)
+  }
+}
+function adoptSaved() {
+  height.value = saved?.height || 'medium'
+  if (saved?.type === 'gradient') {
+    patternDrafts.value[saved.preset] = saved
+    userPalette.value = saved.colors
+    userMotion.value = saved.animated
+  }
+  if (saved?.type === 'image') uploaded.value = saved
+  show(saved)
+}
+watch(() => store.pageMetaRevision, value => {
+  if (store.currentPath !== openedPath || store.currentSourceId !== openedId || !value || saving.value || adjustmentPending) return
+  revision = value
+  if (!sameCover(store.pageMeta.cover, saved)) {
+    saved = store.pageMeta.cover ?? null
+    adoptSaved()
+  }
+})
 onBeforeUnmount(() => {
   mounted = false
-  if (objectUrl) URL.revokeObjectURL(objectUrl)
+  commitAdjustment()
+  if (localFile && !saving.value && !decoding.value) URL.revokeObjectURL(localFile.url)
 })
 </script>
 <style scoped>
@@ -295,32 +385,28 @@ onBeforeUnmount(() => {
 }
 .cover-head { flex:none; justify-content:space-between; gap:6px; }
 .cover-tabs { gap:2px; }
-.cover-picker button:not(.cover-done) { color:var(--c-sub); }
+.cover-picker button { color:var(--c-sub); }
 .cover-picker button:hover:not(:disabled) { color:var(--c-ink); background-color:var(--c-hover); }
 .cover-picker :is(button,input):focus-visible { outline:2px solid var(--c-focus); outline-offset:2px; }
-.cover-tabs button,.cover-close,.cover-adjust,.cover-shuffle,.cover-flow,.cover-footer button,.cover-heights button {
+.cover-tabs button,.cover-close,.cover-adjust,.cover-shuffle,.cover-flow,.cover-remove,.cover-heights button {
   min-height:30px; padding:4px 9px; border-radius:var(--radius-item); font-size:12px; line-height:1.35;
 }
 .cover-picker button[aria-selected=true],.cover-picker button[aria-pressed=true]:not(.upload-choice) { color:var(--c-ink); background-color:var(--c-active); }
 .cover-close { min-width:30px; display:grid; place-items:center; padding:0; }
 .cover-body { overflow:auto; overscroll-behavior:contain; min-height:0; padding:6px 3px 4px; margin:2px -3px 0; }
-.cover-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px 7px; margin-top:4px; }
-.gallery-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 9px; }
-.gallery-grid .cover-thumb { aspect-ratio:2.65; }
+.cover-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:4px 1px 1px; }
 .cover-picker label.cover-tile { position:relative; display:block; margin:0; min-width:0; cursor:pointer; }
 .cover-picker .cover-tile input[type=radio] {
   position:absolute; width:1px; height:1px; opacity:0; margin:0; padding:0; pointer-events:none;
 }
-.cover-thumb { position:relative; display:block; aspect-ratio:1.85; border-radius:var(--radius-item); background:var(--c-field); }
+.cover-thumb { position:relative; display:block; aspect-ratio:2.65; border-radius:var(--radius-item); background:var(--c-field); }
 .cover-thumb>img,.cover-thumb :deep(.gradient-cover) { width:100%; height:100%; object-fit:cover; display:block; border-radius:inherit; overflow:hidden; }
 .cover-thumb::after { content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; box-shadow:inset 0 0 0 1px var(--surface-menu-border); }
 .cover-tile input:checked+.cover-thumb { outline:1.5px solid var(--c-ink); outline-offset:2px; }
 .cover-tile input:focus-visible+.cover-thumb { outline:2px solid var(--c-focus); outline-offset:2px; }
 .cover-mark { display:grid; place-items:center; position:absolute; bottom:4px; right:4px; width:16px; height:16px; border-radius:50%; background:var(--c-pop); color:var(--c-ink); }
-.cover-name { display:block; margin-top:6px; padding-inline:1px; color:var(--c-sub); font-size:12px; line-height:1.4; }
-.cover-tile input:checked~.cover-name { color:var(--c-ink); }
-.cover-tile:has(input:disabled) { cursor:wait; }
-.cover-adjust-bar { margin:8px -4px 0; }
+.cover-adjust-bar { justify-content:space-between; margin:8px -4px 0; }
+.cover-remove { margin-left:auto; }
 .cover-adjust,.cover-shuffle,.cover-flow { gap:5px; }
 .adjust-caret { transition:transform .14s var(--motion-ease); }
 .adjust-caret.open { transform:rotate(180deg); }
@@ -357,19 +443,14 @@ onBeforeUnmount(() => {
 .upload-choice { display:flex; width:100%; gap:10px; align-items:center; padding:5px; border-radius:var(--radius-control); }
 .upload-choice img { width:74px; height:36px; object-fit:cover; border-radius:5px; }
 .upload-choice span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:start; }
-.cover-picker .cover-footer { display:flex; align-items:center; flex:none; flex-wrap:nowrap; gap:4px; margin:10px 0 0; }
-.cover-cancel { margin-left:auto; }
-.cover-footer .cover-done { padding-inline:14px; color:var(--c-on-accent); background:var(--c-accent); }
-.cover-footer .cover-done:hover:not(:disabled) { color:var(--c-on-accent); background:var(--c-accent-hover); }
-.cover-picker button:disabled { cursor:default; }
 .cover-picker p.reader-error { margin:6px 0 0; font-size:12px; }
 @media(max-width:600px) {
   .cover-picker.reader-dialog { top:auto!important; bottom:max(10px,env(safe-area-inset-bottom)); max-height:64dvh!important; }
-  .cover-thumb { aspect-ratio:2; }
+
 }
 @media(max-height:430px) { .cover-picker.reader-dialog{ max-height:calc(100dvh - 20px)!important; } }
 @media(pointer:coarse) {
-  .cover-head button,.cover-adjust,.cover-variation button,.cover-footer button,.cover-heights button,.cover-file-button { min-height:44px; min-width:44px; }
+  .cover-head button,.cover-adjust,.cover-variation button,.cover-remove,.cover-heights button,.cover-file-button { min-height:44px; min-width:44px; }
   .cover-swatches button { height:44px; padding:7px 3px; }
   .cover-picker .cover-custom input[type=color] { width:34px;height:44px;padding:7px 2px; }
 }

@@ -3,86 +3,116 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
-  const lib = 'Cover studio'
-  const file = lib + '/Materials.md'
+  const lib = 'Cover studio', file = lib + '/Materials.md'
   const url = new URL('doc/' + lib + '/Materials?lib=' + encodeURIComponent(lib), appUrl).href
   fs.mkdirSync(path.join(root, lib))
   fs.writeFileSync(path.join(root, file), '# Materials\n\nLight passes through both layers.\n')
   async function saved() {
-    const r = await fetch(new URL('api/metadata?path=' + encodeURIComponent(file), appUrl)).then(r => r.json())
-    assert(r.ok)
-    return r.data.meta.cover ?? null
+    const result = await fetch(new URL('api/metadata?path=' + encodeURIComponent(file), appUrl)).then(r => r.json())
+    assert(result.ok)
+    return result.data.meta.cover ?? null
   }
-  async function wait(expression) {
-    for (let i = 0; i < 140; i++) {
-      if (await ev('return !!(' + expression + ')')) return
+  async function until(read, label) {
+    for (let i = 0; i < 160; i++) {
+      const result = await read()
+      if (result) return result
       await sleep(50)
     }
-    throw Error('Cover picker timed out: ' + expression)
+    throw Error('Cover picker timed out: ' + label)
   }
+  const wait = expression => until(() => ev('return !!(' + expression + ')'), expression)
+  const expectSaved = (label, predicate) => until(async () => predicate(await saved()), label)
+  const radio = id => '.cover-picker input[type=radio][value="' + id + '"]'
+  const inHeader = id => '[...document.querySelectorAll(".cover-plane img,.page-cover img")].some(i=>i.complete && i.naturalWidth && new URL(i.src).pathname.endsWith("/' + id + '.webp"))'
   async function click(selector) {
-    await wait('document.querySelector(' + JSON.stringify(selector) + ')')
-    await ev('document.querySelector(' + JSON.stringify(selector) + ').click()')
+    const node = 'document.querySelector(' + JSON.stringify(selector) + ')'
+    await wait(node)
+    await ev(node + '.click()')
   }
   async function tab(label) {
     const option = '[...document.querySelectorAll(".cover-picker [role=tab]")].find(b => b.textContent.trim() === ' + JSON.stringify(label) + ')'
     await wait(option)
     await ev(option + '.click()')
   }
-  const radio = name => '.cover-picker input[type=radio][aria-label="' + name + '"]'
-  const inHeader = artwork => '[...document.querySelectorAll(".cover-plane img,.page-cover img")].some(i=>i.complete && i.naturalWidth && new URL(i.src).pathname.endsWith("/' + artwork + '.webp"))'
-  const trigger = '.page-header-controls button:last-child'
-  const edit = '.cover-actions button'
+  async function checkTiles(ids) {
+    const nodes = await ev(`return [...document.querySelectorAll('.cover-tile')].map(label=>{
+      const input=label.querySelector('input');return [input.value, label.innerText.trim(), input.getAttribute('aria-label')]
+    })`)
+    assert.deepEqual(nodes.map(n => n[0]).sort(), ids.sort())
+    assert(nodes.every(([, text, accessibleName]) => !text && accessibleName?.trim()))
+  }
+  const trigger = '.page-header-controls button:last-child', edit = '.cover-actions button'
+  const close = () => click('.cover-close')
+  const closed = () => wait('!document.querySelector(".cover-picker")')
+  const colors = () => ev('return [...document.querySelectorAll(".cover-custom input")].map(i=>i.value)')
   await send('Page.navigate', { url })
   await wait('document.querySelector(".ProseMirror h1")?.textContent === "Materials"')
   await click(trigger)
-  await wait(inHeader('overlap'))
   await wait('document.querySelectorAll(".cover-tile img").length === 4 && [...document.querySelectorAll(".cover-tile img")].every(im=>im.complete && im.naturalWidth)')
+  await checkTiles(['overlap','resonance','register','refraction'])
   assert.equal(await saved(), null)
-  await click(radio('骏州江尻'))
-  await wait(inHeader('ejiri'))
-  await click(radio('套印'))
-  await wait(inHeader('register'))
-  await click('.cover-cancel')
-  await wait('!document.querySelector(".page-cover, .cover-picker")')
-  assert.equal(await saved(), null)
+  assert(await ev('return !document.querySelector(".page-cover, .cover-done, .cover-cancel")'))
+  await click(radio('refraction'))
+  await wait(inHeader('refraction'))
+  await expectSaved('first click writes full art', c => c?.artwork === 'refraction')
 
-  await click(trigger)
-  await click(radio('振纹'))
-  await click('.cover-done')
-  await wait('!document.querySelector(".cover-picker")')
-  assert.equal((await saved()).artwork, 'resonance')
+  // A rejected choice leaves the saved cover intact and allows another selection.
+  await ev(`const original=window.fetch; window.fetch=function(input,init) {
+    if(init?.method==='PUT' && new URL(input.url || input,location.href).pathname.endsWith('/api/metadata')) {
+      window.fetch=original
+      return Promise.resolve(Response.json({ok:false,error:'封面测试写入失败'}, {status:503}))
+    }
+    return original.call(this,input,init)
+  }`)
+  await click(radio('resonance'))
+  await wait('document.querySelector(".cover-picker [role=alert]")?.textContent.trim()')
+  assert.equal((await saved()).artwork, 'refraction')
+
+  // Hold the first real metadata write while two more choices and a dismissal arrive.
+  await ev(`const original=window.fetch; window.fetch=async function(input,init) {
+    if(init?.method==='PUT' && new URL(input.url || input,location.href).pathname.endsWith('/api/metadata')) {
+      window.fetch=original
+      await new Promise(resolve=>{window.finishCoverWrite=resolve})
+    }
+    return original.call(this,input,init)
+  }`)
+  await click(radio('overlap'))
+  await wait('typeof window.finishCoverWrite==="function"')
+  await click(radio('resonance'))
+  await click(radio('register'))
+  await wait(inHeader('register'))
+  await close()
+  await ev('window.finishCoverWrite()')
+  await closed()
+  await expectSaved('last choice survives closing during an earlier write', c => c?.artwork === 'register')
   const timeOrigin = await ev('return performance.timeOrigin')
   await send('Page.reload')
   await wait('performance.timeOrigin !== '+timeOrigin)
-  await wait(inHeader('resonance'))
+  await wait(inHeader('register'))
   await click(edit)
-  await wait('document.querySelector(' + JSON.stringify(radio('振纹')) + ')?.checked')
+  await wait('document.querySelector(' + JSON.stringify(radio('register')) + ')?.checked')
   await tab('图案')
-  await click(radio('流线'))
+  await checkTiles(['mist','mesh','grain','pixel'])
+  await click(radio('mesh'))
   await wait('document.querySelector(".page-cover canvas,.cover-plane canvas")')
+  await expectSaved('pattern saved on selection', c => c?.preset === 'mesh')
   await click('.cover-adjust')
   await click('.cover-swatches button:nth-child(2)')
-  const colorValues = () => ev('return [...document.querySelectorAll(".cover-custom input")].map(input=>input.value)')
-  const palette = await colorValues()
+  const palette = await colors()
   assert.equal(palette.length, 3)
+  await expectSaved('palette saved without confirmation', c => c?.colors.join() === palette.join())
+  const seed = (await saved()).seed
   await click('.cover-shuffle')
-  assert.deepEqual(await colorValues(), palette)
-  await click(radio('像素'))
-  await click(radio('流线'))
-  await wait('document.querySelector(' + JSON.stringify(radio('流线')) + ')?.checked')
-  assert.deepEqual(await colorValues(), palette)
-  assert.equal((await saved()).artwork, 'resonance')
+  await expectSaved('shuffle keeps chosen colors', c => c?.seed !== seed && c?.colors.join() === palette.join())
+  await click(radio('pixel'))
   await send('Input.dispatchKeyEvent', { type:'keyDown', key:'Escape', code:'Escape' })
-  await wait('!document.querySelector(".cover-picker")')
-  await wait(inHeader('resonance'))
+  await closed()
+  await expectSaved('escape preserves applied pattern', c => c?.preset === 'pixel')
 
-  // With the outline open the right controls sit on the outline's own background.
   if (await ev('return !!document.querySelector(".doc-tools.over-outline")')) {
     await click('.toc-collapse-chip')
     await wait('!document.querySelector(".doc-tools.over-outline")')
   }
-  // A two-tone local upload exercises live preview and the real over-cover controls.
   await click(edit)
   await tab('上传')
   await ev(`const c=document.createElement('canvas'); c.width=1000;c.height=240;
@@ -91,37 +121,55 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
     const input=document.querySelector('.cover-picker input[type=file]');
     const transfer=new DataTransfer();transfer.items.add(new File([blob],'Two inks.png',{type:'image/png'}));
     input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));`)
-  await wait('[...document.querySelectorAll(".cover-plane img,.page-cover img")].some(im=>im.src.startsWith("blob:") && im.naturalWidth===1000)')
+  await expectSaved('upload applies immediately', c => c?.type === 'image' && c.asset)
   await wait('document.querySelector(".doc-topbar.over-cover .doc-tools[data-cover-surface=dark]")')
   await wait('document.querySelector(".doc-topbar.over-cover .doc-tab[data-cover-surface=light]")')
-  assert.equal((await saved()).artwork, 'resonance')
-  await click('.cover-done')
-  await wait('!document.querySelector(".cover-picker")')
-  assert.equal((await saved()).type, 'image')
-
+  await click('.cover-adjust')
+  await ev(`const slider=document.querySelector('.cover-position-row input[type=range]')
+    for (const n of [39,54,76]) {slider.value=n;slider.dispatchEvent(new Event('input',{bubbles:true}))}`)
+  assert.notEqual((await saved()).position, 76)
+  await ev('document.querySelector(".cover-position-row input").dispatchEvent(new Event("change",{bubbles:true}))')
+  await expectSaved('crop saved when the slider settles', c => c?.position === 76)
+  await close()
+  await closed()
   await send('Emulation.setDeviceMetricsOverride', {width:390,height:740,deviceScaleFactor:1,mobile:false})
   try {
     await click(edit)
     await wait('document.querySelector(".cover-picker [role=tab][aria-selected=true]")?.textContent.trim()==="上传"')
     await tab('图库')
-    await click(radio('叠片'))
-    await wait(inHeader('overlap'))
     assert(await ev(`const panel=document.querySelector('.cover-picker'), rect=panel.getBoundingClientRect();
       return rect.left>=0 && rect.right<=innerWidth+1 && rect.bottom<=innerHeight+1 && panel.scrollWidth<=panel.clientWidth+1`), 'narrow picker must fit')
-    await click('.cover-done')
-    await wait('!document.querySelector(".cover-picker")')
-    await click(edit)
+    await click(radio('overlap'))
+    await expectSaved('narrow gallery choice', c => c?.artwork === 'overlap')
     await click('.cover-remove')
-    assert.equal((await saved()).artwork, 'overlap')
-    await click('.cover-cancel')
-    await wait('!document.querySelector(".cover-picker")')
-    await wait(inHeader('overlap'))
-    await click(edit)
-    await click('.cover-remove')
-    await click('.cover-done')
-    await wait('!document.querySelector(".cover-picker,.page-cover")')
+    await expectSaved('remove persists immediately', c => c === null)
+    await wait('!document.querySelector(".page-cover")')
+    if (await ev('return !!document.querySelector(".cover-close")')) await close()
+    await closed()
+    await click(trigger)
+    await close()
+    await closed()
     assert.equal(await saved(), null)
   } finally {
     await send('Emulation.clearDeviceMetricsOverride')
   }
+
+  // A file created in an older release must keep its unavailable material.
+  const metaUrl = new URL('api/metadata', appUrl)
+  const metadata = await fetch(new URL('api/metadata?path=' + encodeURIComponent(file), appUrl)).then(r=>r.json())
+  const oldCover = {type:'gradient', preset:'ribbon', height:'small', animated:false, seed:513,
+    colors:['#315072','#c4baab','#dda871','#b8c6c3']}
+  const updated = await fetch(metaUrl,{method:'PUT', headers:{'content-type':'application/json'},
+    body:JSON.stringify({path:file, revision:metadata.data.revision, meta:{cover:oldCover}})}).then(r=>r.json())
+  assert(updated.ok, updated.error)
+  const previousTimeOrigin = await ev('return performance.timeOrigin')
+  await send('Page.reload')
+  await wait('performance.timeOrigin !== '+previousTimeOrigin)
+  await wait('document.querySelector(".cover-plane canvas,.page-cover canvas")')
+  await click(edit)
+  await tab('图案')
+  await checkTiles(['mist','mesh','grain','pixel'])
+  await close()
+  await closed()
+  assert.deepEqual(await saved(), updated.data.meta.cover)
 }

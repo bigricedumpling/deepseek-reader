@@ -13,9 +13,9 @@ try{
  const entries=execFileSync('tar',['-tf',archive],{encoding:'utf8'}).trim().split(/\r?\n/)
  assert(entries.includes('package/runtime/dist/index.html'))
  assert(entries.includes('package/runtime/server/serve.js'))
- for (const { id } of coverArtworkCatalog) {
+ for (const { id, archived } of coverArtworkCatalog) {
    assert(entries.includes('package/runtime/dist/covers/' + id + '.webp'))
-   assert(entries.includes('package/runtime/dist/covers/' + id + '-thumb.webp'))
+   if (!archived) assert(entries.includes('package/runtime/dist/covers/' + id + '-thumb.webp'))
  }
  assert(entries.includes('package/runtime/dist/licenses/Met-Ejiri.txt'))
  assert(entries.includes('package/platform.js'))

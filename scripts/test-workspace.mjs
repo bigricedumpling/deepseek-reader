@@ -45,7 +45,10 @@ try{
  const fresh=await get(a)
  assert.equal((await request('PUT','/api/doc',{path:a,revision:fresh.revision,content:'saved'})).json.ok,true)
  share.setShared('Test',true)
- const asset=(await request('POST','/api/asset',{path:a,mime:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII='})).json.data
+ const staleUpload=await request('POST','/api/asset',{path:a,documentId:'removed-document',mime:'image/png'})
+ assert.equal(staleUpload.status,409)
+ assert.equal(staleUpload.json.code,'DOCUMENT_CHANGED')
+ const asset=(await request('POST','/api/asset',{path:a,documentId:initial.id,mime:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII='})).json.data
  assert.equal((await request('GET',asset.url,null,'guest')).status,200)
  const renamed=(await request('PATCH','/api/doc',{path:a,name:'two'})).json.data.file
  assert.equal((await get(renamed)).id,initial.id)

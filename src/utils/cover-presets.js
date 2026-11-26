@@ -8,14 +8,12 @@ export const coverPalettes = [
 export const coverPaletteNames = ['青瓷', '霞紫', '陶红', '蓝灰']
 
 export const coverShapes = [
-  ['mist', '柔雾'], ['mesh', '色域'], ['ribbon', '流线'],
-  ['grain', '颗粒'], ['pixel', '像素'], ['halftone', '网印']
+  ['mist', '柔雾'], ['mesh', '色域'], ['grain', '颗粒'], ['pixel', '像素']
 ]
 
 // Use the exact same deterministic frame for the swatch, preview, and applied cover.
 const defaults = [
-  ['mist', 0, 27], ['mesh', 1, 21], ['ribbon', 2, 18],
-  ['grain', 2, 12], ['pixel', 3, 57], ['halftone', 0, 30]
+  ['mist', 0, 27], ['mesh', 1, 21], ['grain', 2, 12], ['pixel', 3, 57]
 ]
 export const patternCovers = defaults.map(([preset, palette, seed]) => ({
   type: 'gradient', preset, colors: [...coverPalettes[palette]], seed,

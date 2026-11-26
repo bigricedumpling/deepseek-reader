@@ -59,8 +59,7 @@ function configure(event) {
   if (settings.value || busy.value || store.currentReadonly) return
   coverDocPath = store.currentPath
   const trigger = event.currentTarget
-  // Keep the reading surface and picker independent while a crop or removal is tried.
-  // Resolve the anchor after the first preview is mounted, then keep its place.
+  // The trigger moves when a cover is added or removed; keep the open picker steady.
   let rect, width
   pickerAnchor.value = {
     isConnected: true,

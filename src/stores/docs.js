@@ -1268,13 +1268,34 @@ export const useDocsStore = defineStore('docs', () => {
       if (currentPath.value === path && request === metadataRequest) setError(e.message, 'load')
     }
   }
-  async function savePageMeta(patch) {
-    const path=currentPath.value
-    let result;try{result=await api('PUT','/metadata',{path,revision:pageMetaRevision.value,meta:patch})}catch(e){if(e.code==='CONFLICT')await loadPageMeta();throw e}
-    const {data}=result
-    if(currentPath.value===path){metadataRequest++;pageMeta.value=data.meta;pageMetaRevision.value=data.revision}
-    if (tabs.value.includes(path)) tabIcons.value.set(path, data.meta?.icon || '')
-    const update=list=>{for(const node of list){if(node.file===path)node.meta=data.meta;if(node.children)update(node.children)}};update(treeNodes.value)
+  async function savePageMeta(patch, target = {}) {
+    const path = target.path ?? currentPath.value
+    const id = target.id ?? (path === currentPath.value ? currentSourceId.value : undefined)
+    const revision = target.revision ?? pageMetaRevision.value
+    const isActive = () => id ? currentSourceId.value === id : currentPath.value === path
+    let data
+    try {
+      const result = await api('PUT', '/metadata', { id, path, revision, meta: patch })
+      data = result.data
+    } catch (error) {
+      if (error.code === 'CONFLICT' && isActive()) await loadPageMeta()
+      throw error
+    }
+    if (isActive()) {
+      metadataRequest++
+      pageMeta.value = data.meta
+      pageMetaRevision.value = data.revision
+    }
+    if (tabs.value.includes(data.path) && (currentPath.value !== data.path || isActive())) {
+      tabIcons.value.set(data.path, data.meta.icon || '')
+    }
+    function update(nodes) {
+      for (const node of nodes) {
+        if (node.file === data.path && (!node.id || node.id === data.id)) node.meta = data.meta
+        if (node.children) update(node.children)
+      }
+    }
+    update(treeNodes.value)
     return data
   }
   async function saveConflictMerge(c, merged, mergeBase) {
