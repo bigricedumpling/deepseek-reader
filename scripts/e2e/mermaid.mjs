@@ -21,28 +21,46 @@ export async function verifyMermaid({ send, ev, root, appUrl, sleep }) {
       if (await test()) return
       await sleep(80)
     }
-    throw Error('Mermaid: ' + label)
+    const visible = await ev(`return [...document.querySelectorAll('.ProseMirror .milkdown-code-block')].map(block=>({ source: block.querySelector('code,.cm-content')?.textContent.slice(0,60), svg: !!block.querySelector('.mermaid-preview svg'), error: !!block.querySelector('.mermaid-preview-error') }))`)
+    throw Error('Mermaid: ' + label + ' blocks=' + JSON.stringify(visible))
   }
-  const labels = () => ev(`return [...document.querySelectorAll('.ProseMirror .mermaid-preview > svg')].map(svg =>
-    [...svg.querySelectorAll('text, foreignObject')].map(n => n.textContent.trim()).join(' '))`)
-  async function diagramsReady(edited = false, withTemplate = false) {
-    await wait('inline flowchart, mindmap and sequence labels', async () => {
-      const [chart, tree, sequenceText, template] = await labels()
-      return ['Inputs', edited ? 'Ready' : 'Draft', 'Review'].every(label => chart?.includes(label))
-        && ['Ideas', 'Research', 'Sources', 'Writing'].every(label => tree?.includes(label))
-        && sequenceText?.includes('Save now') && sequenceText.includes('Done')
-        && (!withTemplate || template?.includes('下一步'))
+  const blockAt = index => "document.querySelectorAll('.ProseMirror .milkdown-code-block')[" + index + "]"
+  async function inspectBlock(index, words, options) {
+    const target = blockAt(index)
+    const label = (options.narrow ? 'read-only ' : '') + (words ? words.join(', ') : 'syntax error')
+    // Crepe mounts code blocks as they approach the viewport and retires distant ones.
+    // Check each in reading order, including when a preceding diagram increases the page height.
+    await wait(label, async () => {
+      const state = await ev(`const block=${target}
+        if (!block) return null
+        block.scrollIntoView({block:'center', behavior:'instant'})
+        const svg=block.querySelector('.mermaid-preview > svg'), source=block.querySelector('.cm-content')
+        const bounds=svg?.getBoundingClientRect()
+        return { error:!!block.querySelector('.mermaid-preview-error'),
+          labels: svg && [...svg.querySelectorAll('text, foreignObject')].map(n=>n.textContent.trim()).join(' '),
+          sourceHidden: source && !source.checkVisibility(),
+          fits: bounds && bounds.height>0 && bounds.width>0 && bounds.width<=innerWidth+1 }`)
+      if (!state) return false
+      if (!words) return state.error
+      return !state.error && words.every(word => state.labels?.includes(word)) &&
+        (!options.previewOnly || state.sourceHidden) && (!options.narrow || state.fits)
     })
+  }
+  async function diagramsReady(edited = false, withTemplate = false, options = {}) {
+    const expected = [['Inputs', edited ? 'Ready' : 'Draft', 'Review'], null,
+      ['Ideas','Research','Sources','Writing'], ['Save now','Done']]
+    if (withTemplate) expected.push(['下一步'])
+    for (const [index, words] of expected.entries()) await inspectBlock(index, words, options)
   }
 
   await send('Page.navigate', { url: route('doc') })
-  await diagramsReady()
-  assert.equal(await ev("return document.querySelectorAll('.ProseMirror .mermaid-preview-error').length"), 1)
-  assert(await ev(`return !window.__reader.isDirty && [...document.querySelectorAll('.ProseMirror .mermaid-preview > svg')].every(svg =>
-    !svg.closest('.milkdown-code-block').querySelector('.cm-content').checkVisibility())`), 'valid diagrams should open as figures')
+  await diagramsReady(false, false, {previewOnly:true})
+  assert(await ev('return !window.__reader.isDirty'))
   assert.equal(disk(), original, 'drawing the diagrams changed the authored file')
 
   const block = "document.querySelector('.ProseMirror .milkdown-code-block')"
+  await ev(block + ".scrollIntoView({block:'center', behavior:'instant'})")
+  await wait('source toggle available', () => ev('return !!'+block+".querySelector('.preview-toggle-button')"))
   await ev(block + ".querySelector('.preview-toggle-button').click()")
   await wait('editable diagram source', () => ev('return ' + block + ".querySelector('.cm-content').checkVisibility()"))
   const point = await ev(`const source = ${block}.querySelector('.cm-content')
@@ -69,12 +87,24 @@ export async function verifyMermaid({ send, ev, root, appUrl, sleep }) {
   const edited = original.replace('B[Draft]', 'B[Ready]')
   await wait('saved source preserves newlines, indentation and adjacent fences', () => disk() === edited)
 
-  await ev(`const pm = document.querySelector('.ProseMirror')
-    const paragraph = [...pm.querySelectorAll('p')].find(n => n.textContent === 'End of notes.')
-    pm.focus(); getSelection().collapse(paragraph, paragraph.childNodes.length)`)
+  const paragraphPoint = await ev(`const p = [...document.querySelectorAll('.ProseMirror p')].find(n=>n.textContent==='End of notes.')
+    p.scrollIntoView({block:'center',behavior:'instant'})
+    const end=document.createRange(); end.selectNodeContents(p.firstChild); end.collapse(false)
+    const rect=end.getBoundingClientRect()
+    return { x:rect.right+1, y:rect.top+rect.height/2 }`)
+  for (const type of ['mousePressed','mouseReleased']) {
+    await send('Input.dispatchMouseEvent', {type, button:'left', clickCount:1, ...paragraphPoint})
+  }
+  await wait('caret at the end of the last paragraph', () => ev(`const range=getSelection()?.rangeCount && getSelection().getRangeAt(0)
+    const node=range?.startContainer
+    return range?.collapsed && node?.textContent==='End of notes.' && range.startOffset===node.textContent.length &&
+      document.activeElement?.classList.contains('ProseMirror') &&
+      window.__fold.view().state.selection.$from.parent.textContent === 'End of notes.'`))
   for (const type of ['keyDown', 'keyUp']) {
     await send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
   }
+  await wait('new paragraph is ready for the slash', () => ev(`const pos = window.__fold.view().state.selection.$from
+    return pos.parent.type.name === 'paragraph' && pos.parent.content.size === 0 && getSelection()?.anchorNode?.parentElement?.closest('.ProseMirror') != null`))
   await send('Input.insertText', { text: '/' })
   const item = "[...document.querySelectorAll('.milkdown-slash-menu li[data-index]')].find(n => n.textContent.trim() === '思维导图')"
   await wait('mindmap in slash menu', () => ev('return !!' + item))
@@ -95,13 +125,7 @@ export async function verifyMermaid({ send, ev, root, appUrl, sleep }) {
   try {
     await send('Page.navigate', { url: route('onlyread') })
     await wait('read-only route', () => ev("return window.__reader?.isGuest && !!document.querySelector('.ProseMirror[contenteditable=false]')"))
-    await diagramsReady(true, true)
-    assert.equal(await ev("return document.querySelectorAll('.ProseMirror .mermaid-preview-error').length"), 1)
-    assert(await ev(`const diagrams = [...document.querySelectorAll('.ProseMirror .mermaid-preview > svg')]
-      return diagrams.length === 4 && diagrams.every(svg => {
-        const rect = svg.getBoundingClientRect()
-        return rect.width > 0 && rect.height > 0 && rect.width <= innerWidth + 1
-      })`), 'a diagram overflows a narrow reading viewport')
+    await diagramsReady(true, true, {previewOnly:true, narrow:true})
     assert.equal(disk(), saved)
   } finally {
     await send('Emulation.clearDeviceMetricsOverride')
