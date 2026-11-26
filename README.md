@@ -20,7 +20,7 @@ Open **Aa** to adjust the typeface, font size and text width. The current page r
 
 Choose a light, soft or dark appearance. The Default, Feishu, Notion and Obsidian styles also apply to the sidebar and tabs.
 
-![The same Markdown passage with two reading configurations applied through the Aa panel.](docs/images/readme-typography.webp)
+![Typocket in dark mode with the Feishu style and file tree open. The Aa controls are labeled in English for this illustration. Two close-ups compare typeface, size and line spacing in the same passage.](docs/images/readme-typography.webp)
 
 ## Reading PDFs and HTML pages
 

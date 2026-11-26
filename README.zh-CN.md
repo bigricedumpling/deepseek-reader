@@ -20,7 +20,7 @@ Typocket 是一款本地文档阅读器和 Markdown 编辑器。一个知识库�
 
 外观有浅色、柔和、深色三种模式。主题风格另有默认、飞书、Notion 和 Obsidian，作用于正文、侧栏及标签。
 
-![同一篇 Markdown 在 Aa 中使用不同阅读设置时的排版对照。](docs/images/readme-typography.webp)
+![深色模式下的飞书风格，左侧展开文件树，右侧 Aa 控件在图中标为英文。下方对照同一段正文在不同字体、字号和行距下的效果。](docs/images/readme-typography.webp)
 
 ## PDF 与 HTML（H5）阅读
 
