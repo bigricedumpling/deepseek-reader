@@ -1,6 +1,6 @@
 # 支持范围与已知问题
 
-Typocket 当前以 Preview 版本提供。安装包包含网页与本机服务，适合在 DSH 中阅读、编辑和整理个人资料。
+Typocket 当前以 Preview 版本提供。安装包包含编辑器、本机服务和 Agent 工具，可独立运行，也可作为 DSH 插件使用。
 
 ## 平台
 
@@ -45,4 +45,4 @@ macOS、Node.js 24.19 的合成知识库测量如下。每项先运行一次，�
 
 长文样本包含一万段正文。这些数字用于版本对比，实际设备、磁盘和资料内容都会影响体验。开发者可用 `node scripts/measure-performance.mjs 3000` 复测。
 
-遇到问题可在 [GitHub Issues](https://github.com/bigricedumpling/deepseek-reader/issues) 提交系统版本、插件版本和复现步骤。涉及正文时请使用脱敏示例。
+遇到问题可在 [GitHub Issues](https://github.com/bigricedumpling/typocket/issues) 提交系统版本、插件版本和复现步骤。涉及正文时请使用脱敏示例。

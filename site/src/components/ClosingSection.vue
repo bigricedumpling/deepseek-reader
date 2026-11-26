@@ -1,8 +1,8 @@
 <script setup>
 import RIcon from './RIcon.vue'
 
-const releaseUrl = 'https://github.com/bigricedumpling/deepseek-reader/releases'
-const repoUrl = 'https://github.com/bigricedumpling/deepseek-reader'
+const releaseUrl = 'https://github.com/bigricedumpling/typocket/releases'
+const repoUrl = 'https://github.com/bigricedumpling/typocket'
 </script>
 
 <template>
@@ -11,7 +11,7 @@ const repoUrl = 'https://github.com/bigricedumpling/deepseek-reader'
       <h2>文件始终<br />在本机。</h2>
       <div class="closing-copy">
         <p>
-          正文是普通 Markdown，附件是普通文件。Typocket 只是一个 DSH 插件：下载 .tgz，在「插件 → 添加插件」里打开，三步。
+          正文和附件都保存在本机。下载发行包，用 Node.js 启动编辑器，即可通过 MCP 接入 Agent。在 DSH 中也可以直接安装插件。
         </p>
         <div class="closing-actions">
           <a class="button button-primary" :href="releaseUrl" target="_blank" rel="noreferrer">

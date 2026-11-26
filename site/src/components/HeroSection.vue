@@ -4,16 +4,16 @@ import appDesktop from '../assets/shots/app-base.webp'
 import appMobile from '../assets/shots/app-mobile.webp'
 import { demoUrl } from '../config'
 
-const releaseUrl = 'https://github.com/bigricedumpling/deepseek-reader/releases'
+const releaseUrl = 'https://github.com/bigricedumpling/typocket/releases'
 </script>
 
 <template>
   <section id="top" class="hero">
     <div class="container hero-copy" data-reveal>
-      <h1>给 Agent 写下的文件，<br />一间阅览室。</h1>
+      <h1>和 Agent 共写<br />一篇本地笔记。</h1>
       <p>
-        Typocket 是 DSH 的插件。读工作区的 Markdown、PDF 和网页，<br class="desktop-break" />
-        把需要的资料保存到知识库。文件始终留在本机。
+        在浏览器里写 Markdown、读 PDF 和网页。<br class="desktop-break" />
+        把一段话交给常用的 Agent，再回来逐行核对它的修改。
       </p>
       <div class="hero-actions">
         <a class="button button-primary" :href="releaseUrl" target="_blank" rel="noreferrer">

@@ -1,48 +1,57 @@
-<h1 align="center">Typocket</h1>
+# Typocket
 
-<p align="center">一款可以和 Agent 共用的本地 Markdown 编辑器。<br>在 DSH 里读工作区的文档，接着写，把值得留下的资料收进自己的知识库。</p>
+[简体中文](README.zh-CN.md)
 
-<p align="center"><a href="https://awesome-dsh-plugin.com/?q=Typocket"><b>从 DSH 市场安装</b></a>　 <a href="https://github.com/bigricedumpling/deepseek-reader/releases">下载安装包</a>　 <a href="docs/USER-GUIDE.md">使用指南</a></p>
+Typocket is a local Markdown editor you can share with your agent. Write in the browser, hand over a passage, and review the lines your agent changed.
 
-![Typocket 正文阅读界面。英文声学笔记 Chladni plates 中，三幅原创数值插图呈现不同振动模式的节线。](docs/images/readme-reading.webp)
+[Download Typocket](https://github.com/bigricedumpling/typocket/releases) · [Run it locally](#run-it-locally) · [Connect an agent](plugins/reader-workspace/README.md#connect-an-agent)
 
-<sub>截图采用英文示例资料，界面标签作了对应翻译。</sub>
+![A printmaker’s notebook open in Typocket. The Registration proofs page shows a cobalt and vermilion overprint beside its two ink separations.](docs/images/readme-reading.webp)
 
-## 从 Agent 的草稿接着写
+## Give your agent a passage to revise
 
-在 DSH 的文件区打开一篇 Markdown，就能看见排好版的正文、图片、表格和公式。想留下它时，点「保存到知识库」。工作区原稿留在原处，你可以放心整理自己的副本。
+Select a paragraph and choose **Copy for Agent**. The selection comes with the document and section it belongs to. An agent connected through Typocket can find the note, read the current version, and write the revision back.
 
-编辑时可以直接修改公式，或输入 `/` 插入思维导图。Markdown 中的 Mermaid 代码块会显示为图表，点「查看源码」就能修改。写到一半切去另一篇查资料，切回来仍能继续撤销刚才的输入。需要交付时，可以打印成 PDF，导出含图片的独立网页，或把 Markdown 和附件一起打成 ZIP，留给对方继续编辑。「通过 Agent 分享」可以把一篇文档或一个知识库交给 Agent 制作临时只读网页。
+In this print job, the blue plate was already in place. The agent corrected the instruction to move the red plate and added a proofing step before the full print run. Open **Agent changes** to compare the wording, then jump back to the note. Edits made through Typocket’s tools appear here.
 
-## 记得一句话，也能找回一篇文档
+![The Agent changes panel shows two revisions to Registration study, including which plate to move and when to pull a proof.](docs/images/readme-agent.webp)
 
-![Typocket 知识库总览。英文示例资料按研究主题收纳，每个文件夹都能预览里面的一页。](docs/images/readme-library.webp)
+## Edit a diagram on the page
 
-用知识库区分研究、项目和个人笔记，再用文件夹整理。标签可以跨库打开。只记得原文的一句话时，打开侧栏搜索，选择「跨库正文」，点结果即可回到那段话。Markdown 的章节链接和 PDF 的页码链接也能直接定位。
+A fenced Mermaid block renders where you put it in the text. Choose **View source** and edit a branch with the preview open. The file still contains ordinary Mermaid syntax. Equations work much the same way with LaTeX. Diagrams and equations are included when you export a PDF or a self-contained HTML page.
 
-## 和 Agent 改同一篇文章
+![A Mermaid flowchart in the dark editor. The source sits above a live decision about whether to print the edition or shift the red plate and pull another proof.](docs/images/readme-diagram.webp)
 
-![Typocket 的 Agent 改动记录，展示 Listening notes 中一条观察在修改前后的措辞。](docs/images/readme-agent.webp)
+## Find the note you meant
 
-选中一段，点「复制给 Agent」，把选段、小节和出处一起粘贴到会话里。在知识库里，即使文章改过名，Agent 也可以通过文档标识找到原文。使用 Typocket 工具写回的修改会出现在「Agent 改动」里，方便逐段核对。遇到你们同时修改的段落，可以保留草稿再处理。
+Keep a library for each project, with folders for its notes and references. The library view gives you a glimpse of an actual page from each collection. Tabs stay open across libraries, so you can consult a reference and return to the paragraph you were editing. If you remember a phrase but forget the filename, search across the text of your notes.
 
-DSH 可直接使用随包工具。支持本机 stdio MCP 的其他 Agent 也能连接同一份资料。具体接法见[插件说明](plugins/reader-workspace/README.md#在其他-agent-中使用)。
+![Four print studio libraries, each with its own icon and a preview of the ink, type, paper, or proofs inside.](docs/images/readme-library.webp)
 
-## 安装与文件
+## Put a familiar mark on a page
 
-在 [DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)安装后，从 DSH 右侧栏的「开始 → Typocket」打开。安装包自带本机服务。手动安装时，从 [GitHub Releases](https://github.com/bigricedumpling/deepseek-reader/releases) 下载 `.tgz`，在 DSH NEXT 的「插件 → 添加插件」中选中它。
+Libraries and documents can each have their own icon. A document’s icon follows it into the tab bar. The proof book below uses a little printing press and a looping ink drawing. Open the gallery to change the cover, or upload an image of your own.
 
-正文以普通 Markdown 文件保存，PDF 和 HTML 也能在同一处预览。更新或卸载插件会保留知识库。备份时请同时保留正文、附件和元数据。[数据目录与备份恢复](docs/DATA-AND-RECOVERY.md) · [各平台支持情况](docs/RELEASE-READINESS.md) · [版本变化](CHANGELOG.md)
+![The proof book with its printing press icon, blue proof marks, and the six cover choices in the open gallery.](docs/images/readme-cover.webp)
 
-## 从源码运行
+## Take a document with you
 
-需要 Node.js 24 或更新版本。
+Markdown files, images, PDF references, and HTML pages stay on your computer. Export **Markdown and attachments** to give someone an editable ZIP. For a read-only link, choose **Share via agent** and give the prompt to an agent that can host the selected document or library.
 
-```bash
-npm ci
-npm run dev
+## Run it locally
+
+Download the `.tgz` from [Releases](https://github.com/bigricedumpling/typocket/releases) and extract it. With Node.js 24 or newer, run this from the directory containing the extracted `package` folder, then open the local address it prints.
+
+```sh
+node package/managed-server.js
 ```
 
-开发时可设置 `DOCS_ROOT` 指向独立的测试目录。`npm run build` 构建应用，`npm run release:plugin` 生成可安装的插件包。[工程说明](docs/ENGINEERING.md) · [报告问题](https://github.com/bigricedumpling/deepseek-reader/issues)
+**Connect an agent.** In a client that supports local stdio MCP, use `node` as the command and pass the absolute path to `package/scripts/reader.mjs`, followed by `--stdio`. The setup guide includes a copyable configuration and instructions for WorkBuddy, Claude Code and Codex. [Agent setup](plugins/reader-workspace/README.md#connect-an-agent)
 
-项目代码采用 [MIT 许可](LICENSE)。字体、图标与阅读组件的许可见[第三方资产](docs/THIRD-PARTY-ASSETS.md)。
+**Use it in DeepSeek Harness.** Install Typocket from the DSH marketplace and open it from the sidebar. The plugin starts the local service for you. Workspace Markdown opens as a preview and can be saved to your library. [DSH marketplace](https://awesome-dsh-plugin.com/?q=Typocket)
+
+**Run from source.** With Node.js 24 or newer, run `npm ci` and `npm run dev` in the repository. [Development guide (中文)](docs/ENGINEERING.md)
+
+*The screenshots show Preview 9 with English sample documents. Interface labels were translated for the screenshots. The current app uses Chinese.*
+
+[Changelog (中文)](CHANGELOG.md) · [Backup and recovery (中文)](docs/DATA-AND-RECOVERY.md) · [Platform support (中文)](docs/RELEASE-READINESS.md) · [MIT license](LICENSE) · [Third-party credits](docs/THIRD-PARTY-ASSETS.md)

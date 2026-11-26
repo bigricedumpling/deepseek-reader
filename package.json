@@ -1,9 +1,9 @@
 {
-  "name": "deepseek-prep-reader",
+  "name": "typocket",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Typocket: Read, write and organize local documents in DeepSeek Harness.",
+  "description": "Typocket: A local Markdown editor for you and your agent.",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

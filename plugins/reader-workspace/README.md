@@ -1,61 +1,66 @@
 # Typocket
 
-Typocket 是 DSH 中的个人文档工具，方便你阅读 Agent 的工作成果，继续编辑 Markdown，并将有用的资料保存到本机知识库。PDF 和 HTML 页面也可一起预览。插件安装包包含完整网页和本机服务。启用插件后自动启动，无需另装 Typocket、Node.js 或运行终端命令。
+[简体中文](README.zh-CN.md)
 
-![Typocket 中的英文示例声学笔记和节线图](https://raw.githubusercontent.com/bigricedumpling/deepseek-reader/v0.2.0-preview.9/docs/images/readme-reading.webp)
+Typocket lets you and your agent work on the same local Markdown files. Open a draft in your browser, edit a paragraph, or check exactly what the agent changed. The release package includes the editor, its local service, and the tools an agent uses to reach your library.
 
-## 安装
+![A two-color registration study open in Typocket](https://raw.githubusercontent.com/bigricedumpling/typocket/main/docs/images/readme-reading.webp)
 
-1. 在 [DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)搜索 Typocket 并安装。手动安装时，从 [GitHub 发布页](https://github.com/bigricedumpling/deepseek-reader/releases)下载所需版本的 `.tgz`，在 DSH NEXT 的「插件 → 添加插件」中选择该文件。
-2. 在右侧栏「开始」页点击「Typocket」。首次使用会自动创建本机数据目录。
-3. 在 DSH 文件区打开 Markdown，可用 Typocket 预览；在 Typocket 顶栏点外部打开图标，可在浏览器打开当前页面。
+## Open Typocket in a browser
 
-## 本机数据
+Download the `dsh-reader-workspace-*.tgz` asset from [GitHub Releases](https://github.com/bigricedumpling/typocket/releases). Extract it and keep the resulting `package` directory together. Start the local service with Node.js 24 or later.
 
-macOS 默认知识库目录是 `~/Library/Application Support/Reader/知识库`。它不在插件安装目录中，更新或卸载插件不会删除文档。本机服务只监听回环地址，并会保存首次分配的端口供重启复用。
+```sh
+node "/absolute/path/to/package/managed-server.js"
+```
 
-如果本机 `127.0.0.1:8090` 已有旧 Typocket，插件会先接入它，继续使用原来的资料；旧服务离线时会提示离线，避免切换到另一份空库。迁移旧目录前请先备份。需要沿用原目录的高级用户可在启动 DSH 前设置 `DSH_READER_DATA_DIR`，插件不会自行移动旧数据。在插件详情中可手动连接另一台 Typocket；远程地址需使用 HTTPS。
+Open the local address printed in the terminal. Leave the process running while you work. If DSH already has Typocket running, use the browser button in its toolbar to open that instance.
 
-## 工作区 Markdown 与 Agent
+## Connect an agent
 
-工作区 Markdown 预览只读。相对链接继续打开工作区文件，相对图片从当前工作区读取；预览不会移动原文件。想保留时在预览页直接「保存到知识库」，生成知识库中的独立副本；不收录就不保留浏览记录。收进知识库后，点 Mermaid 图表上的「查看源码」即可修改图表，导出网页或打印时也会带上图表。
-
-文档「更多」菜单中的「通过 Agent 分享」可为一篇文档或整个知识库复制分享提示词。将它交给有临时托管能力的 Agent，即可让它制作只读快照并返回网址。
-
-在支持技能的 DSH NEXT 中，启用插件后即可让 Agent 使用 `reader-workspace`。例如，告诉它「在项目资料里找到会议纪要，帮我把最后一段改短，保留原图」。插件向 DSH 注册文档工具，遵循会话的只读和工作区权限。本机连接无需配置 Typocket 令牌。在默认的工作区写入模式下，如果知识库位于工作区之外，DSH 会询问是否允许本次写入。
-
-## 在其他 Agent 中使用
-
-1. 准备完整插件目录。可以解压 DSH 安装包，解压后的 `package` 目录内应当有 `managed-server.js`、`scripts` 和 `runtime`。
-2. 如果本机已有 Typocket 在运行，可以直接连接。单独使用时，用 Node.js 24 或更新版本执行 `node "/插件绝对路径/managed-server.js"`，保持这个进程运行。它会显示可在浏览器打开的地址。
-3. 在 Agent 的 MCP 设置中添加一个 **stdio** 服务器，命令填 `node`，参数依次填桥接脚本的绝对路径和 `--stdio`。支持 JSON 配置的宿主可使用以下内容，替换为本机路径。
+With Typocket running, add a **stdio** MCP server to your agent's settings. Use `node` as the command, followed by the absolute path to `scripts/reader.mjs` inside the plugin and the argument `--stdio`. For clients that accept JSON, replace the example path below.
 
 ```json
 {
   "mcpServers": {
     "typocket": {
       "command": "node",
-      "args": ["/插件绝对路径/scripts/reader.mjs", "--stdio"]
+      "args": ["/absolute/path/to/package/scripts/reader.mjs", "--stdio"]
     }
   }
 }
 ```
 
-不同宿主的入口如下。
+Ask your agent to “list my Typocket libraries” to check the connection. When it saves a change through Typocket, you can review the before and after in **Agent changes** (Agent 改动).
 
-- **WorkBuddy**　在「连接器 → 自定义连接器」中添加上面的 MCP 服务。[WorkBuddy 连接器说明](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Connector)
-- **Claude Code**　启动本地会话时使用 `claude --plugin-dir "/插件绝对路径"`，从同一目录加载技能和 MCP 工具。
-- **Codex CLI**　使用源码仓库时，运行 `codex plugin marketplace add "/Typocket仓库绝对路径"`，再运行 `codex plugin add reader-workspace@typocket`。打开新的会话后可用。仅持有解压包时也可按上面的通用方式添加 MCP。
+- **WorkBuddy** — Open **Connectors → Custom connector** and add the MCP server above. [WorkBuddy connector guide](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Connector)
+- **Claude Code** — Start a local session with `claude --plugin-dir "/absolute/path/to/package"` to load the bundled skill and MCP tools.
+- **Codex CLI** — With a local checkout of the Typocket repository, run `codex plugin marketplace add "/absolute/path/to/typocket"`, then `codex plugin add reader-workspace@typocket`. Start a new session. With the extracted release alone, use the stdio setup above.
 
-连接后可以让 Agent「列出我在 Typocket 中的知识库」。桥接脚本会查找本机服务。如果你已启动另一个实例，可在该 MCP 服务器的环境变量中设置 `READER_URL` 为它的本机地址，并用 `DOCS_ROOT` 指定预期的知识库根目录。旧服务若提示需要更新，请先更新并重启对应实例。
+The bridge discovers the local service and sends the [library skill](skills/reader-workspace/SKILL.md) to the client on connection. A host that loads skills on their own also needs a way to run the tools or reach the local service. Cloud agents need a host-provided connection to your machine. To select another running local instance, set `READER_URL` and its matching `DOCS_ROOT` in the MCP server's environment. If the service asks for an update, update and restart that instance.
 
-随包的[使用技能](skills/reader-workspace/SKILL.md)也会在 MCP 握手时交给客户端。仅导入技能的宿主，还需要可用的本机服务和工具、命令行或 HTTP 访问能力。浏览器中的云端 Agent 需要宿主提供本机连接。
+## Install in DSH
 
-## 支持范围与已知问题
+1. Search for Typocket in the [DSH community market](https://awesome-dsh-plugin.com/?q=Typocket), or choose **Plugins → Add plugin** (插件 → 添加插件) in DSH NEXT and select the downloaded `.tgz`.
+2. Open **Start → Typocket** (开始 → Typocket) in the right sidebar. DSH starts the bundled service for you.
+3. Open a Markdown file in the DSH workspace to preview it with its relative links and images. Choose **Save to library** (保存到知识库) to edit a separate copy. The original and the saved copy can then be edited independently.
 
-- 插件面向 macOS、Windows 和 Linux。macOS 已验证 DSH NEXT 的安装链。Windows 和 Linux 的原生 DSH 安装与桌面交互仍待验收。
-- 单篇内容交付使用导出；导出不会随后续编辑自动更新。
-- 工作区文件与知识库副本独立，不提供双向同步或多人协作。
-- 在 macOS DSH NEXT 的两个原生窗口中可以同时打开同一个知识库。两处写入冲突时可另存副本；卸载插件后原文和副本继续留在本机。
+DSH NEXT sessions with skill support can use the bundled document tools directly. The local connection uses the session’s read-only and workspace permissions. In workspace-write mode, DSH asks before writing to a library outside the workspace.
 
-源代码采用 [MIT License](LICENSE)。字体、PDF 阅读组件和图标的来源与许可见[第三方资产](https://github.com/bigricedumpling/deepseek-reader/blob/main/docs/THIRD-PARTY-ASSETS.md)。
+## Where your files live
+
+| System | Default library directory |
+| --- | --- |
+| macOS | `~/Library/Application Support/Reader/知识库` |
+| Windows | `%APPDATA%\Reader\知识库` |
+| Linux | `$XDG_DATA_HOME/Reader/知识库`, or `~/.local/share/Reader/知识库` |
+
+Libraries live outside the plugin directory and survive updates and removal. The service listens on the loopback interface and remembers its port. DSH can reuse an existing Typocket at `127.0.0.1:8090` and will report it offline if that service stops. To keep using an existing data directory, set `DSH_READER_DATA_DIR` before starting DSH. Back up your library before moving it. The plugin details also accept an HTTPS address for a manually configured remote instance.
+
+## Export and share
+
+Print to PDF or export a self-contained HTML file to keep the current version of your document, including Mermaid diagrams. To share a read-only snapshot of a document or library, choose **More → Share via agent** (更多 → 通过 Agent 分享). Give the resulting prompt to an agent that can host it and return a temporary link.
+
+The package targets macOS, Windows and Linux. Native DSH NEXT installation and two-window editing have been tested on macOS, including saving a separate copy after a conflict. Native DSH installation and desktop interaction on Windows and Linux still need testing. [Platform details](https://github.com/bigricedumpling/typocket/blob/main/docs/RELEASE-READINESS.md)
+
+[MIT license](LICENSE) · [Third-party assets](https://github.com/bigricedumpling/typocket/blob/main/docs/THIRD-PARTY-ASSETS.md)

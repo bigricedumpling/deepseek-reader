@@ -1,8 +1,8 @@
 <script setup>
 import RIcon from './RIcon.vue'
 
-const releaseUrl = 'https://github.com/bigricedumpling/deepseek-reader/releases'
-const repoUrl = 'https://github.com/bigricedumpling/deepseek-reader'
+const releaseUrl = 'https://github.com/bigricedumpling/typocket/releases'
+const repoUrl = 'https://github.com/bigricedumpling/typocket'
 </script>
 
 <template>
