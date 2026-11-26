@@ -243,6 +243,12 @@ try {
   })
   await evaluate("document.querySelector('.cover-close').click()")
   await waitFor('dismissed cover picker', () => evaluate("!document.querySelector('.cover-picker')"))
+  await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion', value:'no-preference'}]})
+  const beforeReopen = await evaluate('performance.timeOrigin')
+  await send('Page.reload')
+  await waitFor('saved animated cover reopens', () => evaluate(`performance.timeOrigin !== ${beforeReopen} &&
+    !!document.querySelector('.cover-plane svg[data-cover-ink="ink-index"]') &&
+    !!document.querySelector('.editor-shell')`))
   await clickExport('网页')
   await waitFor('ink artwork HTML export', () => fs.existsSync(artHtml))
   const inkSource = fs.readFileSync(path.join(runtime, 'dist/covers/ink-index.webp'))
@@ -250,13 +256,16 @@ try {
   assert(inkHtml.includes('data:image/webp;base64,' + inkSource.toString('base64')))
   assert(!inkHtml.includes('ink-index-ink.svg') && !inkHtml.includes('cover-ink-pass'))
   await evaluate(`window.addEventListener('beforeprint', () => {
-    const img = document.querySelector('.typocket-print .page-cover.small img')
-    window.printedArtwork = [img?.getAttribute('src'), img?.style.objectPosition]
+    const cover = document.querySelector('.typocket-print .page-cover.small')
+    const img = cover?.querySelector('img')
+    window.printedArtwork = {src:img?.getAttribute('src'), position:img?.style.objectPosition,
+      elements:Array.from(cover?.querySelectorAll('*') || [], el => el.localName)}
   }, {once:true})`)
   const artPdf = await send('Page.printToPDF', {printBackground:true, preferCSSPageSize:true, displayHeaderFooter:false})
   const printedArtwork = await evaluate('window.printedArtwork')
-  assert(printedArtwork[0].endsWith('/covers/ink-index.webp'))
-  assert.equal(printedArtwork[1].replace('center', '50%'), '50% ' + selectedArt.position + '%')
+  assert.deepEqual(printedArtwork.elements, ['img'], 'print includes only the static cover image')
+  assert(printedArtwork.src.endsWith('/covers/ink-index.webp'))
+  assert.equal(printedArtwork.position.replace('center', '50%'), '50% ' + selectedArt.position + '%')
   const artPdfPath = path.join(temp, 'artwork.pdf')
   fs.writeFileSync(artPdfPath, Buffer.from(artPdf.data, 'base64'))
   const printImages = execFileSync(process.env.PDFIMAGES_BIN || 'pdfimages', ['-list', artPdfPath], {encoding:'utf8'})

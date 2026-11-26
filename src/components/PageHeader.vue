@@ -6,8 +6,8 @@
     <div :key="pictureUrl || displayCover.preset" class="cover-art-layer">
      <GradientCover v-if="displayCover.type==='gradient'" :cover="displayCover" :active="active" />
      <img v-else-if="pictureUrl" class="document-cover-image" :src="pictureUrl" :style="{objectPosition:'center '+(displayCover.position ?? 50)+'%'}" alt="文档封面" @load="onPictureLoad" />
-     <CoverInkPass v-if="inkPass && loadedPicture === pictureUrl && inkPass === displayCover.artwork"
-       :key="inkPass" :artwork="getCoverArtwork(inkPass)" :position="displayCover.position ?? 50" @finish="finishInk" />
+     <CoverInkPass v-if="artwork?.inkUrl && loadedPicture === pictureUrl"
+       :key="artwork.id" :artwork="artwork" :position="displayCover.position ?? 50" :active="active" />
     </div>
    </Transition>
   </Teleport>
@@ -20,7 +20,7 @@
  </div></div>
  <IconPicker v-if="iconOpen" :anchor="iconAnchor" :save="saveIcon" :current="meta.icon || ''" @close="closeIcon" />
  <RichBlockDialog :initial="blockDraft" v-if="blockDraft" @close="blockDraft=null" />
- <CoverPicker v-if="settings" :original="meta.cover || null" :anchor="pickerAnchor" :path="coverDocPath" :ink-preview="inkPass"
+ <CoverPicker v-if="settings" :original="meta.cover || null" :anchor="pickerAnchor" :path="coverDocPath" :active="active"
    @preview="previewCover" @dismiss="closeCover" />
 </section>
 </template>
@@ -38,7 +38,7 @@ import GradientCover from './GradientCover.vue'
 import RichBlockDialog from './RichBlockDialog.vue'
 
 const emit = defineEmits(['preview-cover'])
-const props = defineProps({ coverPlane: { type: Object, default: null }, active: { type: Boolean, default: true } })
+defineProps({ coverPlane: { type: Object, default: null }, active: { type: Boolean, default: true } })
 const store = useDocsStore()
 const meta = computed(() => store.pageMeta)
 const settings = ref(false), coverControlsOpen = ref(false)
@@ -47,34 +47,20 @@ const editCoverButton = ref(null), addCoverButton = ref(null), iconButton = ref(
 const pickerAnchor = shallowRef(null), candidate = shallowRef(undefined)
 let coverDocPath = ''
 const displayCover = computed(() => settings.value && candidate.value !== undefined ? candidate.value : meta.value.cover)
+const artwork = computed(() => displayCover.value?.type === 'artwork' ? getCoverArtwork(displayCover.value.artwork) : null)
 const pictureUrl = computed(() => {
   const cover = displayCover.value
-  if (cover?.type === 'artwork') return getCoverArtwork(cover.artwork)?.url
+  if (artwork.value) return artwork.value.url
   if (cover?.type === 'image') return cover.previewUrl || API_BASE + '/api/file?asset=' + encodeURIComponent(cover.asset)
   return ''
 })
-const inkPass = ref(null), loadedPicture = ref('')
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
-function finishInk(id) {
-  if (inkPass.value === id) inkPass.value = null
-}
-watch(inkPass, (id, _, onCleanup) => {
-  if (!id) return
-  const stop = () => { if (reducedMotion.matches) finishInk(id) }
-  reducedMotion.addEventListener('change', stop)
-  onCleanup(() => reducedMotion.removeEventListener('change', stop))
-})
+const loadedPicture = ref('')
 function onPictureLoad(event) {
   if (event.currentTarget.getAttribute('src') === pictureUrl.value) loadedPicture.value = pictureUrl.value
 }
 watch(pictureUrl, () => { loadedPicture.value = '' }, { flush:'sync' })
-watch(() => props.active, active => { if (!active) inkPass.value = null })
 function previewCover(cover) {
   if (!settings.value || store.currentPath !== coverDocPath) return
-  if (displayCover.value?.artwork !== cover?.artwork) {
-    const art = cover?.type === 'artwork' && getCoverArtwork(cover.artwork)
-    inkPass.value = art?.inkUrl && props.active && !reducedMotion.matches ? art.id : null
-  }
   candidate.value = cover
   emit('preview-cover', cover)
 }
@@ -120,7 +106,6 @@ onBeforeUnmount(() => {
   if (settings.value) emit('preview-cover', undefined)
 })
 watch(() => store.currentPath, () => {
-  inkPass.value = null
   closeCover()
   iconOpen.value = false
   blockDraft.value = null
@@ -146,7 +131,6 @@ function closeIcon() {
 <style scoped>
 .page-header{padding-top:16px}.page-header.has-cover{padding-top:0}.page-cover{position:relative;height:240px;overflow:hidden;margin:0;border-radius:0}.page-cover.small{height:160px}.page-cover.large{height:330px}.document-cover-image{width:100%;height:100%;object-fit:cover}.page-heading-inner{padding:0 64px}.page-heading-content{max-width:var(--measure);margin:auto}.page-icon{display:block;margin:18px 0 2px;padding:4px 0}.has-cover .page-icon{margin-top:-28px;position:relative;filter:drop-shadow(0 1px 3px #fff8)}.page-description{margin-top:14px;color:var(--c-sub);font-size:14px;line-height:1.7}.page-header-controls{display:flex;gap:20px;margin:8px 0 0;font:13px var(--font-sans);color:var(--c-faint)}.page-header-controls button,.cover-actions button{display:flex;align-items:center;gap:6px}.page-header-controls button:hover{color:var(--c-ink)}.cover-actions{position:absolute;right:14px;bottom:14px;display:flex;gap:2px;opacity:0;pointer-events:none;padding:2px}.page-cover:focus-within .cover-actions{opacity:1;pointer-events:auto}@media(hover:hover){.page-cover:hover .cover-actions{opacity:1;pointer-events:auto}}@media(hover:none){.page-cover.cover-controls-open .cover-actions{opacity:1;pointer-events:auto}}.cover-actions button{padding:4px 7px;font-size:11.5px;gap:5px;line-height:1.2}
 .cover-art-layer { position:absolute; inset:0; pointer-events:none; }
-.cover-art-layer:has(> .cover-ink-pass) { container-type:size; overflow:clip; }
 .cover-swap-enter-active,.cover-swap-leave-active { transition:opacity 150ms var(--motion-ease); }
 .cover-swap-enter-active { z-index:1; }
 .cover-swap-enter-from,.cover-swap-leave-to { opacity:0; }

@@ -18,7 +18,7 @@
                 <input type="radio" name="featured-cover" :value="art.id" :aria-label="art.name"
                   :checked="draft?.artwork === art.id" @change="selectArt(art.id)" />
                 <span class="cover-thumb"><img :src="art.thumbnail" alt="" />
-                  <CoverInkPass v-if="inkPreview === art.id" :artwork="art" />
+                  <CoverInkPass v-if="art.inkUrl && draft?.artwork === art.id" :artwork="art" :active="active" />
                   <span v-if="draft?.artwork === art.id" class="cover-mark"><PhCheck :size="12"/></span>
                 </span>
               </label>
@@ -105,7 +105,7 @@ import CoverInkPass from './CoverInkPass.vue'
 
 const props = defineProps({
   original: { type:Object, default:null },
-  inkPreview: { type:String, default:null },
+  active: { type:Boolean, default:true },
   anchor: {type:Object, required:true},
   path: {type:String, required:true}
 })
@@ -403,7 +403,6 @@ onBeforeUnmount(() => {
   position:absolute; width:1px; height:1px; opacity:0; margin:0; padding:0; pointer-events:none;
 }
 .cover-thumb { position:relative; display:block; aspect-ratio:2.65; border-radius:var(--radius-item); background:var(--c-field); }
-.cover-thumb:has(> .cover-ink-pass) { container-type:size; overflow:clip; }
 .cover-thumb>img,.cover-thumb :deep(.gradient-cover) { width:100%; height:100%; object-fit:cover; display:block; border-radius:inherit; overflow:hidden; }
 .cover-thumb::after { content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; box-shadow:inset 0 0 0 1px var(--surface-menu-border); }
 .cover-tile input:checked+.cover-thumb { outline:1.5px solid var(--c-ink); outline-offset:2px; }

@@ -6,7 +6,7 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   const lib = 'Cover studio', file = lib + '/Materials.md'
   const url = new URL('doc/' + lib + '/Materials?lib=' + encodeURIComponent(lib), appUrl).href
   fs.mkdirSync(path.join(root, lib))
-  fs.writeFileSync(path.join(root, file), '# Materials\n\nLight passes through both layers.\n')
+  fs.writeFileSync(path.join(root, file), '# Materials\n\n' + Array.from({length:32}, (_,i) => 'Study ' + (i+1) + '. Light passes through both layers.').join('\n\n') + '\n')
   async function saved() {
     const result = await fetch(new URL('api/metadata?path=' + encodeURIComponent(file), appUrl)).then(r => r.json())
     assert(result.ok)
@@ -64,11 +64,12 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   for (const id of inkSeries) {
     await click(radio(id))
     await wait(`document.querySelector('.cover-plane svg[data-cover-ink="${id}"] use')?.getAttribute('href')?.endsWith('/covers/${id}-ink.svg#nib')`)
+    await wait(`document.querySelector('.cover-tile svg[data-cover-ink="${id}"] use')`)
     const activeTiles = await ev(`return [...document.querySelectorAll('.cover-tile svg.cover-ink-pass')]
       .map(svg => [svg.dataset.coverInk, svg.closest('.cover-tile').querySelector('input:checked')?.value])`)
-    assert.deepEqual(activeTiles, [[id, id]], 'only the newly selected thumbnail draws its ink stroke')
+    assert.deepEqual(activeTiles, [[id, id]], 'only the selected thumbnail draws its ink stroke')
     assert(await ev(`const svg=document.querySelector('.cover-plane svg[data-cover-ink="${id}"]')
-      const img=svg.parentElement.querySelector('.document-cover-image'), viewport=img.getBoundingClientRect()
+      const img=svg.closest('.cover-art-layer').querySelector('.document-cover-image'), viewport=img.getBoundingClientRect()
       const aspect=img.naturalWidth/img.naturalHeight, box=svg.getBoundingClientRect()
       const w=Math.max(viewport.width,viewport.height*aspect), h=w/aspect
       return Math.abs(svg.viewBox.baseVal.width/svg.viewBox.baseVal.height-aspect)<.001 &&
@@ -80,32 +81,62 @@ export async function verifyCoverPicker({ send, ev, root, appUrl, sleep }) {
   }
 
   await checkBodyWidth('Selected artwork and its actions')
-  await wait('!document.querySelector(".cover-ink-pass")')
-  await click(radio('ink-margin'))
-  await sleep(150)
-  assert(await ev('return !document.querySelector(".cover-ink-pass")'), 'reselecting the dry illustration should leave it still')
+  const stage = '.cover-plane .cover-ink-pass'
+  const running = selector => `document.querySelector(${JSON.stringify(selector)})?.getAnimations({subtree:true})
+    .some(track=>track.playState==='running' && track.effect.getTiming().iterations===Infinity)`
+  const stopped = selector => `![...document.querySelectorAll(${JSON.stringify(selector)})]
+    .some(svg=>svg.getAnimations({subtree:true}).some(track=>track.playState==='running'))`
+  for (const selector of [stage, '.cover-tile .cover-ink-pass']) {
+    await wait(running(selector))
+    const validCycle = await ev(`const svg=document.querySelector(${JSON.stringify(selector)}), tracks=svg.getAnimations({subtree:true})
+      if(!tracks.every(a=>a.effect.getTiming().iterations===Infinity)) return false
+      const period=tracks[0].effect.getTiming().duration
+      const sample=phase=>{
+        for(const a of tracks){a.pause();a.currentTime=period*phase}
+        return Number(getComputedStyle(svg).opacity)
+      }
+      try {
+        return sample(.15)>.5 && sample(.65)<.02 && sample(1.15)>.5 && sample(1.65)<.02
+      } finally {for(const a of tracks) a.play()}`)
+    assert(validCycle,'the ink should return after a dry interval on ' + selector)
+  }
 
-  await click(radio('ink-leaf'))
-  await wait(`document.querySelector('.cover-plane [data-cover-ink="ink-leaf"]')`)
   await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion', value:'reduce'}]})
   try {
-    await wait('!document.querySelector(".cover-ink-pass")')
+    await wait(stopped('.cover-ink-pass'))
     await ev('performance.clearResourceTimings()')
     await click(radio('ink-index'))
     await wait(inHeader('ink-index'))
     await expectSaved('ink choice with reduced motion', c => c?.artwork === 'ink-index')
-    assert(await ev(`return !document.querySelector('.cover-ink-pass') &&
+    assert(await ev(`return ${stopped('.cover-ink-pass')} &&
       !performance.getEntriesByType('resource').some(entry => entry.name.endsWith('-ink.svg'))`))
   } finally {
     await send('Emulation.setEmulatedMedia', {features:[]})
   }
+  await wait(running(stage))
+  await wait(running('.cover-tile .cover-ink-pass'))
   await close()
   await closed()
   await send('Page.reload')
   await wait(inHeader('ink-index'))
-  assert(await ev(`return !document.querySelector('.cover-ink-pass') &&
-    !performance.getEntriesByType('resource').some(entry => entry.name.endsWith('-ink.svg'))`),
-    'opening a saved document must not replay its cover stroke')
+  await wait(running(stage))
+  // Scroll the actual reader, then return to the saved cover.
+  await ev("document.getElementById('main-scroll-container').scrollTo({top:950,behavior:'instant'})")
+  await wait("document.querySelector('.cover-plane').getBoundingClientRect().bottom <= 1")
+  await wait(stopped(stage))
+  await ev("document.getElementById('main-scroll-container').scrollTo({top:0,behavior:'instant'})")
+  await wait(running(stage))
+  const { targetInfo } = await send('Target.getTargetInfo')
+  const otherTab = await send('Target.createTarget', { url:'about:blank', background:false })
+  try {
+    await send('Target.activateTarget', {targetId:otherTab.targetId})
+    await wait('document.hidden')
+    await wait(stopped(stage))
+  } finally {
+    await send('Target.activateTarget', {targetId:targetInfo.targetId})
+    await send('Target.closeTarget', {targetId:otherTab.targetId})
+  }
+  await wait(running(stage))
   await click(edit)
 
   // A rejected choice leaves the saved cover intact and allows another selection.
