@@ -2,56 +2,65 @@
 
 [简体中文](README.zh-CN.md)
 
-Typocket is a local Markdown editor you can share with your agent. Write in the browser, hand over a passage, and review the lines your agent changed.
+Typocket is a local Markdown editor. You and your agent can work on the same file and see what changed. Open it in a browser, or keep the draft beside your conversation in DeepSeek Harness.
 
-[Download Typocket](https://github.com/bigricedumpling/typocket/releases) · [Run it locally](#run-it-locally) · [Connect an agent](plugins/reader-workspace/README.md#connect-an-agent)
+[Download](https://github.com/bigricedumpling/typocket/releases) | [Run it locally](#run-it-locally) | [Connect an agent](plugins/reader-workspace/README.md#connect-an-agent)
 
-![A printmaker’s notebook open in Typocket. The Registration proofs page shows a cobalt and vermilion overprint beside its two ink separations.](docs/images/readme-reading.webp)
+![A print studio conversation in DeepSeek Harness, with Typocket open in the right sidebar.](docs/images/readme-sidebar.webp)
 
-## Give your agent a passage to revise
+## Reading and editing
 
-Select a paragraph and choose **Copy for Agent**. The selection comes with the document and section it belongs to. An agent connected through Typocket can find the note, read the current version, and write the revision back.
+Click a paragraph to start writing. Select a phrase to format it, add a link, or insert an inline equation. In a longer note, use the outline on the right to jump to a section. Open **Aa** to change the typeface, line spacing, or text width.
 
-In this print job, the blue plate was already in place. The agent corrected the instruction to move the red plate and added a proofing step before the full print run. Open **Agent changes** to compare the wording, then jump back to the note. Edits made through Typocket’s tools appear here.
+![A sentence selected in the proof notes, with the formatting toolbar above it and the document outline on the right.](docs/images/readme-editor.webp)
 
-![The Agent changes panel shows two revisions to Registration study, including which plate to move and when to pull a proof.](docs/images/readme-agent.webp)
+## Revising with an agent
 
-## Edit a diagram on the page
+Select a passage and choose **Copy for Agent**. The copied text includes the file path and, when available, the section heading. When your agent saves an edit through Typocket, open **Agent changes** to compare the old and new lines. Here the original instructions called for moving the blue plate. The revision keeps it fixed and moves the red plate two millimetres to the left.
 
-A fenced Mermaid block renders where you put it in the text. Choose **View source** and edit a branch with the preview open. The file still contains ordinary Mermaid syntax. Equations work much the same way with LaTeX. Diagrams and equations are included when you export a PDF or a self-contained HTML page.
+![An edit to the press instructions. The red line shows the original wording and the green line shows the correction.](docs/images/readme-agent.webp)
 
-![A Mermaid flowchart in the dark editor. The source sits above a live decision about whether to print the edition or shift the red plate and pull another proof.](docs/images/readme-diagram.webp)
+## Keeping references open
 
-## Find the note you meant
+Libraries and folders live in the sidebar. Tabs can hold notes from different libraries, so you can look up a paper stock or a typeface and come straight back to the proof. Give a library an icon you recognise at a glance. A note can have its own icon, which also appears on its tab.
 
-Keep a library for each project, with folders for its notes and references. The library view gives you a glimpse of an actual page from each collection. Tabs stay open across libraries, so you can consult a reference and return to the paragraph you were editing. If you remember a phrase but forget the filename, search across the text of your notes.
+![Six libraries with monochrome icons, a folder tree, and open tabs for the paper, type and proof notes.](docs/images/readme-navigation.webp)
 
-![Four print studio libraries, each with its own icon and a preview of the ink, type, paper, or proofs inside.](docs/images/readme-library.webp)
+<details>
+<summary>View illustrations, Mermaid diagrams, libraries and covers</summary>
 
-## Put a familiar mark on a page
+Place pictures between paragraphs. Use the image toolbar to enlarge a proof and inspect its registration marks.
 
-Libraries and documents can each have their own icon. A document’s icon follows it into the tab bar. The proof book below uses a little printing press and a looping ink drawing. Open the gallery to change the cover, or upload an image of your own.
+![A two-colour print proof alongside the individual ink separations, embedded in the page.](docs/images/readme-reading.webp)
 
-![The proof book with its printing press icon, blue proof marks, and the six cover choices in the open gallery.](docs/images/readme-cover.webp)
+Mermaid diagrams and mind maps render in the text. Choose **View source** to edit one with the preview open. You can also typeset equations in LaTeX. PDF and HTML exports keep the rendered diagrams and equations.
 
-## Take a document with you
+![Mermaid source above its live print-check flowchart in the dark editor.](docs/images/readme-diagram.webp)
 
-Markdown files, images, PDF references, and HTML pages stay on your computer. Export **Markdown and attachments** to give someone an editable ZIP. For a read-only link, choose **Share via agent** and give the prompt to an agent that can host the selected document or library.
+The library overview shows a page from each collection. For a document cover, use a picture of your own or pick a looping ink drawing from the gallery.
+
+![Ink, type, paper and proof pages visible inside four library folders.](docs/images/readme-library.webp)
+
+![A proof book with a printing press icon, blue proof marks and the cover gallery open.](docs/images/readme-cover.webp)
+
+</details>
+
+## Export and share
+
+Choose **Markdown and attachments** to send someone an editable ZIP with the images included. For a read-only link, choose **Share via agent**. Give the prompt to an agent that can host a snapshot of the selected document or library.
 
 ## Run it locally
 
-Download the `.tgz` from [Releases](https://github.com/bigricedumpling/typocket/releases) and extract it. With Node.js 24 or newer, run this from the directory containing the extracted `package` folder, then open the local address it prints.
+Download the `.tgz` from [Releases](https://github.com/bigricedumpling/typocket/releases) and extract it. With Node.js 24 or later, run this from the directory containing the extracted `package` folder. Open the local address printed in the terminal.
 
 ```sh
 node package/managed-server.js
 ```
 
-**Connect an agent.** In a client that supports local stdio MCP, use `node` as the command and pass the absolute path to `package/scripts/reader.mjs`, followed by `--stdio`. The setup guide includes a copyable configuration and instructions for WorkBuddy, Claude Code and Codex. [Agent setup](plugins/reader-workspace/README.md#connect-an-agent)
+- **Connect an agent.** Use a client that supports local stdio MCP. The setup guide includes a sample configuration and steps for WorkBuddy, Claude Code and Codex. [Agent setup](plugins/reader-workspace/README.md#connect-an-agent)
+- **Install in DeepSeek Harness.** Search for Typocket in the community market. After installation, open it from **Start** in the right sidebar. [DSH community market](https://awesome-dsh-plugin.com/?q=Typocket)
+- **Run from source.** From the repository, run `npm ci` and then `npm run dev`. [Development guide (中文)](docs/ENGINEERING.md)
 
-**Use it in DeepSeek Harness.** Install Typocket from the DSH marketplace and open it from the sidebar. The plugin starts the local service for you. Workspace Markdown opens as a preview and can be saved to your library. [DSH marketplace](https://awesome-dsh-plugin.com/?q=Typocket)
+*The screenshots show Preview 9 with sample notes and a sample conversation. The editor currently uses Chinese. Its controls were translated for these images.*
 
-**Run from source.** With Node.js 24 or newer, run `npm ci` and `npm run dev` in the repository. [Development guide (中文)](docs/ENGINEERING.md)
-
-*The screenshots show Preview 9 with English sample documents. Interface labels were translated for the screenshots. The current app uses Chinese.*
-
-[Changelog (中文)](CHANGELOG.md) · [Backup and recovery (中文)](docs/DATA-AND-RECOVERY.md) · [Platform support (中文)](docs/RELEASE-READINESS.md) · [MIT license](LICENSE) · [Third-party credits](docs/THIRD-PARTY-ASSETS.md)
+[Changelog (中文)](CHANGELOG.md) | [Backup and recovery (中文)](docs/DATA-AND-RECOVERY.md) | [Platform support (中文)](docs/RELEASE-READINESS.md) | [MIT license](LICENSE) | [Third-party credits](docs/THIRD-PARTY-ASSETS.md)

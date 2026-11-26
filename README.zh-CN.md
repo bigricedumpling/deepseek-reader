@@ -2,56 +2,65 @@
 
 [English](README.md)
 
-Typocket 是一个可以和 Agent 共用的本地 Markdown 编辑器。你在浏览器里读写笔记，Agent 也能打开同一篇文档。它改完后，你可以逐行核对改动。
+Typocket 是一个本地 Markdown 编辑器。你在浏览器里写，Agent 也可以改同一份文件。在 DeepSeek Harness 里，还可以把文档开在对话右边，一边讨论，一边看稿。
 
-[下载 Typocket](https://github.com/bigricedumpling/typocket/releases) · [在本机运行](#在本机运行) · [接入 Agent](plugins/reader-workspace/README.zh-CN.md)
+[下载](https://github.com/bigricedumpling/typocket/releases)　[在本机运行](#在本机运行)　[接入 Agent](plugins/reader-workspace/README.zh-CN.md)
 
-![在 Typocket 中打开的印刷笔记。正文里是钴蓝与朱红的套印样张，旁边是两张单色分版。](docs/images/readme-reading.webp)
+![DeepSeek Harness 的英文校样对话，右侧栏打开了 Typocket。](docs/images/readme-sidebar.webp)
 
-## 把一段话交给 Agent
+## 正文编辑与阅读
 
-选中正文，点「复制给 Agent」，就能把原文连同文档位置和小节一起发给它。通过 Typocket 工具接入的 Agent 可以找到这篇笔记，读到最新内容，再把修改写回来。
+点进正文就能写。选中一句话，旁边的小工具栏可以加粗、插链接或写行内公式。读长文时，从右侧目录跳到想看的小节，还可以在右上角的 **Aa** 里调字体、行距和正文宽度。
 
-图里是一份印刷操作记录。蓝版已经对准，Agent 把「移动蓝版」改成了「固定蓝版，向左移动红版」，还在正式开印前加了一次打样。打开「Agent 改动」就能对照这两处原话，点「打开文档」继续写。
+![正在编辑的校样笔记，正文中选中了一句话，上方是格式工具栏，右边是本文目录。](docs/images/readme-editor.webp)
 
-![在 Agent 改动中对照印刷笔记的两处修改，分别涉及移动哪块色版，以及何时再次打样。](docs/images/readme-agent.webp)
+## 和 Agent 一起改稿
 
-## 在正文里改图
+想请 Agent 改一段，选中原文，点“复制给 Agent”。复制时会带上文档路径。如果这段话在某个标题下面，小节名也会一起带上。Agent 通过 Typocket 保存后，可以在“Agent 改动”里逐行对照。图中的原稿写着“移动蓝版”，改完后，蓝版固定，红版向左移两毫米。
 
-文档中的 Mermaid 代码块会直接显示为图表。点「查看源码」，可以对着预览修改流程分支。保存下来的 Markdown 仍保留 Mermaid 源码。LaTeX 公式也可以在正文中编辑。导出 PDF 或独立 HTML 时，排好的图表和公式会一起带上。
+![校样笔记的修改记录，红色是原句，绿色是改后的印刷指令。](docs/images/readme-agent.webp)
 
-![深色编辑器中，上方是 Mermaid 源码，下方是实时流程图，标出可以开印和需要调整色版的两种情况。](docs/images/readme-diagram.webp)
+## 查资料时留着手头的稿子
 
-## 找回正在写的那一篇
+左边选知识库，再从文件夹里找文档。不同库的文档也能并排开着。图里同时打开了纸张、字体和校样三篇笔记，查完资料，点一下顶部标签就能接着写。常看的知识库可以换个容易认的图标，文档自己的图标也会跟着出现在标签上。
 
-可以给每个项目建一个知识库，用文件夹整理笔记和参考资料。知识库总览会展示各库的内页预览。不同知识库的文档可以并排开在标签栏里，查完资料就能回到刚才写的位置。忘了文件名，也可以凭记得的一句话跨库搜正文。
+![左侧六个知识库各有自己的黑色图标，文件树旁边同时开着纸张、字体和校样三篇笔记。](docs/images/readme-navigation.webp)
 
-![四个印刷知识库各有自己的图标，卡片露出油墨、字样、纸张和校样的内页。](docs/images/readme-library.webp)
+<details>
+<summary>展开查看文档插图、Mermaid、知识库和封面</summary>
 
-## 给常用的文档做个记号
+配图可以直接放在段落之间。想看这张校样上两种油墨有没有对齐，把指针移到图上，点“查看大图”。
 
-知识库和文档可以各自选图标。文档打开后，图标也会出现在标签栏里。图中的校样本用了小印刷机图标，封面是一幅循环播放的蓝墨校对线稿。打开图库就能换一张，也可以上传自己的图片。
+![正文里的双色套印样张，右侧是分版图。](docs/images/readme-reading.webp)
 
-![校样本的印刷机图标和蓝墨线稿封面，右侧展开的图库里有六个可选封面。](docs/images/readme-cover.webp)
+Mermaid 流程图和思维导图直接显示在正文里。点“查看源码”就能边改边预览。LaTeX 公式也可以随正文编辑，导出 PDF 或独立 HTML 时会保留排版。
 
-## 把文档交给别人
+![深色模式下同时显示的 Mermaid 源码和校样检查流程图。](docs/images/readme-diagram.webp)
 
-Markdown、图片、PDF 和 HTML 资料都保存在本机。需要让别人接着改时，选「Markdown 和附件」即可把正文和配图打成 ZIP。只想给对方一个阅读链接，可以选「通过 Agent 分享」，把提示词发给能够托管网页的 Agent，由它为选中的文档或知识库生成只读链接。
+知识库总览里能看到每个库的内页。文档可以加封面，图库里有会循环播放的纸墨线稿，也可以上传自己的图片。
+
+![四个知识库的内页分别展示了油墨、字样、纸张和校样。](docs/images/readme-library.webp)
+
+![带有印刷机图标的校样本，以及打开的封面图库。](docs/images/readme-cover.webp)
+
+</details>
+
+## 导出与分享
+
+想给别人一份能接着改的稿子，选“Markdown 和附件”，正文和图片会一起打包成 ZIP。只需要阅读链接时，选“通过 Agent 分享”，把提示词发给能托管网页的 Agent，由它为这篇文档或所选知识库生成临时链接。
 
 ## 在本机运行
 
-从[发布页](https://github.com/bigricedumpling/typocket/releases)下载并解压 `.tgz`。准备好 Node.js 24 或更高版本，在解压出来的 `package` 文件夹所在目录执行以下命令，再用浏览器打开终端显示的本机地址。
+安装 Node.js 24 或更高版本，从[发布页](https://github.com/bigricedumpling/typocket/releases)下载并解压 `.tgz`。在 `package` 文件夹的上一级目录运行以下命令，然后用浏览器打开终端显示的地址。
 
 ```sh
 node package/managed-server.js
 ```
 
-**接入 Agent。** 支持本机 stdio MCP 的客户端都可以连接。命令填 `node`，两个参数依次为 `package/scripts/reader.mjs` 的绝对路径和 `--stdio`。说明里提供了可复制的配置，以及 WorkBuddy、Claude Code 和 Codex 的接法。[Agent 接入说明](plugins/reader-workspace/README.zh-CN.md)
+- **接入 Agent**　支持本机 stdio MCP 的客户端都可以连接。说明里有可复制的配置，也写了 WorkBuddy、Claude Code 和 Codex 分别怎么接。[接入说明](plugins/reader-workspace/README.zh-CN.md)
+- **在 DeepSeek Harness 中安装**　在插件市场搜索 Typocket。装好后，从右侧栏的“开始”菜单打开。[DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)
+- **从源码运行**　在仓库目录运行 `npm ci`，然后运行 `npm run dev`。[工程说明](docs/ENGINEERING.md)
 
-**在 DeepSeek Harness 中使用。** 从 DSH 插件市场安装后，通过侧栏打开 Typocket。插件会自动启动本机服务，DSH 工作区里的 Markdown 可以直接预览，也可以保存到知识库。[DSH 插件市场](https://awesome-dsh-plugin.com/?q=Typocket)
+*配图取自 Preview 9，笔记和对话均为英文示例。编辑器目前使用中文，截图里的控件名称已译成英文。*
 
-**从源码运行。** 使用 Node.js 24 或更高版本，在仓库目录依次执行 `npm ci` 和 `npm run dev`。[工程说明](docs/ENGINEERING.md)
-
-*配图拍摄自 Preview 9，使用英文示例文档。截图中的界面标签已译为英文，当前应用界面为中文。*
-
-[使用指南](docs/USER-GUIDE.md) · [版本变化](CHANGELOG.md) · [备份与恢复](docs/DATA-AND-RECOVERY.md) · [平台支持](docs/RELEASE-READINESS.md) · [MIT 许可](LICENSE) · [第三方资产](docs/THIRD-PARTY-ASSETS.md)
+[使用指南](docs/USER-GUIDE.md)　[更新记录](CHANGELOG.md)　[备份与恢复](docs/DATA-AND-RECOVERY.md)　[平台支持](docs/RELEASE-READINESS.md)　[MIT 许可](LICENSE)　[第三方资产](docs/THIRD-PARTY-ASSETS.md)
