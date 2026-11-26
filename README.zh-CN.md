@@ -2,65 +2,88 @@
 
 [English](README.md)
 
-Typocket 是一个本地 Markdown 编辑器。你在浏览器里写，Agent 也可以改同一份文件。在 DeepSeek Harness 里，还可以把文档开在对话右边，一边讨论，一边看稿。
+Typocket 是一款本地文档阅读器和 Markdown 编辑器。一个知识库可以同时收纳 Markdown 笔记、PDF 和 HTML 网页。启动后，在浏览器中打开本机地址即可使用。支持访问本机网页的 Agent 客户端也可以在浏览器侧栏中打开同一地址。
 
-[下载](https://github.com/bigricedumpling/typocket/releases)　[在本机运行](#在本机运行)　[接入 Agent](plugins/reader-workspace/README.zh-CN.md)
+[下载](https://github.com/bigricedumpling/typocket/releases)　[在本机运行](#在本机运行)　[Agent 接入说明](plugins/reader-workspace/README.zh-CN.md)　[内置 Skill](plugins/reader-workspace/skills/reader-workspace/SKILL.md)
 
-![DeepSeek Harness 的英文校样对话，右侧栏打开了 Typocket。](docs/images/readme-sidebar.webp)
+![侧栏使用示例：DeepSeek Harness 左侧是套印校样的对话，右侧是 Typocket 中对应的文档。](docs/images/readme-sidebar.webp)
 
-## 正文编辑与阅读
+## Markdown 阅读与编辑
 
-点进正文就能写。选中一句话，旁边的小工具栏可以加粗、插链接或写行内公式。读长文时，从右侧目录跳到想看的小节，还可以在右上角的 **Aa** 里调字体、行距和正文宽度。
+正文直接按排版效果显示。点击段落即可编辑，选中文字可加粗、插入链接或行内公式。右侧目录按标题跳转，切换文档标签后再返回，可以恢复阅读位置并继续撤销之前的编辑。
 
-![正在编辑的校样笔记，正文中选中了一句话，上方是格式工具栏，右边是本文目录。](docs/images/readme-editor.webp)
+![校样笔记的正文编辑界面，选中文字后出现格式工具栏，右侧为文档目录。](docs/images/readme-editor.webp)
 
-## 和 Agent 一起改稿
+### 实时调整阅读排版
 
-想请 Agent 改一段，选中原文，点“复制给 Agent”。复制时会带上文档路径。如果这段话在某个标题下面，小节名也会一起带上。Agent 通过 Typocket 保存后，可以在“Agent 改动”里逐行对照。图中的原稿写着“移动蓝版”，改完后，蓝版固定，红版向左移两毫米。
+打开右上角 **Aa**，切换正文字体、字号或栏宽，当前文章会立即重新排版。拖动行距滑块时可直接观察段落的疏密。“更多排版”提供字间距、首行缩进、表格宽度与对齐等设置。阅读偏好保存在当前浏览器，Markdown 源文件保持原样。
 
-![校样笔记的修改记录，红色是原句，绿色是改后的印刷指令。](docs/images/readme-agent.webp)
+外观有浅色、柔和、深色三种模式。主题风格另有默认、飞书、Notion 和 Obsidian，作用于正文、侧栏及标签。
 
-## 查资料时留着手头的稿子
+![同一篇 Markdown 在 Aa 中使用不同阅读设置时的排版对照。](docs/images/readme-typography.webp)
 
-左边选知识库，再从文件夹里找文档。不同库的文档也能并排开着。图里同时打开了纸张、字体和校样三篇笔记，查完资料，点一下顶部标签就能接着写。常看的知识库可以换个容易认的图标，文档自己的图标也会跟着出现在标签上。
+## PDF 与 HTML（H5）阅读
 
-![左侧六个知识库各有自己的黑色图标，文件树旁边同时开着纸张、字体和校样三篇笔记。](docs/images/readme-navigation.webp)
+**PDF** 支持翻页、缩放和文内查找。有文字层的 PDF 可直接选词。笔记中链接到 PDF 页码，点开即可回到引用的那一页。
 
-<details>
-<summary>展开查看文档插图、Mermaid、知识库和封面</summary>
+![在 Typocket 中阅读 Devlin 等人的 BERT 论文，保留作者、摘要和原刊双栏排版。](docs/images/readme-pdf.webp)
 
-配图可以直接放在段落之间。想看这张校样上两种油墨有没有对齐，把指针移到图上，点“查看大图”。
+*图中论文为 Jacob Devlin、Ming-Wei Chang、Kenton Lee、Kristina Toutanova 的《BERT》，NAACL 2019。* [原文](https://aclanthology.org/N19-1423/) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
-![正文里的双色套印样张，右侧是分版图。](docs/images/readme-reading.webp)
+**HTML（H5）** 以只读方式打开，保留网页的排版和交互。图中的自注意力示例用一组演示向量计算权重。点选左侧的词，右侧图表随之更新。[HTML 示例文件](docs/examples/self-attention.html)
 
-Mermaid 流程图和思维导图直接显示在正文里。点“查看源码”就能边改边预览。LaTeX 公式也可以随正文编辑，导出 PDF 或独立 HTML 时会保留排版。
+![本地 HTML 自注意力示例，选择词元可查看对应的注意力权重。](docs/images/readme-html.webp)
 
-![深色模式下同时显示的 Mermaid 源码和校样检查流程图。](docs/images/readme-diagram.webp)
+## Agent 工具与改稿记录
 
-知识库总览里能看到每个库的内页。文档可以加封面，图库里有会循环播放的纸墨线稿，也可以上传自己的图片。
+发行包内置 `reader-workspace` Skill 和本机 MCP 文档工具。Skill 说明如何定位文档、保留图片引用、按当前版本写回，以及如何处理同时编辑产生的冲突。通过 stdio MCP 连接时，客户端会收到这份说明。Agent 可以检索和修改 Markdown，也能读取选定 PDF、HTML 的原文件交给自己的工具处理。[内置 Skill](plugins/reader-workspace/skills/reader-workspace/SKILL.md)　[接入配置](plugins/reader-workspace/README.zh-CN.md)
 
-![四个知识库的内页分别展示了油墨、字样、纸张和校样。](docs/images/readme-library.webp)
+选中正文后点“复制给 Agent”，即可复制原文、文档路径和所在小节（如有）。知识库文档的选段还带有固定 ID，改名后仍可定位。通过 Typocket 工具保存的修改会出现在“Agent 改动”中，可以逐行对照前后两个版本。如果同一段落出现冲突，可保留本地草稿再处理。
 
-![带有印刷机图标的校样本，以及打开的封面图库。](docs/images/readme-cover.webp)
+![Agent 改动记录，逐行显示校样说明中修改前后的色版位置和打样步骤。](docs/images/readme-agent.webp)
 
-</details>
+## 知识库与跨库导航
 
-## 导出与分享
+左侧栏按知识库和文件夹组织文档。顶部标签可以同时打开不同库的资料。知识库和文档可分别设置图标，文档图标也会显示在对应标签上。
 
-想给别人一份能接着改的稿子，选“Markdown 和附件”，正文和图片会一起打包成 ZIP。只需要阅读链接时，选“通过 Agent 分享”，把提示词发给能托管网页的 Agent，由它为这篇文档或所选知识库生成临时链接。
+![知识库和文件夹使用不同的黑色图标，顶部标签同时打开纸张、字体和校样三份资料。](docs/images/readme-navigation.webp)
+
+知识库总览会显示各库的内页预览。使用侧栏搜索中的“跨库正文”可从一句原文找到对应的 Markdown 段落。文档间的链接支持跳到指定标题或 PDF 页码。
+
+![知识库总览，四个文件夹分别展示油墨、字体、纸张和校样的内页。](docs/images/readme-library.webp)
+
+## 插图、图表与封面
+
+图片可以嵌在段落之间，随正文栏宽缩放。将指针移到图片上，选择“查看大图”可放大检查细节。
+
+![笔记正文中的双色套印样张和两张分版图。](docs/images/readme-reading.webp)
+
+Mermaid 代码块在正文中显示为图表，点“查看源码”可同时编辑和预览。输入 `/` 可以插入思维导图。LaTeX 支持行内公式和独立公式，导出 PDF 或独立 HTML 时会保留图表和公式的排版。
+
+![深色编辑器中，上方是 Mermaid 源码，下方是实时渲染的校样检查流程图。](docs/images/readme-diagram.webp)
+
+文档封面支持上传图片，也可以从内置图库中选择静态图片或循环播放的纸墨线稿。
+
+![校样本的印刷机图标、蓝墨线稿封面和内置封面图库。](docs/images/readme-cover.webp)
+
+## 文件、导出与分享
+
+- **导出**　支持 Markdown、含图片的独立 HTML、打印或保存为 PDF。选择“Markdown 和附件”可将可编辑的正文和配图一起打包为 ZIP。
+- **分享**　“通过 Agent 分享”会为选中的文档或知识库生成提示词。具备网页托管能力的 Agent 可据此生成只读快照，并返回临时链接。
+- **备份**　知识库保存在插件目录之外，升级或卸载插件后仍保留在本机。备份时请同时保留正文、附件和元数据。[备份与恢复](docs/DATA-AND-RECOVERY.md)
 
 ## 在本机运行
 
-安装 Node.js 24 或更高版本，从[发布页](https://github.com/bigricedumpling/typocket/releases)下载并解压 `.tgz`。在 `package` 文件夹的上一级目录运行以下命令，然后用浏览器打开终端显示的地址。
+安装 Node.js 24 或更高版本，从[发布页](https://github.com/bigricedumpling/typocket/releases)下载并解压 `.tgz`。在解压所得的 `package` 文件夹的上一级目录运行以下命令。终端会显示阅读器的本机地址。
 
 ```sh
 node package/managed-server.js
 ```
 
-- **接入 Agent**　支持本机 stdio MCP 的客户端都可以连接。说明里有可复制的配置，也写了 WorkBuddy、Claude Code 和 Codex 分别怎么接。[接入说明](plugins/reader-workspace/README.zh-CN.md)
-- **在 DeepSeek Harness 中安装**　在插件市场搜索 Typocket。装好后，从右侧栏的“开始”菜单打开。[DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)
-- **从源码运行**　在仓库目录运行 `npm ci`，然后运行 `npm run dev`。[工程说明](docs/ENGINEERING.md)
+- **MCP 接入**　命令为 `node`，两个参数依次为 `package/scripts/reader.mjs` 的绝对路径和 `--stdio`。接入说明包含配置示例和 WorkBuddy、Claude Code、Codex 的安装方式。[Agent 接入说明](plugins/reader-workspace/README.zh-CN.md)
+- **DeepSeek Harness 插件**　在社区市场安装后，从右侧栏的“开始”菜单打开 Typocket。工作区 Markdown 可直接预览，点击“保存到知识库”会创建独立副本。[DSH 社区插件市场](https://awesome-dsh-plugin.com/?q=Typocket)
+- **从源码运行**　在仓库目录执行 `npm ci` 和 `npm run dev`。可通过 `DOCS_ROOT` 指定测试目录。[工程说明](docs/ENGINEERING.md)
 
-*配图取自 Preview 9，笔记和对话均为英文示例。编辑器目前使用中文，截图里的控件名称已译成英文。*
+*配图取自 Preview 9，使用英文示例资料。编辑器目前使用中文，截图中的控件名称已译为英文。*
 
-[使用指南](docs/USER-GUIDE.md)　[更新记录](CHANGELOG.md)　[备份与恢复](docs/DATA-AND-RECOVERY.md)　[平台支持](docs/RELEASE-READINESS.md)　[MIT 许可](LICENSE)　[第三方资产](docs/THIRD-PARTY-ASSETS.md)
+[使用指南](docs/USER-GUIDE.md)　[更新记录](CHANGELOG.md)　[平台支持](docs/RELEASE-READINESS.md)　[报告问题](https://github.com/bigricedumpling/typocket/issues)　[MIT 许可](LICENSE)　[第三方资产](docs/THIRD-PARTY-ASSETS.md)

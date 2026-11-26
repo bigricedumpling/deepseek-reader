@@ -20,3 +20,7 @@
 Nucleo 图标经授权随 Typocket 分发，供用户在产品内选择。图标著作权归 Nucleo，项目的 MIT 许可仅适用于项目代码。独立再分发这些图标需获得 Nucleo 的许可。
 
 插件安装包和产品介绍页均不附带微信字体（`Weixin.otf`）。依赖的完整版本见 `package-lock.json`。
+
+## README 论文配图
+
+PDF 阅读器截图展示论文《BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding》首页的局部。作者为 Jacob Devlin、Ming-Wei Chang、Kenton Lee 和 Kristina Toutanova，发表于 NAACL 2019。论文页面按原刊排版显示，截图仅截取当前阅读区域，并加入 Typocket 的阅读器界面和样机边框。© 2019 Association for Computational Linguistics。[ACL Anthology 原文](https://aclanthology.org/N19-1423/)　[ACL 版权说明](https://aclanthology.org/faq/copyright/)　[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
