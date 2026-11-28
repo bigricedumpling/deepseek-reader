@@ -68,8 +68,8 @@ export function documentRoutes(repo,{share,assertFile,assertMd,assertVisible,inR
       if(body.revision!==revision)throw fault('CONFLICT','页面设置已变化，请重新打开设置',409,{meta:n.meta,revision})
       const patch=validateMeta(body.meta)
       if(patch.cover?.type==='image'){
-        const a=repo.db.prepare('SELECT owner FROM assets WHERE id=?').get(patch.cover.asset)
-        if(!a||a.owner!==n.id)throw fault('FORBIDDEN','封面必须属于当前文档',403)
+        const a=repo.db.prepare('SELECT owner, mime FROM assets WHERE id=?').get(patch.cover.asset)
+        if(!a||a.owner!==n.id||(a.mime && !a.mime.startsWith('image/')))throw fault('FORBIDDEN','封面必须属于当前文档',403)
       }
       const meta={...n.meta,...patch}
       repo.db.prepare('UPDATE nodes SET meta=? WHERE id=?').run(JSON.stringify(meta),n.id)

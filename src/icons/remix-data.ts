@@ -120,6 +120,8 @@ import v61a from 'remixicon/icons/System/history-line.svg?raw'
 import v61b from 'remixicon/icons/System/history-fill.svg?raw'
 import v62a from 'remixicon/icons/Buildings/home-line.svg?raw'
 import v62b from 'remixicon/icons/Buildings/home-fill.svg?raw'
+import videoLine from 'remixicon/icons/Media/video-line.svg?raw'
+import videoFill from 'remixicon/icons/Media/video-fill.svg?raw'
 import v63a from 'remixicon/icons/Media/image-line.svg?raw'
 import v63b from 'remixicon/icons/Media/image-fill.svg?raw'
 import v64a from 'remixicon/icons/Editor/indent-increase.svg?raw'
@@ -265,6 +267,7 @@ export const remixIcons: Record<string, { line: string; fill: string }> = {
   'graduation-cap': { line: cut(v60a), fill: cut(v60b) },
   'history': { line: cut(v61a), fill: cut(v61b) },
   'home': { line: cut(v62a), fill: cut(v62b) },
+  'video': { line: cut(videoLine), fill: cut(videoFill) },
   'image': { line: cut(v63a), fill: cut(v63b) },
   'indent-increase': { line: cut(v64a), fill: cut(v64a) },
   'information': { line: cut(v65a), fill: cut(v65b) },

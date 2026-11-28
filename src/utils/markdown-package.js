@@ -1,20 +1,21 @@
 import { zipSync, strToU8 } from 'fflate'
 import { rewriteDocumentUrls } from '../../server/services/document-attachments.js'
 import { API_BASE, assetUrl } from './api.js'
+import { videoExtensions, videoTypes } from './video-format.js'
 
 const imageTypes = { 'image/png':'png', 'image/jpeg':'jpg', 'image/webp':'webp', 'image/gif':'gif', 'image/svg+xml':'svg', 'image/avif':'avif', 'image/bmp':'bmp', 'image/x-icon':'ico' }
 const fileImage = /\.(?:png|jpe?g|webp|gif|svg|avif|bmp|ico)$/i
 
 function attachment(raw, kind, file) {
-  if (!raw || raw.startsWith('#') || /^(?:data:image\/)/i.test(raw)) return null
+  if (!raw || raw.startsWith('#') || /^(?:data:(?:image|video)\/)/i.test(raw)) return null
   const managed = raw.startsWith('/api/file?')
   let url
   if (managed) {
     url = new URL(assetUrl(raw), location.origin)
     const target = url.searchParams.get('path') || ''
-    if (kind !== 'image' && !url.searchParams.has('asset') && !fileImage.test(target) && !/\.pdf$/i.test(target)) return null
+    if (kind !== 'image' && !url.searchParams.has('asset') && !fileImage.test(target) && !videoExtensions.test(target) && !/\.pdf$/i.test(target)) return null
   } else if (/^(?:https?:|\/\/|blob:)/i.test(raw)) {
-    if (kind !== 'image') return null
+    if (kind !== 'image' && kind !== 'video') return null
     url = new URL(raw, location.href)
   }
   else if (/^[a-z][\w+.-]*:|^\/|\\/i.test(raw)) return null
@@ -23,7 +24,7 @@ function attachment(raw, kind, file) {
     const rel = new URL(raw, origin)
     if (rel.origin !== location.origin) return null
     const dest = decodeURIComponent(rel.pathname.slice(1))
-    if (kind !== 'image' && !fileImage.test(dest) && !/\.pdf$/i.test(dest)) return null
+    if (kind !== 'image' && !fileImage.test(dest) && !videoExtensions.test(dest) && !/\.pdf$/i.test(dest)) return null
     url = new URL(API_BASE + '/api/file', location.origin)
     url.searchParams.set('path', dest)
     url.searchParams.set('doc', file)
@@ -50,7 +51,7 @@ export async function markdownPackage(doc, raw) {
       const response = await fetch(asset.url, { credentials: 'same-origin', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(20000) })
       if (!response.ok) throw Error()
       const blob = await response.blob(), mime = blob.type.toLowerCase().split(';')[0]
-      const extension = imageTypes[mime] || (mime === 'application/pdf' ? 'pdf' : '')
+      const extension = imageTypes[mime] || videoTypes[mime] || (mime === 'application/pdf' ? 'pdf' : '')
       if (!extension || !blob.size) throw Error()
       total += blob.size
       if (total > 256 * 1024 * 1024) throw RangeError()

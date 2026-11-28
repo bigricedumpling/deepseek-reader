@@ -1,3 +1,4 @@
+import { maxVideoBytes, videoTypes } from './services/video-types.js'
 import {readPdfOutline} from './services/pdf-outline.js'
 import { backupService } from './services/backups.js'
 import { trashService } from './services/trash.js'
@@ -139,7 +140,7 @@ function assertFile(rel, opts) {
   assertVisible(rel, opts)
   const abs = safeResolve(rel)
   /* 图片也放行：文档里插图要用 /api/file 取，否则 <img> 打不开 */
-  if (!/\.(md|pdf|html?|png|jpe?g|webp|gif|svg|avif)$/i.test(abs)) throw new Error('只能操作 md、pdf、h5 或图片: ' + rel)
+  if (!/\.(md|pdf|html?|png|jpe?g|webp|gif|svg|avif|mp4|m4v|webm|ogv|mov)$/i.test(abs)) throw new Error('不支持此文件格式: ' + rel)
   if (inReader(abs)) throw new Error('这是阅读器自己的文件，不在文档树里: ' + rel)
   return abs
 }
@@ -550,7 +551,7 @@ function moveWithReferences(from, to, ctx, intermediate) {
   return rebaseDocumentReferences(from, to, ctx)
 }
 
-/** 复制文档时给新文档重新登记图片，避免副本继续依赖原文档的资源归属。 */
+/** 复制文档时给新文档重新登记附件。 */
 function copyDocument(from, to) {
   const ext = path.extname(from).toLowerCase()
   if (!['.md', '.pdf', '.html', '.htm'].includes(ext)) throw fault('UNSUPPORTED_FILE', '只支持复制文档、PDF 或 HTML')
@@ -559,10 +560,10 @@ function copyDocument(from, to) {
   repo.write(safeResolve(to), bytes)
   const source = repo.node(from)
   const target = repo.node(to, ext === '.md' ? 'doc' : ext === '.pdf' ? 'pdf' : 'h5')
-  const cloneImage = asset => {
+  const cloneAsset = asset => {
     const mime = asset.mime || ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[path.extname(asset.path).slice(1).toLowerCase()])
-    if (!mime) throw fault('INVALID_IMAGE', '图片格式无法识别，复制已取消')
-    return assets.upload(to, mime, fs.readFileSync(safeResolve(asset.path)).toString('base64'))
+    if (!mime) throw fault('INVALID_IMAGE', '附件格式无法识别，复制已取消')
+    return assets.upload(to, mime, fs.readFileSync(safeResolve(asset.path)).toString('base64'), { allowVideo: true })
   }
   if (ext !== '.pdf') {
     if (ext === '.md') assets.legacy(from)
@@ -576,7 +577,7 @@ function copyDocument(from, to) {
       if (!id && !legacyPath) return null
       const asset = assets.find(legacyPath || '', id)
       if (asset?.owner !== source.id) return null
-      if (!copies.has(asset.id)) copies.set(asset.id, cloneImage(asset).id)
+      if (!copies.has(asset.id)) copies.set(asset.id, cloneAsset(asset).id)
       url.searchParams.delete('path')
       url.searchParams.set('asset', copies.get(asset.id))
       return url.pathname + url.search + url.hash
@@ -587,7 +588,7 @@ function copyDocument(from, to) {
   if (meta.cover?.type === 'image') {
     const cover = assets.find('', meta.cover.asset)
     if (!cover || cover.owner !== source.id) throw fault('INVALID_IMAGE', '封面资源缺失，复制已取消')
-    meta.cover.asset = cloneImage(cover).id
+    meta.cover.asset = cloneAsset(cover).id
   }
   repo.db.prepare('UPDATE nodes SET meta=? WHERE id=?').run(JSON.stringify(meta), target.id)
   const foldables = readFoldables()
@@ -676,9 +677,11 @@ const MIME = {
   '.webp': 'image/webp',
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
+  ...Object.fromEntries(Object.entries(videoTypes).map(([type, extension]) => ['.' + extension, type])),
+  '.m4v': 'video/mp4',
 }
 
-/** 原样把库里的文件发给浏览器。支持 Range，pdf 才能翻页、跳页。 */
+/** Serve PDF and media byte ranges for navigation and seeking. */
 function sendFile(req, res, rel, opts) {
   const abs = assertFile(rel, opts)
   if (!fs.existsSync(abs)) return send(res, 404, { ok: false, error: '文件不存在: ' + rel })
@@ -686,22 +689,22 @@ function sendFile(req, res, rel, opts) {
   const type = MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream'
   const range = req.headers.range
   if (range) {
-    const m = /bytes=(\d*)-(\d*)/.exec(range)
-    if (m) {
-      const start = m[1] ? Number(m[1]) : 0
-      const end = m[2] ? Number(m[2]) : st.size - 1
+    const m = /^bytes=(\d*)-(\d*)$/.exec(range)
+    if (m && (m[1] || m[2])) {
+      const start = m[1] ? Number(m[1]) : Math.max(0, st.size - Number(m[2]))
+      const end = m[1] && m[2] ? Math.min(Number(m[2]), st.size - 1) : st.size - 1
       if (start > end || start >= st.size) {
         res.statusCode = 416
         res.setHeader('Content-Range', 'bytes */' + st.size)
         return res.end()
       }
       res.statusCode = 206
-      res.setHeader('Content-Range', 'bytes ' + start + '-' + Math.min(end, st.size - 1) + '/' + st.size)
+      res.setHeader('Content-Range', 'bytes ' + start + '-' + end + '/' + st.size)
       res.setHeader('Accept-Ranges', 'bytes')
-      res.setHeader('Content-Length', Math.min(end, st.size - 1) - start + 1)
+      res.setHeader('Content-Length', end - start + 1)
       res.setHeader('Content-Type', type)
       res.setHeader('Cache-Control', 'no-store')
-      return fs.createReadStream(abs, { start, end: Math.min(end, st.size - 1) }).pipe(res)
+      return fs.createReadStream(abs, { start, end: end }).pipe(res)
     }
   }
   res.statusCode = 200
@@ -1404,9 +1407,9 @@ const routes = {
     const doc = String(body.path || '')
     const abs = assertMd(doc)
     if (body.documentId && (repo.byId(body.documentId)?.path !== doc || !fs.existsSync(abs))) {
-      throw fault('DOCUMENT_CHANGED', '原文档已移动或移除，请重新选择图片', 409)
+      throw fault('DOCUMENT_CHANGED', '原文档已移动或移除，请重新选择附件', 409)
     }
-    return {ok:true,data:assets.upload(doc,String(body.mime||''),String(body.data||body.base64||''))}
+    return {ok:true,data:assets.upload(doc, String(body.mime || ''), String(body.data || body.base64 || ''), { allowVideo: true })}
   },
 
   /** 新建文档：dir 为空串表示根目录 */
@@ -1863,7 +1866,9 @@ export async function handleApi(req, res, ctx = {}) {
       if (origin && new URL(origin).host !== req.headers.host && new URL(origin).host !== req.headers['x-forwarded-host']) throw new Error('请求来源不匹配')
       if (!String(req.headers['content-type'] || '').startsWith('application/json')) throw new Error('仅接受 JSON 请求')
     }
-    const body = req.method === 'GET' ? {} : await readBody(req, key === 'POST /asset' ? 15 * 1024 * 1024 : key === 'POST /import-workspace-doc' ? 20 * 1024 * 1024 : undefined)
+    const assetLimit = req.headers['x-reader-video'] === '1'
+      ? Math.ceil(maxVideoBytes / 3) * 4 + 64 * 1024 : 15 * 1024 * 1024
+    const body = req.method === 'GET' ? {} : await readBody(req, key === 'POST /asset' ? assetLimit : key === 'POST /import-workspace-doc' ? 20 * 1024 * 1024 : undefined)
     if(credential && !agent)throw fault('UNAUTHORIZED','Agent 凭据无效或已过期',401)
     if ((key === 'PUT /doc' || key === 'POST /doc') && body.workspaceId && body.workspaceId !== workspaceId) {
       throw fault('DOCUMENT_CHANGED', '工作区已经更换，请重新打开原文档', 409)

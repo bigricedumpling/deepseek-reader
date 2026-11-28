@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
 import { renderMarkdown, renderFormula } from './markdown.js'
+import { playableVideoUrl } from './video-format.js'
 
 let purifier
 const geometry = new Set(['height', 'width', 'min-width', 'top', 'left', 'right', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom', 'padding-left', 'vertical-align', 'border-bottom-width', 'font-size'])
@@ -33,7 +34,7 @@ export const forbiddenReadingTags = ['style', 'iframe', 'object', 'embed', 'form
 
 // Sanitize user-authored markup first. KaTeX's trusted output contains MathML
 // semantics and SVG paths that the document sanitizer correctly strips from arbitrary HTML.
-export function readingFragment(markdown, { allowHtml = true, gaps = true, purifyOptions = {} } = {}) {
+export function readingFragment(markdown, { allowHtml = true, gaps = true, purifyOptions = {}, docFile } = {}) {
   const formulas = []
   let slotClass
   const html = renderMarkdown(markdown, { allowHtml, gaps, renderMath(value, display, label) {
@@ -44,6 +45,28 @@ export function readingFragment(markdown, { allowHtml = true, gaps = true, purif
   const fragment = documentPurifier().sanitize(html, {
     FORBID_TAGS: forbiddenReadingTags, ADD_ATTR: ['target'], ...purifyOptions, RETURN_DOM_FRAGMENT: true
   })
+  for (const video of fragment.querySelectorAll('video')) {
+    video.removeAttribute('autoplay')
+    video.setAttribute('controls', '')
+    video.setAttribute('playsinline', '')
+    video.setAttribute('preload', 'metadata')
+    for (const source of [video, ...video.querySelectorAll('source')]) {
+      const src = playableVideoUrl(source.getAttribute('src'), docFile)
+      if (src) source.setAttribute('src', src)
+      else source.removeAttribute('src')
+    }
+    if (video.hasAttribute('data-typocket-video')) {
+      const figure = document.createElement('figure')
+      figure.className = 'reader-video-figure'
+      video.replaceWith(figure)
+      figure.append(video)
+      if (!video.title) continue
+      const caption = document.createElement('figcaption')
+      caption.className = 'reader-video-caption'
+      caption.textContent = video.title
+      figure.append(caption)
+    }
+  }
   if (slotClass) {
     for (const marker of fragment.querySelectorAll('.' + slotClass)) {
       const { value, display, label } = formulas[Number(marker.textContent)]

@@ -18,8 +18,8 @@ function snapshotImageAllowed(src) {
 
 // Expand only recognized and validated layout fences. Invalid JSON stays visible as code.
 export function readingDocument(markdown, options = {}) {
-  const { snapshot = false, allowHtml = true, gaps = true, links = true, purifyOptions = {} } = options
-  const fragment = readingFragment(markdown, { allowHtml, gaps, purifyOptions: snapshot ? snapshotOptions : purifyOptions })
+  const { snapshot = false, allowHtml = true, gaps = true, links = true, purifyOptions = {}, docFile } = options
+  const fragment = readingFragment(markdown, { allowHtml, gaps, docFile, purifyOptions: snapshot ? snapshotOptions : purifyOptions })
   const richContent = text => readingDocument(text, { ...options, allowHtml: false })
   for (const code of fragment.querySelectorAll('pre > code.language-reader-block, pre > code.language-reader-columns')) {
     if (code.classList.contains('language-reader-block')) {

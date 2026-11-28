@@ -14,6 +14,8 @@ Edit directly on the formatted page. Selecting text opens a toolbar for emphasis
 
 ![A sentence selected in the proof notes, with the editing toolbar above it and the document outline on the right.](docs/images/readme-editor.webp)
 
+Type `/` and choose **Video** to embed a file or a direct video URL. Play it in the document, resize it like an image, or add a caption. Local uploads are limited to 50 MB.
+
 ### Live typography controls
 
 Open **Aa** to adjust the typeface, font size and text width. The current page reflows immediately, including while you drag the line-spacing slider. Additional controls cover letter spacing, paragraph indents, table width and alignment. Preferences are saved in the browser, independently of the Markdown file.

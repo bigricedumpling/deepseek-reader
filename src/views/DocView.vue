@@ -70,7 +70,7 @@
             <div class="doc-options-divider" />
             <button v-if="!isPreview" class="pop-item" @click="pickExport('md')"><PhFileText :size="15" /> Markdown 文件</button>
             <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('package')"><PhFileText :size="15" /> Markdown 和附件（ZIP）</button>
-            <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含图片）</button>
+            <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('html')"><PhFileText :size="15" /> 网页（含媒体）</button>
             <button v-if="!isPreview" class="pop-item" :disabled="exporting" @click="pickExport('pdf')"><PhPrinter :size="15" /> 打印 / 导出 PDF</button>
             <a v-else class="pop-item" :href="pdfSrc.split('#')[0]" target="_blank" rel="noopener" @click="open = ''"><PhArrowSquareOut :size="15" />打开原文件</a>
           </div>

@@ -19,9 +19,9 @@ function download(filename, blob) {
 }
 
 // Render from the document snapshot. Editor widgets can contain only the visible code lines.
-function articleFragment(raw) {
-  const purifyOptions = { FORBID_TAGS: ['style', 'link', 'form', 'button', 'textarea', 'iframe', 'video', 'audio', 'object', 'embed'] }
-  const fragment = readingDocument(raw, { gaps: false, links: false, purifyOptions })
+function articleFragment(raw, docFile) {
+  const purifyOptions = { FORBID_TAGS: ['style', 'link', 'form', 'button', 'textarea', 'iframe', 'audio', 'object', 'embed'] }
+  const fragment = readingDocument(raw, { gaps: false, links: false, docFile, purifyOptions })
   for (const katex of fragment.querySelectorAll('.katex')) {
     // Keep the accessible expression. The native tree needs no script, remote font or duplicate visual layer.
     const math = katex.querySelector('.katex-mathml > math')
@@ -122,15 +122,15 @@ function exportedHeader(original, cover) {
   return copy
 }
 
-async function imageData(url) {
+async function mediaData(url, kind) {
   const response = await fetch(url, {
     credentials: 'same-origin',
     referrerPolicy: 'no-referrer',
     signal: AbortSignal.timeout(20000),
   })
-  if (!response.ok) throw Error('图片读取失败')
+  if (!response.ok) throw Error('附件读取失败')
   const blob = await response.blob()
-  if (!blob.size || !blob.type.startsWith('image/')) throw Error('图片格式无效')
+  if (!blob.size || !blob.type.startsWith(kind + '/')) throw Error('附件格式无效')
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result)
@@ -157,7 +157,7 @@ async function embedImages(article, original) {
       const url = new URL(assetUrl(src), document.baseURI)
       if (!['http:', 'https:', 'blob:', 'data:'].includes(url.protocol)) throw Error('图片地址无效')
       if (!cache.has(url.href)) {
-        const data = await imageData(url)
+        const data = await mediaData(url, 'image')
         const probe = new Image()
         probe.src = data
         await probe.decode()
@@ -174,9 +174,29 @@ async function embedImages(article, original) {
   for (const source of article.querySelectorAll('picture source')) source.remove()
 }
 
+async function embedVideos(article) {
+  const cache = new Map()
+  for (const media of article.querySelectorAll('video[src], video source[src], video[poster]')) {
+    for (const attr of ['src', 'poster']) {
+      const src = media.getAttribute(attr)
+      if (!src) continue
+      try {
+        const url = new URL(src, document.baseURI)
+        if (!['http:', 'https:'].includes(url.protocol)) throw Error('地址无效')
+        const kind = attr === 'poster' ? 'image' : 'video'
+        const key = kind + ' ' + url.href
+        if (!cache.has(key)) cache.set(key, await mediaData(url, kind))
+        media.setAttribute(attr, cache.get(key))
+      } catch {
+        throw Error('无法嵌入视频，请确认视频和封面可读取后再导出。')
+      }
+    }
+  }
+}
+
 const exportStyles = `
   body{max-width:960px;margin:40px auto;padding:0 24px;font:16px/1.8 system-ui,sans-serif;color:#252525;overflow-wrap:anywhere}
-  h1,h2,h3{line-height:1.4} img,svg{max-width:100%;height:auto} figure{margin-inline:0}
+  h1,h2,h3{line-height:1.4} img,svg,video{max-width:100%;height:auto} .reader-video-figure video{display:block;margin-inline:auto} figure{margin-inline:0}
   table{border-collapse:collapse;max-width:100%} td,th{border:1px solid #ddd;padding:6px 10px}
   pre{white-space:pre-wrap;background:#f5f5f5;padding:16px} pre > code{font-size:.8125em} blockquote{border-left:3px solid #ddd;margin-left:0;padding-left:20px;color:#666}
   .page-cover{height:240px;overflow:hidden}.page-cover.small{height:160px}.page-cover.large{height:330px}.page-cover img{display:block;width:100%;height:100%;object-fit:cover}
@@ -222,7 +242,7 @@ export function useExport(getDoc, getRaw, getCover) {
   function printSheet(original) {
     const sheet = document.createElement('article')
     sheet.className = 'typocket-print'
-    sheet.append(exportedHeader(original, getCover()), articleFragment(getRaw()))
+    sheet.append(exportedHeader(original, getCover()), articleFragment(getRaw(), getDoc()?.file))
     for (const image of sheet.querySelectorAll('img')) image.loading = 'eager'
     return sheet
   }
@@ -280,7 +300,7 @@ export function useExport(getDoc, getRaw, getCover) {
     charset.setAttribute('charset', 'UTF-8')
     const policy = output.createElement('meta')
     policy.httpEquiv = 'Content-Security-Policy'
-    policy.content = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+    policy.content = "default-src 'none'; img-src data:; media-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
     const viewport = output.createElement('meta')
     viewport.name = 'viewport'
     viewport.content = 'width=device-width,initial-scale=1'
@@ -289,7 +309,7 @@ export function useExport(getDoc, getRaw, getCover) {
     output.head.prepend(charset, policy, viewport)
     output.head.append(style)
     output.body.className = 'typocket-export'
-    output.body.append(exportedHeader(original, getCover()), articleFragment(getRaw()))
+    output.body.append(exportedHeader(original, getCover()), articleFragment(getRaw(), getDoc()?.file))
     await renderPaperDiagrams(output.body)
     for (const el of output.body.querySelectorAll('*')) {
       for (const attr of Array.from(el.attributes)) {
@@ -298,6 +318,7 @@ export function useExport(getDoc, getRaw, getCover) {
     }
     measurePrintMath(output.body)
     await embedImages(output.body, original)
+    await embedVideos(output.body)
     download(title + '.html', new Blob(['<!doctype html>\n', output.documentElement.outerHTML], { type: 'text/html;charset=utf-8' }))
   }
   return { exportMarkdown, exportPackage, exportPdf, exportHtml }

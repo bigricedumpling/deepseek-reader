@@ -2,13 +2,33 @@ import { $nodeSchema, $remark } from '@milkdown/kit/utils'
 import { imageBlockSchema } from '@milkdown/kit/component/image-block'
 import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import DOMPurify from 'dompurify'
+import { managedVideoBlock } from './editor-video.js'
 import { readingFragment } from './reading-fragment.js'
 import {DOMParser as ProseParser, DOMSerializer} from '@milkdown/kit/prose/model'
 import { imageBlockAttributes, isFrontmatterBlock, preserveBlocks, writeImageBlock } from './preserved-markdown.js'
 
 // Keep HTML as an explicit atomic block instead of discarding it during serialization.
-export const preservedRemark = $remark('readerPreservedBlocks', () => () => preserveBlocks)
-export function configurePreservedMarkdown(ctx) {
+export const preservedRemark = $remark('readerPreservedBlocks', () => () => (tree, file) => {
+  preserveBlocks(tree, file)
+  function visit(parent) {
+    for (const [index, child] of (parent.children || []).entries()) {
+      let value = child.type === 'readerRaw' || child.type === 'html' ? child.value : ''
+      if (child.type === 'paragraph' && child.children[0]?.type === 'html' &&
+          /^<video[\s>]/i.test(child.children[0].value) && child.children.at(-1)?.type === 'html' &&
+          /^<\/video>$/i.test(child.children.at(-1).value) &&
+          child.position?.start.line === child.position?.end.line) {
+        value = String(file.value).slice(child.position.start.offset, child.position.end.offset)
+      }
+      const attrs = managedVideoBlock(value)
+      if (attrs) parent.children[index] = { type: 'typocketVideo', attrs, position: child.position }
+      else if (value && child.type === 'paragraph') parent.children[index] = { type: 'readerRaw', value, position: child.position }
+      else visit(child)
+    }
+  }
+  visit(tree)
+})
+export function configurePreservedMarkdown(ctx, docFile) {
+  ctx.update(preservedSchema.key, previous => inner => ({ ...previous(inner), toDOM: node => preservedDOM(node, docFile) }))
   ctx.update(imageBlockSchema.key, previous => inner => {
     const image = previous(inner)
     return {
@@ -24,21 +44,22 @@ export function configurePreservedMarkdown(ctx) {
   })
   ctx.update(remarkStringifyOptionsCtx, options => ({...options, handlers:{...options.handlers, readerRaw:node=>node.value}}))
 }
-export const preservedSchema = $nodeSchema('reader_raw', () => ({
-  group:'block', atom:true, isolating:true, attrs:{value:{default:''},sourceKind:{default:''},definitions:{default:''}},
-  parseDOM:[{tag:'div[data-reader-raw]',getAttrs:dom=>({value:dom.dataset.readerRaw,sourceKind:dom.dataset.sourceKind || ''})}],
-  toDOM(node) {
+function preservedDOM(node, docFile) {
     const dom=document.createElement('div');dom.className='reader-raw-block';dom.dataset.readerRaw=node.attrs.value
     if (node.attrs.sourceKind) dom.dataset.sourceKind = node.attrs.sourceKind
     dom.setAttribute('aria-label',node.attrs.sourceKind ? '内容块' : 'HTML 或文档属性');dom.setAttribute('tabindex','0')
     if (isFrontmatterBlock(node) || node.attrs.sourceKind === 'definition') {dom.classList.add('reader-frontmatter');dom.setAttribute('aria-hidden','true');dom.removeAttribute('tabindex')}
     else {
       const context = node.attrs.definitions ? '\n\n' + node.attrs.definitions : ''
-      dom.append(readingFragment(node.attrs.value + context, { purifyOptions: { FORBID_ATTR:['style'], FORBID_TAGS:['style','iframe','object','embed','form','input','button','textarea'] } }))
+      dom.append(readingFragment(node.attrs.value + context, { docFile, purifyOptions: { FORBID_ATTR:['style'], FORBID_TAGS:['style','iframe','object','embed','form','input','button','textarea'] } }))
     }
     const edit=document.createElement('button');edit.type='button';edit.className='raw-edit-button';edit.textContent='编辑';edit.setAttribute('aria-label','编辑内容块');dom.append(edit)
     return dom
-  },
+  }
+export const preservedSchema = $nodeSchema('reader_raw', () => ({
+  group:'block', atom:true, isolating:true, attrs:{value:{default:''},sourceKind:{default:''},definitions:{default:''}},
+  parseDOM:[{tag:'div[data-reader-raw]',getAttrs:dom=>({value:dom.dataset.readerRaw,sourceKind:dom.dataset.sourceKind || ''})}],
+  toDOM: preservedDOM,
   parseMarkdown:{match:node=>node.type==='readerRaw',runner:(state,node,type)=>{
     const match=node.value.match(/^<(div|p)([^>]*)>([\s\S]*)<\/\1>$/i)
     if(match&&!/<(?:div|p|table|ul|ol|section|details|h[1-6])(?:\s|>)/i.test(match[3])){

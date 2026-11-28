@@ -10,13 +10,13 @@ import { readingDocument } from '../utils/safe-reading'
 import { mermaidCodeBlocks } from '../utils/mermaid'
 import { useMermaidPreview } from '../composables/useMermaidPreview'
 
-const props = defineProps({ value: { type: String, default: '' } })
+const props = defineProps({ value: { type: String, default: '' }, docFile: String })
 const article = ref(null)
 const { watchDiagram } = useMermaidPreview()
 
 watch([article, () => props.value], ([root, source]) => {
   if (!root) return
-  root.replaceChildren(readingDocument(source))
+  root.replaceChildren(readingDocument(source, { docFile: props.docFile }))
   for (const input of root.querySelectorAll('input')) input.disabled = true
   for (const link of root.querySelectorAll('a[target]')) link.rel = 'noopener noreferrer'
 

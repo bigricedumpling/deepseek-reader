@@ -41,9 +41,10 @@ function htmlChanges(html, resolve, add, display) {
       if (node.tagName === 'template' || node.attrs?.some(attr => attr.name === 'hidden')) return
       if (node.tagName === 'base') display.base ??= node.attrs?.find(attr => attr.name === 'href')?.value
     }
+    const videoSource = node.tagName === 'video' || (node.tagName === 'source' && node.parentNode?.tagName === 'video')
     for (const attr of node.attrs || []) {
       if (!(['img', 'source'].includes(node.tagName) && ['src', 'srcset'].includes(attr.name)) &&
-          !(node.tagName === 'a' && attr.name === 'href') && !(node.tagName === 'video' && attr.name === 'poster')) continue
+          !(node.tagName === 'a' && attr.name === 'href') && !(node.tagName === 'video' && attr.name === 'poster') && !(videoSource && attr.name === 'src')) continue
       const loc = node.sourceCodeLocation?.attrs?.[attr.name]
       if (!loc) continue
       const raw = html.slice(loc.startOffset, loc.endOffset)
@@ -74,7 +75,7 @@ function htmlChanges(html, resolve, add, display) {
           }
         }
       } else {
-        const replacement = resolve(attr.value, node.tagName === 'a' ? 'link' : 'image')
+        const replacement = resolve(attr.value, node.tagName === 'a' ? 'link' : videoSource && attr.name === 'src' ? 'video' : 'image')
         if (replacement) add(start, end, replacement.replaceAll('&', '&amp;'))
       }
     }

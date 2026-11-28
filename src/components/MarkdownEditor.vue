@@ -1,8 +1,8 @@
 <template>
   <div class="editor-shell" :data-copy-result="copyResult || undefined">
     <p v-if="uploadError" class="lossy-note ui-font flex items-start gap-2" role="alert">
-      <span class="flex-1">图片未保存：{{ uploadError }}</span>
-      <button class="lossy-btn" aria-label="关闭图片错误提示" @click="uploadError = ''">×</button>
+      <span class="flex-1">{{ uploadError }}</span>
+      <button class="lossy-btn" aria-label="关闭上传错误提示" @click="uploadError = ''">×</button>
     </p>
     <p v-if="actionError" class="lossy-note ui-font flex items-start gap-2" role="alert">
       <span class="flex-1">{{ actionError }}</span>
@@ -24,10 +24,13 @@
         编辑器未能打开
         <button type="button" class="lossy-btn" @click="emit('rebuild')">重试</button>
       </p>
-      <MarkdownReading :value="value" @click="openReadingReference" />
+      <MarkdownReading :value="value" :doc-file="docFile" @click="openReadingReference" />
     </template>
     <div v-show="!editorUnavailable" ref="host" class="crepe-host" @click="onToolbarCopy"></div>
 
+    <Teleport v-if="videoPicker" :to="videoPicker.element">
+      <VideoPicker :upload="uploadVideo" @close="closeVideoPicker" @pick="commitVideo" />
+    </Teleport>
     <FormulaEditor v-if="formula" :value="formula.value" :display="formula.display" @close="formula=null" @save="saveFormula" />
     <RawBlockEditor v-if="rawBlock" :value="rawBlock.node.attrs.value" @close="rawBlock=null" @save="saveRawBlock" />
     <IconPicker v-if="calloutPicker" :anchor="calloutPicker.anchor" :save="saveCalloutIcon" @close="calloutPicker=null" />
@@ -43,7 +46,7 @@
       </Transition>
       <Transition name="pop"><TextStyleMenu v-if="styleMenu" :anchor="styleMenu.anchor" :color="styleMenu.color" :highlight="styleMenu.highlight" @pick="onStylePick" /></Transition>
       <Transition name="pop">
-        <EditorContextMenu v-if="contextMenu" :x="contextMenu.x" :y="contextMenu.y" :label="contextMenu.kind === 'image' ? '图片操作' : '编辑操作'" :items="contextItems" @select="onContextPick" @close="closeContextMenu(true)" />
+        <EditorContextMenu v-if="contextMenu" :x="contextMenu.x" :y="contextMenu.y" :label="contextMenu.kind === 'image' ? contextMenu.video ? '视频操作' : '图片操作' : '编辑操作'" :items="contextItems" @select="onContextPick" @close="closeContextMenu(true)" />
       </Transition>
     </Teleport>
     <Teleport to="body">
@@ -53,20 +56,20 @@
         </Transition>
       </div>
     </Teleport>
-    <input ref="imageReplaceInput" type="file" accept="image/*" class="hidden" @change="onImageReplace" />
+    <input ref="imageReplaceInput" type="file" :accept="imageReplaceTarget?.video ? videoAccept : 'image/*'" class="hidden" @change="onImageReplace" />
     <Teleport to="body">
       <Transition name="pop">
-        <div v-if="imageTools" ref="imageToolsPanel" class="reader-image-tools" role="group" aria-label="图片操作"
+        <div v-if="imageTools" ref="imageToolsPanel" class="reader-image-tools" role="group" :aria-label="imageTools.video ? '视频操作' : '图片操作'"
           :style="{ left: imageTools.x + 'px', top: imageTools.y + 'px' }"
           @pointerenter="cancelImageHide" @pointerleave="onImageToolsLeave"
           @focusin="cancelImageHide" @focusout="scheduleImageHide" @mousedown.stop.prevent>
-          <button type="button" title="查看大图" aria-label="查看大图" @click="imageAction('preview')"><PhArrowsOutSimple :size="16" /></button>
+          <button type="button" :title="imageTools.video ? '全屏播放' : '查看大图'" :aria-label="imageTools.video ? '全屏播放' : '查看大图'" @click="imageAction('preview')"><PhArrowsOutSimple :size="16" /></button>
           <button v-if="!readonly" type="button" title="添加图注" aria-label="添加图注" @click="imageAction('caption')"><PhPencilLine :size="16" /></button>
-          <button v-if="!readonly" type="button" title="替换图片" aria-label="替换图片" @click="imageAction('replace')"><PhArrowClockwise :size="16" /></button>
-          <button type="button" title="复制图片地址" aria-label="复制图片地址" @click="imageAction('copy')"><PhCopy :size="16" /></button>
-          <button type="button" title="下载图片" aria-label="下载图片" @click="imageAction('download')"><PhExport :size="16" /></button>
+          <button v-if="!readonly" type="button" :title="imageTools.video ? '替换视频' : '替换图片'" :aria-label="imageTools.video ? '替换视频' : '替换图片'" @click="imageAction('replace')"><PhArrowClockwise :size="16" /></button>
+          <button type="button" :title="imageTools.video ? '复制视频地址' : '复制图片地址'" :aria-label="imageTools.video ? '复制视频地址' : '复制图片地址'" @click="imageAction('copy')"><PhCopy :size="16" /></button>
+          <button type="button" :title="imageTools.video ? '下载视频' : '下载图片'" :aria-label="imageTools.video ? '下载视频' : '下载图片'" @click="imageAction('download')"><PhExport :size="16" /></button>
           <span v-if="!readonly" class="reader-image-tool-sep" />
-          <button v-if="!readonly" type="button" class="is-danger" title="删除图片" aria-label="删除图片" @click="imageAction('delete')"><PhTrash :size="16" /></button>
+          <button v-if="!readonly" type="button" class="is-danger" :title="imageTools.video ? '删除视频' : '删除图片'" :aria-label="imageTools.video ? '删除视频' : '删除图片'" @click="imageAction('delete')"><PhTrash :size="16" /></button>
         </div>
       </Transition>
     </Teleport>
@@ -112,7 +115,10 @@ import { isFrontmatterBlock } from '../utils/preserved-markdown.js'
 import { preservedRemark, preservedSchema, editableHtmlSchema, configurePreservedMarkdown } from '../utils/editor-preserved'
 import { inlineStyleRemark, textColorMark, highlightMark, underlineMark, configureInlineStyleMarkdown } from '../utils/inline-style'
 import { columnsRemark, columnSchema, columnsSchema, columnsDrag, configureColumnMarkdown } from '../utils/editor-columns'
-import { imagePaste } from '../utils/editor-images'
+import { mediaPaste, showVideoPicker } from '../utils/editor-images'
+import VideoPicker from './VideoPicker.vue'
+import { videoBlockSchema, videoBlockView } from '../utils/editor-video.js'
+import { maxVideoBytes, playableVideoUrl, videoAccept, videoMime } from '../utils/video-format.js'
 import { responsiveImageBlocks } from '../utils/responsive-image-blocks'
 import { workspaceImages, rewriteWorkspaceImages } from '../../server/services/workspace-images.js'
 import { richBlockRemark, richBlockSchema, calloutSchema, calloutKeys, calloutValue, richMarkdown } from '../utils/rich-blocks'
@@ -191,7 +197,8 @@ const imagePreview = shallowRef(null)
 const docLinkCard = ref(null)
 let imageHideTimer = 0
 let docCardHideTimer = 0
-let imageReplaceTarget = null
+const imageReplaceTarget = shallowRef(null)
+const videoPicker = shallowRef(null)
 let replacementTarget = null
 const transientImages = computed(() => {
   const source = String(props.value)
@@ -359,29 +366,78 @@ function normalize(s) {
   return String(s || '').replace(/\s+/g, ' ').trim()
 }
 
+async function uploadAsset(file, mime, label, limit) {
+  const path = props.docFile
+  if (props.readonly || !path) throw new Error('当前文档不能上传' + label)
+  if (file.size > limit) throw new Error(label + '超过 ' + (limit / 1024 / 1024) + ' MB')
+  const data = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+    reader.onerror = () => reject(new Error('无法读取' + label))
+    reader.readAsDataURL(file)
+  })
+  const res = await fetch(API_BASE + '/api/asset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(label === '视频' ? { 'X-Reader-Video': '1' } : {}) },
+    body: JSON.stringify({ path, mime, data, documentId: props.agentDocumentId || undefined }),
+  })
+  const out = await res.json()
+  if (!res.ok || !out.ok) throw new Error(out.error || '服务器未保存' + label)
+  return out.data.url || '/api/file?path=' + encodeURIComponent(out.data.path) + '&doc=' + encodeURIComponent(path)
+}
+
 async function uploadImage(file) {
   uploadError.value = ''
-  if (props.readonly || !props.docFile) throw new Error('当前文档不能上传图片')
-  if (file.size > 10 * 1024 * 1024) throw new Error('图片超过 10 MB')
-  try {
-    const data = await new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
-      reader.onerror = () => reject(new Error('无法读取图片'))
-      reader.readAsDataURL(file)
-    })
-    const res = await fetch(API_BASE + '/api/asset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: props.docFile, mime: file.type, data })
-    })
-    const out = await res.json()
-    if (!res.ok || !out.ok) throw new Error(out.error || '服务器未保存图片')
-    return out.data.url || '/api/file?path=' + encodeURIComponent(out.data.path) + '&doc=' + encodeURIComponent(props.docFile)
-  } catch (error) {
-    uploadError.value = error.message || '上传失败'
+  try { return await uploadAsset(file, file.type, '图片', 10 * 1024 * 1024) }
+  catch (error) {
+    uploadError.value = error.message || '图片上传失败'
     throw error
   }
+}
+
+function uploadVideo(file) {
+  const mime = videoMime(file)
+  if (!mime) throw new Error('请选择 MP4、WebM、OGV 或 MOV 视频')
+  return uploadAsset(file, mime, '视频', maxVideoBytes)
+}
+
+function openVideoPicker() {
+  const view = viewOf()
+  if (!view?.editable || videoPicker.value) return
+  const { selection, doc } = view.state
+  const { $from } = selection
+  const element = document.createElement('div')
+  element.className = 'reader-video-picker-host milkdown-image-block'
+  const hideLine = $from.parent.isTextblock && /^\/[^\s]*$/.test($from.parent.textContent)
+  const pos = $from.depth ? $from.before() : selection.from
+  showVideoPicker(view, { element, pos, to: pos + $from.parent.nodeSize, hideLine })
+  videoPicker.value = { view, doc, selection, element, hideLine }
+}
+
+function closeVideoPicker(focus = true) {
+  const target = videoPicker.value
+  videoPicker.value = null
+  if (target && target.view === viewOf()) {
+    showVideoPicker(target.view, null)
+    if (focus) target.view.focus()
+  }
+}
+
+function commitVideo(src) {
+  const target = videoPicker.value
+  closeVideoPicker(false)
+  const view = viewOf()
+  if (!target || view !== target.view || !view.editable || disposed || superseded) return
+  if (view.state.doc !== target.doc) {
+    actionError.value = '正文已更新，请重新选择插入位置'
+    return
+  }
+  const { $from } = target.selection
+  const selection = target.hideLine ? TextSelection.create(target.doc, $from.start(), $from.end()) : target.selection
+  const video = view.state.schema.nodes.reader_video.create({ src })
+  userTyped = true
+  view.dispatch(view.state.tr.setSelection(selection).replaceSelectionWith(video).scrollIntoView())
+  view.focus()
 }
 
 function chooseReplacement(span) {
@@ -546,6 +602,9 @@ function createEditor() {
           builder.getGroup('advanced').addItem('mindmap', {
             label: '思维导图', icon: toolbarIcon('git-branch'), onRun: insertMindmap
           })
+          builder.getGroup('advanced').addItem('video', {
+            label: '视频', icon: toolbarIcon('video'), onRun: openVideoPicker
+          })
           builder.getGroup('advanced').addItem('math', {
             label: '公式', icon: toolbarIcon(TOOLBAR_ICONS.latex), onRun: () => beginFormula(true)
           })
@@ -647,11 +706,17 @@ function createEditor() {
   }))
   crepe.editor.use(editorShortcuts({ docId: props.docId, onOpenDoc: props.docFile ? target => emit('open-doc', target) : undefined }))
   crepe.editor.config(configureInlineStyleMarkdown)
-  crepe.editor.config(configurePreservedMarkdown)
+  crepe.editor.config(ctx => configurePreservedMarkdown(ctx, props.docFile))
   crepe.editor.config(configureColumnMarkdown)
   crepe.editor.config(configureEditorMath)
   crepe.editor.use(editorMathRemark).use(inlineMathNode).use(blockMathNode).use(inlineMathInput)
-  crepe.editor.use(imagePaste(uploadImage,message=>{uploadError.value=message}))
+  crepe.editor.use(videoBlockSchema).use(videoBlockView({
+    docFile: props.docFile, readonly: props.readonly, onEdit: () => { userTyped = true }
+  }))
+  crepe.editor.use(mediaPaste({
+    uploadImage, uploadVideo, onError: message => { uploadError.value = message },
+    onEdit: () => { userTyped = true }
+  }))
   crepe.editor.use(responsiveImageBlocks(() => { userTyped = true }))
   crepe.editor.use(columnsRemark).use(columnSchema).use(columnsSchema).use(columnsDrag)
   crepe.editor.use(richBlockRemark).use(calloutSchema).use(richBlockSchema).use(calloutKeys)
@@ -1058,7 +1123,7 @@ function imageNodeAt(pos) {
   const view = viewOf()
   if (!view || !Number.isInteger(pos) || pos < 0) return null
   const node = view.state.doc.nodeAt(pos)
-  return node?.type?.name === 'image-block' ? node : null
+  return ['image-block', 'reader_video'].includes(node?.type?.name) ? node : null
 }
 
 function imageAbsolute(src) {
@@ -1072,16 +1137,16 @@ function imageKind(target) {
   return 'doc'
 }
 
-function imageContextItems() {
+function imageContextItems(video) {
   return [
-    { id: 'image-preview', label: '查看大图', icon: PhArrowsOutSimple },
+    { id: 'image-preview', label: video ? '全屏播放' : '查看大图', icon: PhArrowsOutSimple },
     { id: 'image-caption', label: '添加 / 编辑图注', icon: PhPencilLine, disabled: props.readonly },
-    { id: 'image-replace', label: '替换图片', icon: PhArrowClockwise, disabled: props.readonly },
+    { id: 'image-replace', label: video ? '替换视频' : '替换图片', icon: PhArrowClockwise, disabled: props.readonly },
     { id: 'image-sep-1', separator: true },
-    { id: 'image-copy', label: '复制图片地址', icon: PhCopy },
-    { id: 'image-download', label: '下载图片', icon: PhExport },
+    { id: 'image-copy', label: video ? '复制视频地址' : '复制图片地址', icon: PhCopy },
+    { id: 'image-download', label: video ? '下载视频' : '下载图片', icon: PhExport },
     { id: 'image-sep-2', separator: true },
-    { id: 'image-delete', label: '删除图片', icon: PhTrash, danger: true, disabled: props.readonly }
+    { id: 'image-delete', label: video ? '删除视频' : '删除图片', icon: PhTrash, danger: true, disabled: props.readonly }
   ]
 }
 
@@ -1094,7 +1159,7 @@ function onContextMouseDown(event) {
 function openContextMenu(event) {
   const target = event.target
   if (!(target instanceof Element)) return
-  if (target.closest('input, textarea, .cm-editor')) return
+  if (target.closest('input, textarea, .cm-editor, .reader-video-picker-host')) return
   const view = viewOf()
   if (!view) return
 
@@ -1109,8 +1174,9 @@ function openContextMenu(event) {
       closeMenu()
       styleMenu.value = null
       hideImageTools()
-      contextMenu.value = { kind: 'image', pos, src: node.attrs.src, caption: node.attrs.caption || '', x: event.clientX, y: event.clientY }
-      contextItems.value = imageContextItems()
+      const video = node.type.name === 'reader_video'
+      contextMenu.value = { kind: 'image', video, pos, src: node.attrs.src, caption: node.attrs.caption || '', x: event.clientX, y: event.clientY }
+      contextItems.value = imageContextItems(video)
       return
     }
   }
@@ -1279,7 +1345,8 @@ async function focusImageCaption(pos) {
   if (!dom || dom.nodeType !== 1) dom = view.domAtPos(pos).node
   const block = dom?.nodeType === 1 ? (dom.closest('.milkdown-image-block') || dom) : dom?.parentElement?.closest('.milkdown-image-block')
   if (!block) return
-  let input = block.querySelector('.caption-input')
+  let input = block.querySelector('input.caption-input')
+  if (input && block.classList.contains('reader-video-block')) input.hidden = false
   if (!input) {
     block.querySelector('.image-wrapper .operation .operation-item')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
     for (let i = 0; i < 8 && !input; i++) {
@@ -1297,10 +1364,14 @@ async function focusImageCaption(pos) {
 }
 
 function downloadImage(node) {
-  const href = imageAbsolute(node.attrs.src)
+  const isVideo = node.type.name === 'reader_video'
+  const href = imageAbsolute(isVideo ? playableVideoUrl(node.attrs.src, props.docFile) : node.attrs.src)
   const raw = String(node.attrs.caption || '').trim().replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)
-  const ext = (String(node.attrs.src || '').split('?')[0].match(/\.(png|jpe?g|webp|gif|svg|avif)$/i) || [])[0] || '.png'
-  const name = (raw || 'image') + (/\.[a-z0-9]{2,5}$/i.test(raw || '') ? '' : ext)
+  const urlPath = String(node.attrs.src || '').split(/[?#]/)[0]
+  const ext = isVideo ? urlPath.match(/\.(mp4|m4v|webm|ogv|mov)$/i)?.[0] || ''
+    : urlPath.match(/\.(png|jpe?g|webp|gif|svg|avif)$/i)?.[0] || '.png'
+  const name = isVideo && !ext ? '' : (raw || (isVideo ? 'video' : 'image')) +
+    (/\.[a-z0-9]{2,5}$/i.test(raw) ? '' : ext)
   const a = document.createElement('a')
   a.href = href
   a.download = name
@@ -1319,6 +1390,15 @@ async function imageAction(action, info) {
     return
   }
   hideImageTools()
+  const video = node.type.name === 'reader_video'
+  if (action === 'preview' && video) {
+    const player = view.nodeDOM(target.pos)?.querySelector('video')
+    try {
+      if (player?.webkitSupportsFullscreen) player.webkitEnterFullscreen()
+      else await player?.requestFullscreen()
+    } catch { actionError.value = '无法全屏播放视频' }
+    return
+  }
   if (action === 'preview') {
     const source = view.nodeDOM(target.pos)?.querySelector?.('.image-wrapper > img')
     imagePreview.value = {
@@ -1333,7 +1413,8 @@ async function imageAction(action, info) {
   }
   if (action === 'replace') {
     if (props.readonly) return
-    imageReplaceTarget = { pos: target.pos, src: node.attrs.src }
+    imageReplaceTarget.value = { pos: target.pos, node, video }
+    await nextTick()
     if (imageReplaceInput.value) {
       imageReplaceInput.value.value = ''
       imageReplaceInput.value.click()
@@ -1341,8 +1422,9 @@ async function imageAction(action, info) {
     return
   }
   if (action === 'copy') {
-    const ok = await copyText(imageAbsolute(node.attrs.src))
-    if (!ok) actionError.value = '复制图片地址失败'
+    const url = video ? playableVideoUrl(node.attrs.src, props.docFile) : node.attrs.src
+    const ok = await copyText(imageAbsolute(url))
+    if (!ok) actionError.value = '复制地址失败'
     return
   }
   if (action === 'download') {
@@ -1360,16 +1442,16 @@ async function imageAction(action, info) {
 
 async function onImageReplace(event) {
   const file = event.target.files?.[0]
-  const target = imageReplaceTarget
+  const target = imageReplaceTarget.value
   event.target.value = ''
-  imageReplaceTarget = null
+  imageReplaceTarget.value = null
   if (!file || !target) return
   try {
-    const url = await uploadImage(file)
+    const url = await (target.video ? uploadVideo(file) : uploadImage(file))
     const view = viewOf()
     const node = imageNodeAt(target.pos)
-    if (!view || !node || node.attrs.src !== target.src) throw new Error('图片位置已变化，请重试')
-    const tr = view.state.tr.setNodeMarkup(target.pos, undefined, { ...node.attrs, src: url, ratio: 1 })
+    if (!view || !node || node !== target.node) throw new Error('图片位置已变化，请重试')
+    const tr = view.state.tr.setNodeMarkup(target.pos, undefined, { ...node.attrs, src: url, ...(target.video ? { scale: 100 } : { ratio: 1 }) })
     userTyped = true
     view.dispatch(tr)
     view.focus()
@@ -1379,7 +1461,7 @@ async function onImageReplace(event) {
 }
 
 async function showImageTools(block) {
-  if (!block) return
+  if (!block || block.classList.contains('reader-video-picker-host')) return
   cancelImageHide()
   const view = viewOf()
   if (!view) return
@@ -1388,14 +1470,14 @@ async function showImageTools(block) {
   const node = imageNodeAt(pos)
   if (!node) return
   if (imageTools.value?.pos === pos) return
-  imageTools.value = { pos, src: node.attrs.src, caption: node.attrs.caption || '', x: 0, y: 0 }
+  imageTools.value = { pos, video: node.type.name === 'reader_video', src: node.attrs.src, caption: node.attrs.caption || '', x: 0, y: 0 }
   await nextTick()
   const panel = imageToolsPanel.value
   if (!panel || imageTools.value?.pos !== pos || !block.isConnected) return
 
   // Centered or resized images can be much narrower than their editor row.
-  const img = block.querySelector('img')
-  const rect = (img?.naturalWidth ? img : block).getBoundingClientRect()
+  const media = block.querySelector('img, video')
+  const rect = (media?.naturalWidth || media?.videoWidth ? media : block).getBoundingClientRect()
   const width = panel.offsetWidth, height = panel.offsetHeight
   const gap = 8
   const fits = rect.width >= width + gap * 2 && rect.height >= height + gap * 2
@@ -1451,7 +1533,7 @@ function scheduleDocCardHide() {
 
 function onEditorImageTap(event) {
   const touch = event.pointerType ? event.pointerType === 'touch' : matchMedia('(hover:none)').matches
-  const image = touch && event.target.closest?.('.milkdown-image-block img')
+  const image = touch && event.target.closest?.('.milkdown-image-block :is(img, video)')
   if (image) showImageTools(image.closest('.milkdown-image-block'))
 }
 function onEditorPointerOver(event) {
@@ -1650,6 +1732,7 @@ function onDocKey(e) {
   if (e.key === 'Escape') {
     clearCopyHint()
     const hadMenu = !!menu.value || !!styleMenu.value || !!contextMenu.value || !!imageTools.value || !!docLinkCard.value
+    if (!e.defaultPrevented && videoPicker.value) closeVideoPicker(false)
     closeMenu()
     styleMenu.value = null
     closeContextMenu()
